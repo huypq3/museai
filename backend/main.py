@@ -7,11 +7,14 @@ import os
 import logging
 from typing import Optional
 
-from fastapi import FastAPI, WebSocket, HTTPException, Query
+from fastapi import FastAPI, WebSocket, HTTPException, Query, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from google.cloud import firestore
+from pydantic import BaseModel
 
 from live.ws_handler import handle_persona_websocket
+from cms.upload import upload_pdf, get_document_status
+from rag.query_engine import answer_with_rag
 
 
 # Cấu hình logging
@@ -59,7 +62,10 @@ async def root():
         "endpoints": {
             "health": "/health",
             "artifact": "/artifacts/{artifact_id}",
-            "websocket": "/ws/persona/{artifact_id}?language=vi"
+            "websocket": "/ws/persona/{artifact_id}?language=vi",
+            "upload_pdf": "/admin/upload-pdf/{artifact_id}",
+            "document_status": "/admin/document-status/{artifact_id}",
+            "qa": "/qa/{artifact_id}"
         }
     }
 
@@ -185,6 +191,110 @@ async def websocket_persona(
             await websocket.close()
         except:
             pass
+
+
+# Pydantic models cho request bodies
+class QARequest(BaseModel):
+    """Request body cho Q&A endpoint."""
+    question: str
+    language: str = "vi"
+
+
+@app.post("/admin/upload-pdf/{artifact_id}")
+async def upload_pdf_endpoint(
+    artifact_id: str,
+    file: UploadFile = File(...)
+):
+    """
+    Upload PDF tài liệu cho artifact và tạo RAG chunks.
+    
+    Args:
+        artifact_id: ID của artifact
+        file: PDF file upload
+    
+    Returns:
+        Dict với thông tin upload result
+    """
+    try:
+        logger.info(f"Receiving PDF upload for artifact: {artifact_id}")
+        
+        # Kiểm tra file type
+        if not file.filename.endswith('.pdf'):
+            raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+        
+        # Đọc file content
+        file_bytes = await file.read()
+        
+        if len(file_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Empty file")
+        
+        logger.info(f"Received PDF file: {file.filename}, size: {len(file_bytes)} bytes")
+        
+        # Upload và process
+        result = await upload_pdf(
+            file_bytes=file_bytes,
+            filename=file.filename,
+            artifact_id=artifact_id
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in upload endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/admin/document-status/{artifact_id}")
+async def document_status_endpoint(artifact_id: str):
+    """
+    Kiểm tra trạng thái document của artifact.
+    
+    Args:
+        artifact_id: ID của artifact
+    
+    Returns:
+        Dict với thông tin document status
+    """
+    try:
+        status = await get_document_status(artifact_id)
+        return status
+        
+    except Exception as e:
+        logger.error(f"Error getting document status: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/qa/{artifact_id}")
+async def qa_endpoint(
+    artifact_id: str,
+    request: QARequest
+):
+    """
+    Trả lời câu hỏi với RAG grounding.
+    
+    Args:
+        artifact_id: ID của artifact
+        request: QARequest với question và language
+    
+    Returns:
+        Dict với answer, sources, grounded status
+    """
+    try:
+        logger.info(f"Q&A request for artifact {artifact_id}: {request.question}")
+        
+        result = await answer_with_rag(
+            question=request.question,
+            artifact_id=artifact_id,
+            language=request.language
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"Error in Q&A endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
