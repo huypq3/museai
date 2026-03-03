@@ -1,0 +1,28 @@
+# Secrets — KHÔNG BAO GIỜ commit
+*.json
+!package.json
+!tsconfig.json
+.env
+.env.*
+*-sa-key.json
+serviceAccountKey.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Node
+node_modules/
+.next/
+dist/
+
+# macOS
+.DS_Store
+
+# Terraform
+infra/terraform/.terraform/
+infra/terraform/*.tfstate
+infra/terraform/*.tfstate.backup
+infra/terraform/.terraform.lock.hcl
