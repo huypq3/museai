@@ -28,5 +28,5 @@ infra/terraform/*.tfstate.backup
 infra/terraform/.terraform.lock.hcl
 
 #prompt 
-.gitignore
+.cursorrules
 PROJECT_CONTEXT.md
