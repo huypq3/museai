@@ -8,6 +8,7 @@ import asyncio
 import base64
 import json
 import logging
+import time
 from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -41,6 +42,7 @@ class GeminiLiveHandler:
         
         self.client = genai.Client(api_key=api_key)
         self.session: Optional[genai.types.LiveSession] = None
+        self.last_audio_chunk_at_ms: int = 0
         
     async def handle_websocket(self, websocket: WebSocket):
         """
@@ -53,24 +55,74 @@ class GeminiLiveHandler:
         logger.info(f"WebSocket connected for artifact: {self.artifact.get('name')}")
         
         try:
-            # Kết nối Gemini Live API
-            config = {
-                "response_modalities": ["AUDIO"],
-            }
-            
             # Tạo system instruction đúng format
             system_instruction_content = types.Content(
                 parts=[types.Part(text=self.system_instruction)]
             )
+
+            # Ruby-inspired configurable knobs (map from voicechat.service.ts)
+            max_output_tokens = int(os.getenv("VOICE_MAX_OUTPUT_TOKENS", "800"))
+            silence_duration_ms = int(os.getenv("VOICE_SILENCE_MS", "200"))
+            prefix_padding_ms = int(os.getenv("VOICE_PREFIX_PADDING_MS", "200"))
+            start_sensitivity = os.getenv("VOICE_START_SENSITIVITY", "START_SENSITIVITY_HIGH")
+            end_sensitivity = os.getenv("VOICE_END_SENSITIVITY", "END_SENSITIVITY_LOW")
+            voice_name = os.getenv("VOICE_NAME", "Kore")
+            temperature = float(os.getenv("VOICE_TEMPERATURE", "0.55"))
+            candidate_count = int(os.getenv("VOICE_CANDIDATE_COUNT", "1"))
+            model_name = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-latest")
+            
+            # Kết nối Gemini Live API với config + VAD
+            config = {
+                "generation_config": {
+                    "response_modalities": ["AUDIO"],
+                    "thinking_config": {
+                        "include_thoughts": False,
+                        "thinking_budget": 0,
+                    },
+                    "speech_config": {
+                        "voice_config": {"prebuilt_voice_config": {"voice_name": voice_name}}
+                    },
+                    "temperature": temperature,
+                    "candidate_count": candidate_count,
+                    "max_output_tokens": max_output_tokens,
+                },
+                "system_instruction": system_instruction_content,
+                # Gemini server-side VAD - tự động detect khi user nói xong
+                "realtime_input_config": {
+                    "automatic_activity_detection": {
+                        # Manual turn mode: client controls end_of_turn explicitly.
+                        "disabled": True,
+                        "start_of_speech_sensitivity": start_sensitivity,
+                        "end_of_speech_sensitivity": end_sensitivity,
+                        "prefix_padding_ms": prefix_padding_ms,
+                        "silence_duration_ms": silence_duration_ms,
+                    }
+                },
+            }
+            logger.info(
+                "✅ Live config: model=%s, voice=%s, max_tokens=%s, silence_ms=%s, "
+                "start_sens=%s, end_sens=%s, thinking_budget=0",
+                model_name,
+                voice_name,
+                max_output_tokens,
+                silence_duration_ms,
+                start_sensitivity,
+                end_sensitivity,
+            )
             
             # Kết nối Gemini Live
             async with self.client.aio.live.connect(
-                model="gemini-2.5-flash-native-audio-latest",
-                config=config,
-                system_instruction=system_instruction_content
+                model=model_name,
+                config=config
             ) as session:
                 self.session = session
                 logger.info("Connected to Gemini Live API")
+                
+                # Gửi welcome message để client biết đã ready
+                await websocket.send_json({
+                    "type": "ready",
+                    "message": "Connected to Gemini Live"
+                })
                 
                 # Tạo 2 tasks: 1 để nhận từ client, 1 để gửi từ Gemini
                 receive_task = asyncio.create_task(
@@ -80,19 +132,15 @@ class GeminiLiveHandler:
                     self._send_to_client(websocket, session)
                 )
                 
-                # Chờ một trong 2 tasks kết thúc
-                done, pending = await asyncio.wait(
-                    [receive_task, send_task],
-                    return_when=asyncio.FIRST_COMPLETED
-                )
-                
-                # Hủy task còn lại
-                for task in pending:
-                    task.cancel()
-                    try:
-                        await task
-                    except asyncio.CancelledError:
-                        pass
+                # Chờ CẢ HAI tasks hoàn thành (hoặc một trong hai bị lỗi)
+                # Dùng gather để cả 2 tasks chạy song song
+                try:
+                    await asyncio.gather(receive_task, send_task)
+                except Exception as e:
+                    logger.error(f"Task error: {e}")
+                    # Cancel tasks còn lại
+                    receive_task.cancel()
+                    send_task.cancel()
                 
                 logger.info("WebSocket session ended")
                 
@@ -134,27 +182,50 @@ class GeminiLiveHandler:
                     audio_base64 = message.get("data")
                     if audio_base64:
                         audio_bytes = base64.b64decode(audio_base64)
+                        self.last_audio_chunk_at_ms = int(time.monotonic() * 1000)
+                        logger.info(f"📥 Received from client: type={msg_type}, size={len(audio_bytes)} bytes")
                         
-                        # Gửi audio cho Gemini
+                        # Gửi audio cho Gemini - sử dụng new API với types
                         await session.send(
-                            types.Part(inline_data=types.Blob(
-                                mime_type="audio/pcm",
-                                data=audio_bytes
-                            )),
-                            end_of_turn=False
+                            input=types.LiveClientRealtimeInput(
+                                media_chunks=[
+                                    types.Blob(
+                                        data=audio_bytes,
+                                        mime_type="audio/pcm;rate=16000"
+                                    )
+                                ]
+                            )
                         )
                         logger.debug("Sent audio chunk to Gemini")
                 
                 elif msg_type == "end_of_turn":
-                    # Client báo hiệu kết thúc lượt nói
-                    await session.send(end_of_turn=True)
-                    logger.debug("Sent end_of_turn to Gemini")
+                    # Manual turn mode: explicitly ask Gemini to start generation.
+                    logger.info("📥 Received end_of_turn from client, signaling Gemini...")
+                    await session.send(input=" ", end_of_turn=True)
+                    logger.info("✅ Sent end_of_turn signal to Gemini")
+                
+                elif msg_type == "interrupt":
+                    # Client báo hiệu muốn interrupt AI đang nói
+                    logger.info("📥 Received interrupt from client")
+                    # Manual mode: stop playback on client side first.
+                    # New turn will be started by user recording + end_of_turn.
+                    pass
+
+                elif msg_type == "audio_stream_end":
+                    # Client-only signal for observability/latency tracking.
+                    # Do not force end_of_turn here; Gemini VAD should decide.
+                    now_ms = int(time.monotonic() * 1000)
+                    since_last_audio = now_ms - self.last_audio_chunk_at_ms
+                    logger.info(
+                        "📥 Received audio_stream_end from client (since_last_audio=%sms)",
+                        since_last_audio,
+                    )
                 
                 elif msg_type == "text":
                     # Client gửi text message (fallback)
                     text = message.get("data")
                     if text:
-                        await session.send(text, end_of_turn=True)
+                        await session.send(input=text, end_of_turn=True)
                         logger.debug(f"Sent text to Gemini: {text}")
                 
                 else:
@@ -176,41 +247,52 @@ class GeminiLiveHandler:
             session: Gemini Live session
         """
         try:
-            # Turn generator: Gemini tạo ra các turns (lượt trả lời)
-            async for turn in session.receive():
-                logger.debug(f"Received turn from Gemini")
+            async for response in session.receive():
+                logger.info(f"📤 Gemini response: data={len(response.data) if response.data else 0} bytes, text={response.text[:50] if response.text else None}, turn_complete={response.server_content.turn_complete if response.server_content else False}")
                 
-                # Mỗi turn có thể có nhiều parts
-                for part in turn.parts:
-                    # Kiểm tra xem có audio data không
-                    if part.inline_data:
-                        audio_data = part.inline_data.data
-                        
-                        # Encode sang base64 để gửi qua WebSocket
-                        audio_base64 = base64.b64encode(audio_data).decode('utf-8')
-                        
-                        # Gửi về client
+                # Xử lý audio data
+                if response.data:
+                    audio_b64 = base64.b64encode(response.data).decode("utf-8")
+                    await websocket.send_json({
+                        "type": "audio_chunk",
+                        "audio": audio_b64
+                    })
+                    logger.info(f"✅ Sent audio chunk to client ({len(response.data)} bytes, base64: {len(audio_b64)} chars)")
+                else:
+                    logger.debug("No audio data in this response")
+
+                # Xử lý text transcript
+                if response.text:
+                    await websocket.send_json({
+                        "type": "transcript",
+                        "text": response.text
+                    })
+                    logger.debug(f"Sent text to client: {response.text[:50]}...")
+
+                # Xử lý turn complete + VAD events
+                if response.server_content:
+                    if getattr(response.server_content, "interrupted", False):
                         await websocket.send_json({
-                            "type": "audio",
-                            "data": audio_base64,
-                            "mime_type": part.inline_data.mime_type
+                            "type": "interrupted"
                         })
-                        logger.debug(f"Sent audio chunk to client ({len(audio_data)} bytes)")
+                        logger.info("⚠️ Gemini interrupted current response")
+
+                    # VAD: User transcript (realtime)
+                    if hasattr(response.server_content, 'input_transcription'):
+                        if response.server_content.input_transcription:
+                            await websocket.send_json({
+                                "type": "user_transcript",
+                                "text": response.server_content.input_transcription.text
+                            })
+                            logger.info(f"👤 User said: {response.server_content.input_transcription.text[:50]}...")
                     
-                    # Nếu có text (fallback hoặc transcript)
-                    elif part.text:
+                    # Turn complete
+                    if response.server_content.turn_complete:
                         await websocket.send_json({
-                            "type": "text",
-                            "data": part.text
+                            "type": "turn_complete"
                         })
-                        logger.debug(f"Sent text to client: {part.text[:50]}...")
-                
-                # Báo hiệu kết thúc turn
-                await websocket.send_json({
-                    "type": "turn_complete"
-                })
-                logger.debug("Turn complete")
-                
+                        logger.info("✅ Turn complete - ready for next question")
+
         except WebSocketDisconnect:
             logger.info("Client disconnected in send loop")
             raise

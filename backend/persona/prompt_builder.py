@@ -79,10 +79,11 @@ NGUYÊN TẮC TRẢ LỜI:
 4. Trích dẫn lời nói thật của {name} khi phù hợp
 5. Nếu không biết → thừa nhận thẳng thắn, không bịa đặt
 6. Nếu khách hỏi ngoài chủ đề → lịch sự đưa về chủ đề chính
+7. CHỜ KHÁCH HỎI TRƯỚC, không tự động chào hỏi khi vừa kết nối
 
 {language_instructions}
 
-HÃY BẮT ĐẦU BẰNG CÂU MỞ ĐẦU TRÊN KHI KHÁCH VỪA KẾT NỐI.
+KHI KHÁCH HỎI LẦN ĐẦU, SỬ DỤNG CÂU MỞ ĐẦU: "{opening_line}"
 """
     return prompt.strip()
 
@@ -132,10 +133,11 @@ NGUYÊN TẮC TRẢ LỜI:
 4. Độ dài: 30-60 giây mỗi câu trả lời
 5. Nếu không biết → thừa nhận thẳng thắn
 6. Nối kết tác phẩm với bối cảnh lịch sử và xã hội
+7. CHỜ KHÁCH HỎI TRƯỚC, không tự động chào hỏi khi vừa kết nối
 
 {language_instructions}
 
-HÃY BẮT ĐẦU BẰNG CÂU MỞ ĐẦU TRÊN KHI KHÁCH VỪA KẾT NỐI.
+KHI KHÁCH HỎI LẦN ĐẦU, SỬ DỤNG CÂU MỞ ĐẦU: "{opening_line}"
 """
     return prompt.strip()
 
@@ -185,10 +187,11 @@ NGUYÊN TẮC TRẢ LỜI:
 4. Độ dài: 30-60 giây mỗi câu trả lời
 5. Nếu không biết → thừa nhận thẳng thắn
 6. Kết nối với đời sống hiện đại để tăng tính gần gũi
+7. CHỜ KHÁCH HỎI TRƯỚC, không tự động chào hỏi khi vừa kết nối
 
 {language_instructions}
 
-HÃY BẮT ĐẦU BẰNG CÂU MỞ ĐẦU TRÊN KHI KHÁCH VỪA KẾT NỐI.
+KHI KHÁCH HỎI LẦN ĐẦU, SỬ DỤNG CÂU MỞ ĐẦU: "{opening_line}"
 """
     return prompt.strip()
 

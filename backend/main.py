@@ -2,9 +2,12 @@
 MuseAI Backend API
 AI Agent cho bảo tàng - Gemini Live Agent Challenge 2026
 """
+from dotenv import load_dotenv
+load_dotenv()
 
 import os
 import logging
+import base64
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, HTTPException, Query, UploadFile, File
@@ -15,6 +18,11 @@ from pydantic import BaseModel
 from live.ws_handler import handle_persona_websocket
 from cms.upload import upload_pdf, get_document_status
 from rag.query_engine import answer_with_rag
+from vision.recognizer import recognize_artifact
+from vision.camera_tour import analyze_frame, generate_commentary
+
+# Import admin routers
+from api import admin_auth, admin_museums, admin_artifacts, admin_upload
 
 
 # Cấu hình logging
@@ -38,6 +46,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Register admin routers
+app.include_router(admin_auth.router)
+app.include_router(admin_museums.router)
+app.include_router(admin_artifacts.router)
+app.include_router(admin_upload.router)
 
 # Firestore client (lazy init)
 _db: Optional[firestore.AsyncClient] = None
@@ -65,7 +79,9 @@ async def root():
             "websocket": "/ws/persona/{artifact_id}?language=vi",
             "upload_pdf": "/admin/upload-pdf/{artifact_id}",
             "document_status": "/admin/document-status/{artifact_id}",
-            "qa": "/qa/{artifact_id}"
+            "qa": "/qa/{artifact_id}",
+            "vision_recognize": "/vision/recognize/{museum_id}",
+            "camera_tour": "/vision/camera-tour/{museum_id}"
         }
     }
 
@@ -200,6 +216,13 @@ class QARequest(BaseModel):
     language: str = "vi"
 
 
+class CameraTourRequest(BaseModel):
+    """Request body cho Camera Tour endpoint."""
+    image_base64: str
+    last_artifact_id: Optional[str] = None
+    language: str = "vi"
+
+
 @app.post("/admin/upload-pdf/{artifact_id}")
 async def upload_pdf_endpoint(
     artifact_id: str,
@@ -294,6 +317,95 @@ async def qa_endpoint(
         
     except Exception as e:
         logger.error(f"Error in Q&A endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/vision/recognize/{museum_id}")
+async def vision_recognize_endpoint(
+    museum_id: str,
+    file: UploadFile = File(...)
+):
+    """
+    Nhận diện hiện vật từ ảnh.
+    
+    Args:
+        museum_id: ID của bảo tàng
+        file: Image file upload (JPEG/PNG)
+    
+    Returns:
+        Dict: {artifact_id, confidence, reasoning, found}
+    """
+    try:
+        logger.info(f"Vision recognize request for museum: {museum_id}")
+        
+        # Đọc image bytes
+        image_bytes = await file.read()
+        
+        if len(image_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Empty image file")
+        
+        # Nhận diện artifact
+        result = await recognize_artifact(image_bytes, museum_id)
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in vision recognize endpoint: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/vision/camera-tour/{museum_id}")
+async def camera_tour_endpoint(
+    museum_id: str,
+    request: CameraTourRequest
+):
+    """
+    Camera Tour mode - Phát hiện hiện vật mới và generate commentary.
+    
+    Args:
+        museum_id: ID của bảo tàng
+        request: CameraTourRequest với image_base64, last_artifact_id, language
+    
+    Returns:
+        Dict: {same, artifact_id, confidence, commentary}
+    """
+    try:
+        logger.info(f"Camera tour request for museum: {museum_id}")
+        
+        # Decode base64 image
+        try:
+            image_bytes = base64.b64decode(request.image_base64)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
+        
+        # Phân tích frame
+        result = await analyze_frame(
+            image_bytes=image_bytes,
+            museum_id=museum_id,
+            last_artifact_id=request.last_artifact_id
+        )
+        
+        # Nếu artifact mới → generate commentary
+        commentary = None
+        if not result["same"] and result["artifact_id"] != "unknown":
+            commentary = await generate_commentary(
+                artifact_id=result["artifact_id"],
+                language=request.language
+            )
+        
+        return {
+            "same": result["same"],
+            "artifact_id": result["artifact_id"],
+            "confidence": result["confidence"],
+            "commentary": commentary
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in camera tour endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 

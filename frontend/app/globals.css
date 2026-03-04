@@ -1,0 +1,38 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --gold: #C9A84C;
+  --gold-dim: rgba(201,168,76,0.3);
+  --museum-white: #F5F0E8;
+  --museum-dim: rgba(245,240,232,0.5);
+  --museum-dark: #0A0A0A;
+}
+
+body {
+  background: var(--museum-dark);
+  color: var(--museum-white);
+  font-family: 'DM Sans', sans-serif;
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  
+  .font-display {
+    font-family: 'Cormorant Garamond', serif;
+  }
+}
+
+@keyframes scanLine {
+  0% { top: 4px; opacity: 0; }
+  10% { opacity: 1; }
+  90% { opacity: 1; }
+  100% { top: 256px; opacity: 0; }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
