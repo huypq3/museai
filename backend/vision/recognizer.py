@@ -1,6 +1,6 @@
 """
-Vision Recognizer - Nhận diện hiện vật bằng Gemini Vision.
-Sử dụng Gemini 2.5 Flash multimodal để match ảnh với artifacts trong bảo tàng.
+Vision recognizer for matching artifacts with Gemini Vision.
+Uses Gemini 2.5 Flash multimodal model for museum artifact matching.
 """
 
 import os
@@ -21,11 +21,11 @@ async def recognize_artifact(
     project_id: str = "museai-2026"
 ) -> Dict:
     """
-    Nhận diện hiện vật từ ảnh bằng Gemini Vision.
+    Recognize an artifact from an image with Gemini Vision.
     
     Args:
         image_bytes: Image data (JPEG/PNG)
-        museum_id: ID của bảo tàng
+        museum_id: Museum ID
         project_id: GCP project ID
     
     Returns:
@@ -39,7 +39,7 @@ async def recognize_artifact(
     try:
         logger.info(f"Recognizing artifact for museum: {museum_id}")
         
-        # Bước 1: Lấy danh sách artifacts từ Firestore
+        # Step 1: Load artifact candidates from Firestore.
         db = firestore.AsyncClient(project=project_id)
         artifacts_ref = db.collection("artifacts").where("museum_id", "==", museum_id)
         artifacts_docs = await artifacts_ref.get()
@@ -53,7 +53,7 @@ async def recognize_artifact(
                 "found": False
             }
         
-        # Tạo artifact list string
+        # Build candidate artifact list.
         artifact_list = []
         for doc in artifacts_docs:
             data = doc.to_dict()
@@ -65,36 +65,36 @@ async def recognize_artifact(
         artifact_list_str = "\n".join(artifact_list)
         logger.info(f"Found {len(artifact_list)} artifacts for matching")
         
-        # Bước 2: Gọi Gemini Vision
+        # Step 2: Call Gemini Vision.
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
         
         client = genai.Client(api_key=api_key)
         
-        # Tạo image part
+        # Build image part.
         image_part = types.Part.from_bytes(
             data=image_bytes,
             mime_type="image/jpeg"
         )
         
-        # Tạo prompt
-        prompt = f"""Nhìn vào ảnh này và xác định đây là hiện vật nào trong danh sách bảo tàng.
+        # Build vision prompt.
+        prompt = f"""Inspect this image and identify which artifact matches the museum list.
 
-Phân tích kỹ hình dạng, màu sắc, kích thước, đặc điểm nổi bật trong ảnh.
-So sánh với mô tả của từng hiện vật trong danh sách.
+Carefully compare visible shape, color, scale, and distinguishing features
+against each listed artifact description.
 
-Chỉ trả về JSON format (KHÔNG có markdown, KHÔNG có text khác):
+Return ONLY valid JSON (no markdown, no extra text):
 {{"artifact_id": "...", "confidence": 0.0-1.0, "reasoning": "..."}}
 
-Nếu không tìm thấy hoặc không chắc chắn:
+If no confident match is possible, return:
 {{"artifact_id": "unknown", "confidence": 0.0, "reasoning": "..."}}
 
-DANH SÁCH HIỆN VẬT:
+ARTIFACT CANDIDATES:
 {artifact_list_str}
 """
         
-        # Gọi Gemini Vision
+        # Invoke Gemini Vision.
         response = client.models.generate_content(
             model="gemini-2.5-flash",
             contents=[image_part, prompt]
@@ -103,7 +103,7 @@ DANH SÁCH HIỆN VẬT:
         response_text = response.text.strip()
         logger.debug(f"Gemini response: {response_text}")
         
-        # Bước 3: Parse JSON response
+        # Step 3: Parse JSON response.
         # Remove markdown code blocks if present
         if response_text.startswith("```"):
             # Extract JSON from markdown
@@ -129,12 +129,12 @@ DANH SÁCH HIỆN VẬT:
                 "found": False
             }
         
-        # Validate result
+        # Validate output.
         artifact_id = result.get("artifact_id", "unknown")
         confidence = float(result.get("confidence", 0.0))
         reasoning = result.get("reasoning", "")
         
-        # Nếu confidence thấp → set artifact_id = unknown
+        # If confidence is too low, downgrade to unknown.
         if confidence < 0.5:
             artifact_id = "unknown"
         

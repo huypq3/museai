@@ -5,15 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { getArtifact } from "@/lib/api";
 import { useLanguage } from "@/hooks/useLanguage";
 import VoiceChat from "@/components/VoiceChat";
-
-const LANGUAGE_FLAGS: Record<string, string> = {
-  vi: "🇻🇳",
-  en: "🇬🇧",
-  fr: "🇫🇷",
-  zh: "🇨🇳",
-  ja: "🇯🇵",
-  ko: "🇰🇷",
-};
+import { trackEvent } from "@/lib/analytics";
 
 export default function ArtifactPage() {
   const params = useParams();
@@ -24,7 +16,6 @@ export default function ArtifactPage() {
   const [artifact, setArtifact] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showLangMenu, setShowLangMenu] = useState(false);
 
   const museumId = typeof window !== 'undefined' 
     ? localStorage.getItem('museum_id') || 'demo_museum'
@@ -35,7 +26,9 @@ export default function ArtifactPage() {
       try {
         const data = await getArtifact(artifactId);
         setArtifact(data.data);
-      } catch (e) {
+        trackEvent("qr_scan", data.data?.museum_id || museumId, artifactId);
+        trackEvent("conversation_start", data.data?.museum_id || museumId, artifactId);
+      } catch {
         setError("Không tìm thấy hiện vật");
       } finally {
         setLoading(false);
@@ -43,11 +36,6 @@ export default function ArtifactPage() {
     }
     loadArtifact();
   }, [artifactId]);
-
-  const handleLanguageChange = (newLang: string) => {
-    changeLanguage(newLang);
-    setShowLangMenu(false);
-  };
 
   if (loading) {
     return (
@@ -76,12 +64,15 @@ export default function ArtifactPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div style={{ height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       {/* Voice Chat - full screen with its own header */}
       <VoiceChat 
         artifactId={artifactId} 
         language={language}
-        onLanguageChange={changeLanguage}
+        onLanguageChange={(next) => {
+          trackEvent("language_changed", museumId, artifactId, { from: language, to: next });
+          changeLanguage(next);
+        }}
         museumName={artifact.museum_id || museumId}
       />
     </div>

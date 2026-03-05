@@ -1,6 +1,6 @@
 """
-RAG Chunker - Tách PDF thành chunks để embedding.
-Dùng PyMuPDF (fitz) để extract text từ PDF.
+RAG chunker for splitting PDF text into overlapping chunks.
+Uses PyMuPDF (fitz) for text extraction.
 """
 
 import fitz  # PyMuPDF
@@ -19,37 +19,37 @@ def extract_chunks(
     overlap: int = 50
 ) -> List[Dict]:
     """
-    Extract text từ PDF và tách thành chunks với overlap.
+    Extract text from PDF and split it into overlapping chunks.
     
     Args:
-        pdf_path: Đường dẫn đến file PDF
-        artifact_id: ID của artifact trong Firestore
-        chunk_size: Số words mỗi chunk (mặc định 512)
-        overlap: Số words overlap giữa các chunks (mặc định 50)
+        pdf_path: PDF file path
+        artifact_id: Artifact ID in Firestore
+        chunk_size: Number of words per chunk (default 512)
+        overlap: Number of overlapping words between chunks (default 50)
     
     Returns:
-        List[Dict]: Danh sách chunks, mỗi chunk có:
+        List[Dict]: List of chunks, each containing:
             - id: unique ID
-            - artifact_id: ID của artifact
-            - chunk_index: thứ tự chunk (0, 1, 2...)
-            - content: nội dung text
-            - word_count: số words trong chunk
+            - artifact_id: Artifact ID
+            - chunk_index: chunk order index (0, 1, 2...)
+            - content: text content
+            - word_count: number of words in chunk
     """
     try:
         logger.info(f"Extracting chunks from PDF: {pdf_path}")
         
-        # Mở PDF
+        # Open PDF.
         doc = fitz.open(pdf_path)
         page_count = len(doc)
         
-        # Extract toàn bộ text từ tất cả pages
+        # Extract all text from all pages.
         full_text = ""
         for page in doc:  # Iterate directly over pages
             full_text += page.get_text()
         
         doc.close()
         
-        # Tách thành words
+        # Split into words.
         words = full_text.split()
         total_words = len(words)
         
@@ -59,18 +59,18 @@ def extract_chunks(
             logger.warning(f"No text extracted from PDF: {pdf_path}")
             return []
         
-        # Tạo chunks với overlap
+        # Build chunks with overlap.
         chunks = []
         chunk_index = 0
         start_idx = 0
         
         while start_idx < total_words:
-            # Lấy chunk_size words
+            # Take chunk_size words.
             end_idx = min(start_idx + chunk_size, total_words)
             chunk_words = words[start_idx:end_idx]
             chunk_content = " ".join(chunk_words)
             
-            # Tạo chunk dict
+            # Build chunk dict.
             chunk = {
                 "id": f"{artifact_id}_chunk_{chunk_index}",
                 "artifact_id": artifact_id,
@@ -81,12 +81,12 @@ def extract_chunks(
             
             chunks.append(chunk)
             
-            # Di chuyển con trỏ với overlap
-            # Nếu đây là chunk cuối → dừng
+            # Move cursor with overlap.
+            # Stop when this is the final chunk.
             if end_idx >= total_words:
                 break
             
-            # Di chuyển start_idx: bỏ qua (chunk_size - overlap) words
+            # Move start_idx by (chunk_size - overlap) words.
             start_idx += (chunk_size - overlap)
             chunk_index += 1
         
@@ -106,33 +106,33 @@ def extract_chunks_from_bytes(
     overlap: int = 50
 ) -> List[Dict]:
     """
-    Extract text từ PDF bytes và tách thành chunks.
-    Dùng cho upload API (không cần save file tạm).
+    Extract text from PDF bytes and split into chunks.
+    Used by upload API (without writing a temp file).
     
     Args:
-        pdf_bytes: PDF file content dạng bytes
-        artifact_id: ID của artifact
-        chunk_size: Số words mỗi chunk
-        overlap: Số words overlap
+        pdf_bytes: PDF bytes content
+        artifact_id: Artifact ID
+        chunk_size: Number of words per chunk
+        overlap: Number of overlapping words
     
     Returns:
-        List[Dict]: Danh sách chunks
+        List[Dict]: List of chunks
     """
     try:
         logger.info(f"Extracting chunks from PDF bytes for artifact: {artifact_id}")
         
-        # Mở PDF từ bytes
+        # Open PDF from bytes.
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
         page_count = len(doc)
         
-        # Extract text từ tất cả pages
+        # Extract text from all pages.
         full_text = ""
         for page in doc:  # Iterate directly over pages
             full_text += page.get_text()
         
         doc.close()
         
-        # Tách thành words
+        # Split into words.
         words = full_text.split()
         total_words = len(words)
         
@@ -142,7 +142,7 @@ def extract_chunks_from_bytes(
             logger.warning(f"No text extracted from PDF bytes for artifact: {artifact_id}")
             return []
         
-        # Tạo chunks với overlap
+        # Build chunks with overlap.
         chunks = []
         chunk_index = 0
         start_idx = 0

@@ -2,14 +2,18 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { setAdminToken } from '@/lib/adminAuth'
+import { setAdminSession } from '@/lib/adminAuth'
+import { useAdminI18n } from '@/lib/adminI18n'
 
 export default function AdminLogin() {
   const router = useRouter()
+  const { locale } = useAdminI18n()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+
+  const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
 
   const handleLogin = async () => {
     setLoading(true)
@@ -23,10 +27,16 @@ export default function AdminLogin() {
           body: JSON.stringify({ username, password }),
         }
       )
-      if (!res.ok) throw new Error('Sai tên đăng nhập hoặc mật khẩu')
+      if (!res.ok) throw new Error(tr('Sai tên đăng nhập hoặc mật khẩu', 'Invalid username or password'))
       const data = await res.json()
-      setAdminToken(data.token)
-      router.push('/admin/museums')
+      setAdminSession(data)
+      if (data.role === 'super_admin') {
+        router.push('/admin/dashboard')
+      } else if (data.role === 'museum_admin' && data.museum_id) {
+        router.push(`/admin/museum/${data.museum_id}`)
+      } else {
+        router.push('/admin/museums')
+      }
     } catch (e: any) {
       setError(e.message)
     } finally {
@@ -77,7 +87,7 @@ export default function AdminLogin() {
             display: 'block',
             marginBottom: 6,
           }}>
-            Tên đăng nhập
+            {tr('Tên đăng nhập', 'Username')}
           </label>
           <input
             value={username}
@@ -105,7 +115,7 @@ export default function AdminLogin() {
             display: 'block',
             marginBottom: 6,
           }}>
-            Mật khẩu
+            {tr('Mật khẩu', 'Password')}
           </label>
           <input
             type="password"
@@ -153,7 +163,7 @@ export default function AdminLogin() {
             opacity: loading ? 0.7 : 1,
           }}
         >
-          {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
+          {loading ? tr('Đang đăng nhập...', 'Signing in...') : tr('Đăng nhập', 'Sign in')}
         </button>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from "react";
-import { WS_BACKEND_URL } from "@/lib/constants";
+import { BACKEND_URL, WS_BACKEND_URL } from "@/lib/constants";
 
 type WSMessage = {
   type: string;
@@ -18,15 +18,31 @@ export function useWebSocket(artifactId: string | null, language: string) {
   const shouldReconnectRef = useRef(true);
   const MAX_RETRY = 3;
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!artifactId) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
     if (isConnectingRef.current) return;
 
     isConnectingRef.current = true;
+    let wsToken = "";
+    try {
+      const tokenResp = await fetch(`${BACKEND_URL}/api/session/token/${artifactId}`, {
+        method: "POST",
+      });
+      if (!tokenResp.ok) {
+        throw new Error(`session token request failed: ${tokenResp.status}`);
+      }
+      const tokenPayload = await tokenResp.json();
+      wsToken = tokenPayload?.token || "";
+    } catch (error) {
+      console.error("❌ Failed to get WS session token:", error);
+      isConnectingRef.current = false;
+      setIsConnected(false);
+      return;
+    }
 
-    const wsUrl = `${WS_BACKEND_URL}/ws/persona/${artifactId}?language=${language}`;
+    const wsUrl = `${WS_BACKEND_URL}/ws/persona/${artifactId}?language=${language}&token=${encodeURIComponent(wsToken)}`;
     console.log("🔌 Connecting to:", wsUrl);
 
     const ws = new WebSocket(wsUrl);
@@ -95,16 +111,18 @@ export function useWebSocket(artifactId: string | null, language: string) {
     };
   }, [artifactId, language, connect]);
 
-  const sendMessage = useCallback((message: WSMessage) => {
+  const sendMessage = useCallback((message: WSMessage): boolean => {
     const ws = wsRef.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
       console.warn("⚠️ Cannot send: WS not open, state:", ws?.readyState);
-      return;
+      return false;
     }
     try {
       ws.send(JSON.stringify(message));
+      return true;
     } catch (error) {
       console.error("❌ Send error:", error);
+      return false;
     }
   }, []);
 

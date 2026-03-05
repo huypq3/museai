@@ -1,5 +1,12 @@
 import { useState, useRef, useCallback } from "react";
 
+type AutoStopOptions = {
+  onAutoStop?: (reason: "silence" | "no_speech") => void;
+  silenceMs?: number;
+  maxNoSpeechMs?: number;
+  voiceThreshold?: number;
+};
+
 export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -7,8 +14,22 @@ export function useAudioRecorder() {
   const streamRef = useRef<MediaStream | null>(null);
   const isRecordingRef = useRef(false);
   const chunkCountRef = useRef(0);
+  const lastVoiceAtRef = useRef(0);
+  const recordingStartedAtRef = useRef(0);
+  const hasDetectedVoiceRef = useRef(false);
+  const autoStoppedRef = useRef(false);
 
-  const start = useCallback(async (onChunk: (base64: string) => void) => {
+  const bytesToBase64 = (bytes: Uint8Array): string => {
+    let binary = "";
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      const slice = bytes.subarray(i, i + chunkSize);
+      binary += String.fromCharCode.apply(null, Array.from(slice));
+    }
+    return btoa(binary);
+  };
+
+  const start = useCallback(async (onChunk: (base64: string) => void, options?: AutoStopOptions) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -31,21 +52,32 @@ export function useAudioRecorder() {
       // Use ScriptProcessorNode to get raw PCM data
       const processor = audioContext.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
+      const silenceMs = options?.silenceMs ?? 1300;
+      const maxNoSpeechMs = options?.maxNoSpeechMs ?? 2800;
+      const voiceThreshold = options?.voiceThreshold ?? 0;
       
       processor.onaudioprocess = (e) => {
         if (!isRecordingRef.current) return;
         
         const inputData = e.inputBuffer.getChannelData(0);
+        let energy = 0;
         
         // Convert Float32Array to Int16Array (PCM 16-bit)
         const pcmData = new Int16Array(inputData.length);
         for (let i = 0; i < inputData.length; i++) {
           const s = Math.max(-1, Math.min(1, inputData[i]));
+          energy += s * s;
           pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+        }
+        const rms = Math.sqrt(energy / inputData.length);
+        const now = Date.now();
+        if (rms >= voiceThreshold) {
+          lastVoiceAtRef.current = now;
+          hasDetectedVoiceRef.current = true;
         }
         
         // Convert to base64
-        const base64 = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+        const base64 = bytesToBase64(new Uint8Array(pcmData.buffer));
         
         // Log every 10 chunks
         if (chunkCountRef.current % 10 === 0) {
@@ -54,12 +86,37 @@ export function useAudioRecorder() {
         chunkCountRef.current++;
         
         onChunk(base64);
+
+        if (autoStoppedRef.current) return;
+
+        if (
+          hasDetectedVoiceRef.current &&
+          now - lastVoiceAtRef.current >= silenceMs
+        ) {
+          autoStoppedRef.current = true;
+          console.log(`⏱️ Auto-stop: silence ${silenceMs}ms`);
+          options?.onAutoStop?.("silence");
+          return;
+        }
+
+        if (
+          !hasDetectedVoiceRef.current &&
+          now - recordingStartedAtRef.current >= maxNoSpeechMs
+        ) {
+          autoStoppedRef.current = true;
+          console.log(`⏱️ Auto-stop: no speech ${maxNoSpeechMs}ms`);
+          options?.onAutoStop?.("no_speech");
+        }
       };
       
       source.connect(processor);
       processor.connect(audioContext.destination);
       
       isRecordingRef.current = true;
+      hasDetectedVoiceRef.current = false;
+      autoStoppedRef.current = false;
+      recordingStartedAtRef.current = Date.now();
+      lastVoiceAtRef.current = recordingStartedAtRef.current;
       setIsRecording(true);
       console.log("🎤 Recording started (PCM 16kHz mono)");
     } catch (error) {
@@ -73,6 +130,8 @@ export function useAudioRecorder() {
     
     isRecordingRef.current = false;
     chunkCountRef.current = 0;  // Reset counter
+    hasDetectedVoiceRef.current = false;
+    autoStoppedRef.current = false;
     
     if (processorRef.current) {
       processorRef.current.disconnect();
@@ -128,7 +187,7 @@ export function useAudioRecorder() {
           }
 
           const rms = Math.sqrt(energy / inputData.length);
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(pcmData.buffer)));
+          const base64 = bytesToBase64(new Uint8Array(pcmData.buffer));
           onChunk(base64, rms);
         };
 

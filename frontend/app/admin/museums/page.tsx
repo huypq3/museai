@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { adminFetch, clearAdminToken } from '@/lib/adminAuth'
+import { adminFetch, clearAdminToken, getAdminSession } from '@/lib/adminAuth'
+import { useAdminI18n } from '@/lib/adminI18n'
 
 type Museum = {
   id: string
@@ -15,13 +16,29 @@ type Museum = {
 
 export default function MuseumsPage() {
   const router = useRouter()
+  const { locale } = useAdminI18n()
+  const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
   const [museums, setMuseums] = useState<Museum[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
-  const [form, setForm] = useState({ name: '', name_en: '', description: '', address: '' })
+  const [form, setForm] = useState({
+    name: '',
+    name_en: '',
+    address: '',
+    city: '',
+    phone: '',
+    email: '',
+    admin_username: '',
+    admin_password: '',
+  })
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    const s = getAdminSession()
+    if (s?.role === 'museum_admin' && s.museum_id) {
+      router.replace(`/admin/museum/${s.museum_id}`)
+      return
+    }
     loadMuseums()
   }, [])
 
@@ -44,7 +61,16 @@ export default function MuseumsPage() {
         body: JSON.stringify(form),
       })
       setShowModal(false)
-      setForm({ name: '', name_en: '', description: '', address: '' })
+      setForm({
+        name: '',
+        name_en: '',
+        address: '',
+        city: '',
+        phone: '',
+        email: '',
+        admin_username: '',
+        admin_password: '',
+      })
       loadMuseums()
     } finally {
       setSaving(false)
@@ -52,7 +78,7 @@ export default function MuseumsPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Xóa bảo tàng này?')) return
+    if (!confirm(tr('Xóa bảo tàng này?', 'Delete this museum?'))) return
     await adminFetch(`/admin/museums/${id}`, { method: 'DELETE' })
     loadMuseums()
   }
@@ -93,12 +119,12 @@ export default function MuseumsPage() {
             letterSpacing: '0.15em',
             textTransform: 'uppercase',
           }}>
-            Quản lý bảo tàng
+            {tr('Quản lý bảo tàng', 'Museum management')}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
           <button
-            onClick={() => setShowModal(true)}
+            onClick={() => router.push('/admin/museums/new')}
             style={{
               padding: '10px 20px',
               background: '#C9A84C',
@@ -110,7 +136,7 @@ export default function MuseumsPage() {
               cursor: 'pointer',
             }}
           >
-            + Thêm bảo tàng
+            + {tr('Thêm bảo tàng', 'Add museum')}
           </button>
           <button
             onClick={() => {
@@ -127,7 +153,7 @@ export default function MuseumsPage() {
               cursor: 'pointer',
             }}
           >
-            Đăng xuất
+            {tr('Đăng xuất', 'Logout')}
           </button>
         </div>
       </div>
@@ -139,7 +165,7 @@ export default function MuseumsPage() {
           textAlign: 'center',
           paddingTop: 80,
         }}>
-          Đang tải...
+          {tr('Đang tải...', 'Loading...')}
         </div>
       ) : (
         <div style={{
@@ -168,7 +194,7 @@ export default function MuseumsPage() {
                 color: 'rgba(245,240,232,0.4)',
                 marginBottom: 12,
               }}>
-                {m.address || 'Chưa có địa chỉ'}
+                {m.address || tr('Chưa có địa chỉ', 'No address')}
               </div>
               <div style={{
                 display: 'flex',
@@ -182,7 +208,7 @@ export default function MuseumsPage() {
                   padding: '3px 10px',
                   borderRadius: 20,
                 }}>
-                  {m.artifact_count || 0} hiện vật
+                  {m.artifact_count || 0} {tr('hiện vật', 'artifacts')}
                 </span>
                 <button
                   onClick={e => {
@@ -230,31 +256,55 @@ export default function MuseumsPage() {
             onClick={e => e.stopPropagation()}
           >
             <div style={{ fontSize: 20, fontWeight: 500, marginBottom: 24 }}>
-              Thêm bảo tàng
+              {tr('Thêm bảo tàng', 'Add museum')}
             </div>
             <input
-              placeholder="Tên bảo tàng (tiếng Việt)"
+              placeholder={tr('Tên bảo tàng (tiếng Việt)', 'Museum name (Vietnamese)')}
               value={form.name}
               onChange={e => setForm({ ...form, name: e.target.value })}
               style={inputStyle}
             />
             <input
-              placeholder="Tên tiếng Anh (dùng làm ID)"
+              placeholder={tr('Tên tiếng Anh (dùng làm ID)', 'English name (used as ID)')}
               value={form.name_en}
               onChange={e => setForm({ ...form, name_en: e.target.value })}
               style={inputStyle}
             />
             <input
-              placeholder="Địa chỉ"
+              placeholder={tr('Địa chỉ', 'Address')}
               value={form.address}
               onChange={e => setForm({ ...form, address: e.target.value })}
               style={inputStyle}
             />
-            <textarea
-              placeholder="Mô tả"
-              value={form.description}
-              onChange={e => setForm({ ...form, description: e.target.value })}
-              style={{ ...inputStyle, height: 80, resize: 'none' as const }}
+            <input
+              placeholder={tr('Thành phố', 'City')}
+              value={form.city}
+              onChange={e => setForm({ ...form, city: e.target.value })}
+              style={inputStyle}
+            />
+            <input
+              placeholder={tr('Số điện thoại', 'Phone')}
+              value={form.phone}
+              onChange={e => setForm({ ...form, phone: e.target.value })}
+              style={inputStyle}
+            />
+            <input
+              placeholder={tr('Email', 'Email')}
+              value={form.email}
+              onChange={e => setForm({ ...form, email: e.target.value })}
+              style={inputStyle}
+            />
+            <input
+              placeholder="Museum admin username"
+              value={form.admin_username}
+              onChange={e => setForm({ ...form, admin_username: e.target.value })}
+              style={inputStyle}
+            />
+            <input
+              placeholder="Museum admin password"
+              value={form.admin_password}
+              onChange={e => setForm({ ...form, admin_password: e.target.value })}
+              style={inputStyle}
             />
             <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
               <button
@@ -270,7 +320,7 @@ export default function MuseumsPage() {
                   fontSize: 14,
                 }}
               >
-                Hủy
+                {tr('Hủy', 'Cancel')}
               </button>
               <button
                 onClick={handleCreate}
@@ -287,7 +337,7 @@ export default function MuseumsPage() {
                   fontWeight: 500,
                 }}
               >
-                {saving ? 'Đang lưu...' : 'Tạo bảo tàng'}
+                {saving ? tr('Đang lưu...', 'Saving...') : tr('Tạo bảo tàng', 'Create museum')}
               </button>
             </div>
           </div>

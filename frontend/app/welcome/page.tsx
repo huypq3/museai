@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/hooks/useLanguage";
 import { t } from "@/lib/i18n";
+import { LanguageCode } from "@/lib/constants";
 
-const FLAG_MAP: Record<string, string> = {
+const FLAG_MAP: Record<LanguageCode, string> = {
   vi: '🇻🇳',
   en: '🇺🇸',
   fr: '🇫🇷',
@@ -14,7 +15,7 @@ const FLAG_MAP: Record<string, string> = {
   zh: '🇨🇳',
 };
 
-const LANG_NAME: Record<string, string> = {
+const LANG_NAME: Record<LanguageCode, string> = {
   vi: 'VI',
   en: 'EN',
   fr: 'FR',
@@ -25,18 +26,21 @@ const LANG_NAME: Record<string, string> = {
 
 export default function WelcomePage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { language, changeLanguage } = useLanguage();
   const [showLangMenu, setShowLangMenu] = useState(false);
-  
-  const museum = searchParams.get('museum') || 'demo_museum';
+  const [museum, setMuseum] = useState("demo_museum");
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setMuseum(params.get("museum") || "demo_museum");
+  }, []);
 
   const handleStart = () => {
     localStorage.setItem('museum_id', museum);
     router.push(`/camera-tour?museum=${museum}`);
   };
 
-  const handleLanguageChange = (newLang: string) => {
+  const handleLanguageChange = (newLang: LanguageCode) => {
     changeLanguage(newLang);
     setShowLangMenu(false);
   };
@@ -84,7 +88,7 @@ export default function WelcomePage() {
             {Object.entries(FLAG_MAP).map(([lang, flag]) => (
               <button
                 key={lang}
-                onClick={() => handleLanguageChange(lang)}
+                onClick={() => handleLanguageChange(lang as LanguageCode)}
                 className="w-full px-4 py-2 flex items-center gap-3 hover:brightness-125 transition"
                 style={{
                   background: language === lang ? 'rgba(201,168,76,0.2)' : 'transparent',
@@ -94,7 +98,7 @@ export default function WelcomePage() {
                 }}>
                 <span className="text-lg">{flag}</span>
                 <span style={{ color: 'var(--museum-white)' }}>
-                  {LANG_NAME[lang]}
+                  {LANG_NAME[lang as LanguageCode]}
                 </span>
               </button>
             ))}

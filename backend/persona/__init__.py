@@ -1,4 +1,4 @@
-"""Persona module - xây dựng AI persona cho hiện vật bảo tàng."""
+"""Persona module for building AI guide persona per museum artifact."""
 
 from .prompt_builder import build_prompt
 

@@ -1,4 +1,4 @@
-"""Live module - xử lý Gemini Live API WebSocket."""
+"""Live module for Gemini Live API websocket handling."""
 
 from .ws_handler import handle_persona_websocket, GeminiLiveHandler
 

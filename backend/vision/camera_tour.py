@@ -1,6 +1,6 @@
 """
-Camera Tour - Live camera mode với AI commentary tự động.
-Phát hiện hiện vật mới và generate commentary ngắn gọn.
+Camera tour module for live camera mode with automatic AI commentary.
+Detects artifact changes and generates short commentary text.
 """
 
 import os
@@ -22,17 +22,17 @@ async def analyze_frame(
     project_id: str = "museai-2026"
 ) -> Dict:
     """
-    Phân tích frame từ camera để phát hiện hiện vật mới.
+    Analyze camera frame and detect whether a new artifact appears.
     
     Args:
         image_bytes: Image data
-        museum_id: ID của bảo tàng
-        last_artifact_id: ID của artifact trước đó (để tránh repeat)
+        museum_id: Museum ID
+        last_artifact_id: Previous artifact ID (to avoid repeats)
         project_id: GCP project ID
     
     Returns:
         Dict: {
-            "same": bool,  # True nếu cùng artifact với lần trước
+            "same": bool,  # True if same artifact as previous frame
             "artifact_id": str,
             "confidence": float
         }
@@ -40,13 +40,13 @@ async def analyze_frame(
     try:
         logger.info(f"Analyzing camera frame for museum: {museum_id}")
         
-        # Nhận diện artifact
+        # Run artifact recognition.
         result = await recognize_artifact(image_bytes, museum_id, project_id)
         
         artifact_id = result["artifact_id"]
         confidence = result["confidence"]
         
-        # Kiểm tra xem có phải cùng artifact không
+        # Check whether the artifact is unchanged.
         if artifact_id == last_artifact_id:
             logger.info(f"Same artifact as last frame: {artifact_id}")
             return {
@@ -55,7 +55,7 @@ async def analyze_frame(
                 "confidence": confidence
             }
         
-        # Artifact mới
+        # New artifact detected.
         logger.info(f"New artifact detected: {artifact_id}")
         return {
             "same": False,
@@ -78,33 +78,33 @@ async def generate_commentary(
     project_id: str = "museai-2026"
 ) -> str:
     """
-    Generate câu commentary ngắn cho Live Camera Tour.
+    Generate short commentary text for live camera tour.
     
     Args:
-        artifact_id: ID của artifact
-        language: Ngôn ngữ (vi, en, fr, zh, ja, ko)
+        artifact_id: Artifact ID
+        language: Output language (vi, en, fr, zh, ja, ko)
         project_id: GCP project ID
     
     Returns:
-        str: Commentary text (1-2 câu ngắn)
+        str: Commentary text (1-2 short sentences)
     """
     try:
         logger.info(f"Generating commentary for artifact: {artifact_id}")
         
-        # Lấy artifact + persona từ Firestore
+        # Load artifact and persona data from Firestore.
         db = firestore.AsyncClient(project=project_id)
         
         artifact_ref = db.collection("artifacts").document(artifact_id)
         artifact_doc = await artifact_ref.get()
         
         if not artifact_doc.exists:
-            return "Xin lỗi, tôi không tìm thấy thông tin về hiện vật này."
+            return "Sorry, I could not find information for this artifact."
         
         artifact_data = artifact_doc.to_dict()
-        name = artifact_data.get("name", "hiện vật này")
+        name = artifact_data.get("name", "this artifact")
         description = artifact_data.get("short_description", artifact_data.get("description", ""))
         
-        # Lấy persona nếu có
+        # Load persona data if available.
         persona_text = ""
         persona_id = artifact_data.get("persona_id")
         if persona_id:
@@ -117,35 +117,35 @@ async def generate_commentary(
                 if opening_line:
                     persona_text = f"Opening line: {opening_line}"
         
-        # Generate commentary bằng Gemini
+        # Generate commentary with Gemini.
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
             raise ValueError("GEMINI_API_KEY environment variable not set")
         
         client = genai.Client(api_key=api_key)
         
-        # Language map
+        # Language label map.
         language_map = {
-            "vi": "tiếng Việt",
+            "vi": "Vietnamese",
             "en": "English",
-            "fr": "français",
-            "zh": "中文",
-            "ja": "日本語",
-            "ko": "한국어"
+            "fr": "French",
+            "zh": "Chinese",
+            "ja": "Japanese",
+            "ko": "Korean",
         }
-        lang_name = language_map.get(language, "tiếng Việt")
-        
-        prompt = f"""Bạn là hướng dẫn viên bảo tàng. Camera vừa phát hiện hiện vật mới.
+        lang_name = language_map.get(language, "Vietnamese")
 
-Tạo câu giới thiệu NGẮN GỌN (1-2 câu, tối đa 30 từ) về:
-- Tên: {name}
-- Mô tả: {description}
+        prompt = f"""You are a museum guide. The camera has detected a new artifact.
+
+Create a SHORT introduction (1-2 sentences, max 30 words) using:
+- Name: {name}
+- Description: {description}
 {persona_text}
 
-Phong cách: Thân thiện, thu hút sự chú ý.
-Ngôn ngữ: {lang_name}
+Style: Friendly and attention-grabbing.
+Language: {lang_name}
 
-CHỈ trả về câu giới thiệu, KHÔNG giải thích thêm.
+Return only the introduction sentence(s), without extra explanation.
 """
         
         response = client.models.generate_content(
@@ -160,4 +160,4 @@ CHỈ trả về câu giới thiệu, KHÔNG giải thích thêm.
         
     except Exception as e:
         logger.error(f"Error generating commentary: {e}", exc_info=True)
-        return "Xin lỗi, đã có lỗi khi tạo commentary."
+        return "Sorry, an error occurred while generating commentary."

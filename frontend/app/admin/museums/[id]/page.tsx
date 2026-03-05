@@ -3,16 +3,22 @@
 import { useEffect, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { adminFetch } from '@/lib/adminAuth'
+import { useAdminI18n } from '@/lib/adminI18n'
 
 type Artifact = {
   id: string
   name: string
-  era: string
-  image_url: string
+  period?: string
+  primary_image_url?: string
+  image_url?: string
+  location?: { hall?: string } | string
+  status?: 'published' | 'draft'
 }
 
 export default function MuseumDetailPage() {
   const router = useRouter()
+  const { locale } = useAdminI18n()
+  const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
   const params = useParams()
   const museumId = params.id as string
   
@@ -41,7 +47,7 @@ export default function MuseumDetailPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Xóa hiện vật này?')) return
+    if (!confirm(tr('Xóa hiện vật này?', 'Delete this artifact?'))) return
     await adminFetch(`/admin/artifacts/${id}`, { method: 'DELETE' })
     loadArtifacts()
   }
@@ -61,7 +67,7 @@ export default function MuseumDetailPage() {
             marginBottom: 12,
           }}
         >
-          ← Bảo tàng
+          ← {tr('Bảo tàng', 'Museums')}
         </button>
         <div style={{
           display: 'flex',
@@ -82,7 +88,7 @@ export default function MuseumDetailPage() {
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
             }}>
-              {artifacts.length} hiện vật
+              {artifacts.length} {tr('hiện vật', 'artifacts')}
             </div>
           </div>
           <button
@@ -98,7 +104,7 @@ export default function MuseumDetailPage() {
               cursor: 'pointer',
             }}
           >
-            + Thêm hiện vật
+            + {tr('Thêm hiện vật', 'Add artifact')}
           </button>
         </div>
       </div>
@@ -110,7 +116,7 @@ export default function MuseumDetailPage() {
           textAlign: 'center',
           paddingTop: 80,
         }}>
-          Đang tải...
+          {tr('Đang tải...', 'Loading...')}
         </div>
       ) : artifacts.length === 0 ? (
         <div style={{
@@ -118,7 +124,7 @@ export default function MuseumDetailPage() {
           textAlign: 'center',
           paddingTop: 80,
         }}>
-          Chưa có hiện vật nào
+          {tr('Chưa có hiện vật nào', 'No artifacts yet')}
         </div>
       ) : (
         <div style={{
@@ -149,9 +155,9 @@ export default function MuseumDetailPage() {
                 justifyContent: 'center',
                 overflow: 'hidden',
               }}>
-                {a.image_url ? (
+                {a.primary_image_url || a.image_url ? (
                   <img
-                    src={a.image_url}
+                    src={a.primary_image_url || a.image_url}
                     alt={a.name}
                     style={{
                       width: '100%',
@@ -169,12 +175,11 @@ export default function MuseumDetailPage() {
                 <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 4 }}>
                   {a.name}
                 </div>
-                <div style={{
-                  fontSize: 12,
-                  color: 'rgba(245,240,232,0.4)',
-                  marginBottom: 12,
-                }}>
-                  {a.era || 'Chưa có thời kỳ'}
+                <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', marginBottom: 6 }}>
+                  {a.period || tr('Chưa có thời kỳ', 'No period')}
+                </div>
+                <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', marginBottom: 12 }}>
+                  {typeof a.location === 'object' ? a.location?.hall : a.location || tr('Chưa có vị trí', 'No location')} · {a.status || 'draft'}
                 </div>
                 <button
                   onClick={e => {
@@ -189,7 +194,7 @@ export default function MuseumDetailPage() {
                     fontSize: 12,
                   }}
                 >
-                  Xóa
+                  {tr('Xóa', 'Delete')}
                 </button>
               </div>
             </div>

@@ -1,5 +1,5 @@
 """
-CMS Upload - Upload PDF tài liệu và tạo RAG chunks.
+CMS upload utilities for PDF ingestion and RAG chunk creation.
 """
 
 import os
@@ -23,30 +23,30 @@ async def upload_pdf(
     bucket_name: str = "museai-documents"
 ) -> Dict:
     """
-    Upload PDF lên Cloud Storage và tạo RAG chunks.
+    Upload PDF to Cloud Storage and generate RAG chunks.
     
     Args:
         file_bytes: PDF file content
-        filename: Tên file gốc
-        artifact_id: ID của artifact
+        filename: Original filename
+        artifact_id: Artifact ID
         project_id: GCP project ID
         bucket_name: Cloud Storage bucket name
     
     Returns:
         Dict:
-            - artifact_id: ID của artifact
-            - chunk_count: số chunks đã tạo
-            - status: "success" hoặc "error"
-            - gcs_path: đường dẫn file trên GCS
+            - artifact_id: Artifact ID
+            - chunk_count: Number of generated chunks
+            - status: "success" or "error"
+            - gcs_path: File path in GCS
     """
     try:
         logger.info(f"Uploading PDF for artifact: {artifact_id}")
         
-        # 1. Upload PDF lên Cloud Storage
+        # 1) Upload PDF to Cloud Storage
         storage_client = storage.Client(project=project_id)
         bucket = storage_client.bucket(bucket_name)
         
-        # Đường dẫn: {artifact_id}/original.pdf
+        # Path: {artifact_id}/original.pdf
         blob_path = f"{artifact_id}/original.pdf"
         blob = bucket.blob(blob_path)
         
@@ -56,7 +56,7 @@ async def upload_pdf(
         
         logger.info(f"Uploaded PDF to: {gcs_path}")
         
-        # 2. Extract chunks từ PDF bytes
+        # 2) Extract chunks from PDF bytes
         chunks = extract_chunks_from_bytes(
             pdf_bytes=file_bytes,
             artifact_id=artifact_id,
@@ -74,14 +74,14 @@ async def upload_pdf(
                 "gcs_path": gcs_path
             }
         
-        # 3. Embed và store chunks vào Firestore
+        # 3) Embed and store chunks in Firestore
         await embed_and_store_chunks(
             chunks=chunks,
             artifact_id=artifact_id,
             project_id=project_id
         )
         
-        # 4. Lưu metadata vào Firestore collection "documents"
+        # 4) Store metadata in Firestore "documents" collection
         db = firestore.AsyncClient(project=project_id)
         doc_ref = db.collection("documents").document(artifact_id)
         
@@ -117,29 +117,29 @@ async def get_document_status(
     project_id: str = "museai-2026"
 ) -> Dict:
     """
-    Kiểm tra trạng thái document của artifact.
+    Check document status for an artifact.
     
     Args:
-        artifact_id: ID của artifact
+        artifact_id: Artifact ID
         project_id: GCP project ID
     
     Returns:
         Dict:
-            - artifact_id: ID của artifact
-            - chunk_count: số chunks hiện có
-            - has_document: True nếu có document
-            - document_info: thông tin document (nếu có)
+            - artifact_id: Artifact ID
+            - chunk_count: Number of current chunks
+            - has_document: True if document exists
+            - document_info: Document metadata (if present)
     """
     try:
         logger.info(f"Getting document status for artifact: {artifact_id}")
         
         db = firestore.AsyncClient(project=project_id)
         
-        # Kiểm tra document metadata
+        # Check document metadata
         doc_ref = db.collection("documents").document(artifact_id)
         doc_snapshot = await doc_ref.get()
         
-        # Đếm chunks
+        # Count chunks
         chunks_ref = db.collection("artifact_chunks").where("artifact_id", "==", artifact_id)
         chunks_docs = await chunks_ref.get()
         chunk_count = len(chunks_docs)

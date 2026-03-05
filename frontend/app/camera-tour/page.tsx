@@ -1,10 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { useLanguage } from "@/hooks/useLanguage";
 import { t } from "@/lib/i18n";
+import { LanguageCode } from "@/lib/constants";
 import QRScanner from "@/components/QRScanner";
+import { trackEvent } from "@/lib/analytics";
 
 type State = "scanning" | "processing" | "detected" | "error";
 
@@ -18,20 +20,27 @@ type DetectedArtifact = {
 
 export default function CameraTourPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
   const { language, changeLanguage } = useLanguage();
   
   const [state, setState] = useState<State>("scanning");
   const [detected, setDetected] = useState<DetectedArtifact | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
+  const [museumId, setMuseumId] = useState("demo_museum");
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   
-  const museumId = searchParams.get('museum') || localStorage.getItem('museum_id') || 'demo_museum';
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const fromQuery = params.get("museum");
+    const fromLocal = localStorage.getItem("museum_id");
+    const resolved = fromQuery || fromLocal || "demo_museum";
+    setMuseumId(resolved);
+    trackEvent("camera_opened", resolved);
+  }, []);
 
-  const LANGUAGE_FLAGS: Record<string, string> = {
+  const LANGUAGE_FLAGS: Record<LanguageCode, string> = {
     vi: "🇻🇳",
     en: "🇬🇧",
     fr: "🇫🇷",
@@ -115,6 +124,9 @@ export default function CameraTourPage() {
           const result = await response.json();
           
           if (result.found && result.confidence >= 0.5) {
+            trackEvent("artifact_detected", museumId, result.artifact_id, {
+              confidence: result.confidence,
+            });
             setDetected({
               artifact_id: result.artifact_id,
               name: result.artifact_name || "Hiện vật",
@@ -191,7 +203,11 @@ export default function CameraTourPage() {
                 {Object.entries(LANGUAGE_FLAGS).map(([lang, flag]) => (
                   <button
                     key={lang}
-                    onClick={() => { changeLanguage(lang); setShowLangMenu(false); }}
+                    onClick={() => {
+                      trackEvent("language_changed", museumId, undefined, { from: language, to: lang });
+                      changeLanguage(lang as LanguageCode);
+                      setShowLangMenu(false);
+                    }}
                     className="w-full px-4 py-2 flex items-center gap-3 hover:brightness-125 transition"
                     style={{
                       background: language === lang ? 'rgba(201,168,76,0.2)' : 'transparent',

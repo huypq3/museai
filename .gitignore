@@ -4,6 +4,8 @@
 !tsconfig.json
 .env
 .env.*
+!.env.example
+!backend/.env.example
 *-sa-key.json
 serviceAccountKey.json
 

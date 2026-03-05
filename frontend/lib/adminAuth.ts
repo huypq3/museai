@@ -1,5 +1,16 @@
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL
 
+export type AdminRole = 'super_admin' | 'museum_admin'
+
+export type AdminSession = {
+  token: string
+  username?: string
+  uid?: string
+  role?: AdminRole
+  museum_id?: string | null
+  museum_name?: string | null
+}
+
 export function getAdminToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem('admin_token')
@@ -9,8 +20,25 @@ export function setAdminToken(token: string) {
   localStorage.setItem('admin_token', token)
 }
 
+export function setAdminSession(session: AdminSession) {
+  setAdminToken(session.token)
+  localStorage.setItem('admin_session', JSON.stringify(session))
+}
+
+export function getAdminSession(): AdminSession | null {
+  if (typeof window === 'undefined') return null
+  const raw = localStorage.getItem('admin_session')
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as AdminSession
+  } catch {
+    return null
+  }
+}
+
 export function clearAdminToken() {
   localStorage.removeItem('admin_token')
+  localStorage.removeItem('admin_session')
 }
 
 export async function adminFetch(
@@ -27,7 +55,7 @@ export async function adminFetch(
       ...options.headers,
     },
   })
-  if (res.status === 401) {
+  if (res.status === 401 || res.status === 403) {
     clearAdminToken()
     window.location.href = '/admin/login'
     throw new Error('Unauthorized')
@@ -36,11 +64,20 @@ export async function adminFetch(
   return res.json()
 }
 
-export async function adminUpload(file: File): Promise<string> {
+export function getAdminRole(): AdminRole | null {
+  return (getAdminSession()?.role as AdminRole | undefined) || null
+}
+
+export function getAdminMuseumId(): string | null {
+  return getAdminSession()?.museum_id || null
+}
+
+export async function adminUpload(file: File, museumId?: string): Promise<string> {
   const token = getAdminToken()
   if (!token) throw new Error('Not authenticated')
   const formData = new FormData()
   formData.append('file', file)
+  if (museumId) formData.append('museum_id', museumId)
   const res = await fetch(`${BACKEND}/admin/upload/image`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },

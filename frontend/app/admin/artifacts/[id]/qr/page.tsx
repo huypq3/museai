@@ -4,9 +4,12 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import QRCode from 'qrcode'
 import { adminFetch } from '@/lib/adminAuth'
+import { useAdminI18n } from '@/lib/adminI18n'
 
 export default function ArtifactQRPage() {
   const router = useRouter()
+  const { locale } = useAdminI18n()
+  const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
   const params = useParams()
   const artifactId = params.id as string
   
@@ -77,7 +80,7 @@ export default function ArtifactQRPage() {
             marginBottom: 24,
           }}
         >
-          ← Quay lại
+          ← {tr('Quay lại', 'Back')}
         </button>
 
         <div style={{
@@ -86,7 +89,7 @@ export default function ArtifactQRPage() {
           color: '#C9A84C',
           marginBottom: 8,
         }}>
-          QR Code
+          {tr('Mã QR', 'QR Code')}
         </div>
 
         <div style={{
@@ -135,7 +138,7 @@ export default function ArtifactQRPage() {
               cursor: 'pointer',
             }}
           >
-            📥 Tải PNG
+            📥 {tr('Tải PNG', 'Download PNG')}
           </button>
           <button
             onClick={() => router.back()}
@@ -150,7 +153,7 @@ export default function ArtifactQRPage() {
               cursor: 'pointer',
             }}
           >
-            Đóng
+            {tr('Đóng', 'Close')}
           </button>
         </div>
       </div>
