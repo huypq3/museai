@@ -19,6 +19,12 @@ venv/
 node_modules/
 .next/
 dist/
+frontend/.next_bak_1772698718/
+
+# Markdown: only keep README files
+*.md
+!README.md
+!**/README.md
 
 # macOS
 .DS_Store
@@ -29,6 +35,6 @@ infra/terraform/*.tfstate
 infra/terraform/*.tfstate.backup
 infra/terraform/.terraform.lock.hcl
 
-#prompt 
+#prompt
 .cursorrules
 PROJECT_CONTEXT.md
