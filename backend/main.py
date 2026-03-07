@@ -233,6 +233,67 @@ async def health():
     }
 
 
+@app.get("/museums/{museum_id}/validate")
+async def validate_museum(museum_id: str):
+    """Validate museum existence + active status for public flows."""
+    db = get_firestore()
+    museum_doc = await db.collection("museums").document(museum_id).get()
+    if not museum_doc.exists:
+        raise HTTPException(status_code=404, detail="Museum not found")
+
+    museum = museum_doc.to_dict() or {}
+    if museum.get("status", "active") != "active":
+        raise HTTPException(status_code=403, detail="Museum is not active")
+
+    return {
+        "id": museum_id,
+        "name": museum.get("name", museum_id),
+        "name_en": museum.get("name_en") or museum.get("name", museum_id),
+        "logo_url": museum.get("logo_url"),
+        "welcome_message": museum.get("welcome_message") or {},
+        "supported_languages": museum.get("supported_languages") or ["vi"],
+        "default_language": museum.get("default_language") or "vi",
+        "status": museum.get("status", "active"),
+        "theme": museum.get("theme") or {},
+    }
+
+
+@app.get("/exhibits/{exhibit_id}/validate")
+async def validate_exhibit_for_museum(exhibit_id: str, museum_id: str = Query(...)):
+    """Validate exhibit exists and belongs to the requested museum."""
+    db = get_firestore()
+
+    museum_doc = await db.collection("museums").document(museum_id).get()
+    if not museum_doc.exists:
+        raise HTTPException(status_code=404, detail="Museum not found")
+
+    museum = museum_doc.to_dict() or {}
+    if museum.get("status", "active") != "active":
+        raise HTTPException(status_code=403, detail="Museum is not active")
+
+    exhibit_doc = await _get_exhibit_doc(db, exhibit_id)
+    if not exhibit_doc.exists:
+        raise HTTPException(status_code=404, detail="Exhibit not found")
+
+    exhibit_data = exhibit_doc.to_dict() or {}
+    exhibit_museum_id = exhibit_data.get("museum_id")
+    if exhibit_museum_id and exhibit_museum_id != museum_id:
+        raise HTTPException(status_code=403, detail="Exhibit does not belong to museum")
+
+    return {
+        "ok": True,
+        "museum_id": museum_id,
+        "exhibit_id": exhibit_id,
+        "exhibit": {
+            "id": exhibit_id,
+            "museum_id": exhibit_museum_id,
+            "name": exhibit_data.get("name"),
+            "name_en": exhibit_data.get("name_en"),
+            "status": exhibit_data.get("status"),
+        },
+    }
+
+
 @app.get("/exhibits/{exhibit_id}")
 async def get_exhibit(exhibit_id: str):
     """

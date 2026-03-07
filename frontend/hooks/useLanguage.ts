@@ -1,7 +1,20 @@
 import { useState, useEffect } from "react";
 import { LanguageCode } from "@/lib/constants";
 
-const SUPPORTED: LanguageCode[] = ["vi", "en", "fr", "ja", "ko", "zh"];
+const SUPPORTED: LanguageCode[] = ["vi", "en", "es", "fr", "ja", "ko", "zh"];
+
+function detectBrowserLanguage(): LanguageCode {
+  if (typeof window === "undefined") return "vi";
+  const navLang = (navigator.language || "").toLowerCase();
+  if (navLang.startsWith("es")) return "es";
+  if (navLang.startsWith("en")) return "en";
+  if (navLang.startsWith("fr")) return "fr";
+  if (navLang.startsWith("ja")) return "ja";
+  if (navLang.startsWith("ko")) return "ko";
+  if (navLang.startsWith("zh")) return "zh";
+  if (navLang.startsWith("vi")) return "vi";
+  return "vi";
+}
 
 function readInitialLanguage(): LanguageCode {
   if (typeof window === "undefined") return "vi";
@@ -9,7 +22,7 @@ function readInitialLanguage(): LanguageCode {
   if (saved && SUPPORTED.includes(saved as LanguageCode)) {
     return saved as LanguageCode;
   }
-  return "vi";
+  return detectBrowserLanguage();
 }
 
 export function useLanguage() {
@@ -24,8 +37,8 @@ export function useLanguage() {
       setIsAutoDetected(false);
       return;
     }
-    setLanguage("vi");
-    setIsAutoDetected(false);
+    setLanguage(detectBrowserLanguage());
+    setIsAutoDetected(true);
   }, []);
 
   const changeLanguage = (lang: LanguageCode) => {

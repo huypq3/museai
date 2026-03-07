@@ -38,6 +38,7 @@ function mergeTranscript(prev: string, incomingRaw: string): string {
 const LANGUAGES: Record<LanguageCode, { flag: string }> = {
   vi: { flag: "🇻🇳" },
   en: { flag: "🇬🇧" },
+  es: { flag: "🇪🇸" },
   fr: { flag: "🇫🇷" },
   zh: { flag: "🇨🇳" },
   ja: { flag: "🇯🇵" },

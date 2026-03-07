@@ -7,7 +7,7 @@ import { useAdminI18n } from '@/lib/adminI18n'
 
 export default function AdminLogin() {
   const router = useRouter()
-  const { locale } = useAdminI18n()
+  const { locale, setLocale } = useAdminI18n()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -77,6 +77,37 @@ export default function AdminLogin() {
           marginBottom: 32,
         }}>
           Admin Panel
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 8, marginBottom: 20 }}>
+          <button
+            onClick={() => setLocale('en')}
+            style={{
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: locale === 'en' ? 'rgba(201,168,76,0.22)' : 'rgba(255,255,255,0.04)',
+              color: '#F5F0E8',
+              fontSize: 12,
+              cursor: 'pointer',
+            }}
+          >
+            EN
+          </button>
+          <button
+            onClick={() => setLocale('vi')}
+            style={{
+              padding: '6px 10px',
+              borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.14)',
+              background: locale === 'vi' ? 'rgba(201,168,76,0.22)' : 'rgba(255,255,255,0.04)',
+              color: '#F5F0E8',
+              fontSize: 12,
+              cursor: 'pointer',
+            }}
+          >
+            VI
+          </button>
         </div>
 
         {/* Username */}

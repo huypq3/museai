@@ -41,19 +41,25 @@ type AdminI18nState = {
 
 const AdminI18nContext = createContext<AdminI18nState | null>(null)
 
-export function AdminI18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<AdminLocale>('vi')
+const STORAGE_KEY = 'admin_language'
 
-  useEffect(() => {
-    const saved = localStorage.getItem('admin_locale') as AdminLocale | null
-    if (saved === 'vi' || saved === 'en') setLocale(saved)
-  }, [])
+function getInitialLocale(): AdminLocale {
+  if (typeof window === 'undefined') return 'en'
+  const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('admin_locale')
+  if (saved === 'vi' || saved === 'en') return saved
+  return 'en'
+}
+
+export function AdminI18nProvider({ children }: { children: React.ReactNode }) {
+  const [locale, setLocale] = useState<AdminLocale>(getInitialLocale)
 
   const value = useMemo<AdminI18nState>(
     () => ({
       locale,
       setLocale: (next) => {
         setLocale(next)
+        localStorage.setItem(STORAGE_KEY, next)
+        // Backward compatibility for older builds/pages that still read old key.
         localStorage.setItem('admin_locale', next)
       },
       t: (key: string) => MESSAGES[locale][key] || key,
@@ -69,4 +75,3 @@ export function useAdminI18n() {
   if (!ctx) throw new Error('useAdminI18n must be used within AdminI18nProvider')
   return ctx
 }
-

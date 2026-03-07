@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useLanguage } from "@/hooks/useLanguage";
 import { t } from "@/lib/i18n";
 import { LanguageCode } from "@/lib/constants";
-import QRScanner from "@/components/QRScanner";
+import QRScanner, { QRScanPayload } from "@/components/QRScanner";
 import { trackEvent } from "@/lib/analytics";
+import { validateMuseum } from "@/lib/api";
 
 type State = "scanning" | "processing" | "detected" | "error";
 
@@ -27,22 +28,55 @@ export default function CameraTourPage() {
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [museumId, setMuseumId] = useState("demo_museum");
+  const [museumName, setMuseumName] = useState<string>(t(language, "camera.demo_museum"));
+  const [museumValidated, setMuseumValidated] = useState(false);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const fromQuery = params.get("museum");
-    const fromLocal = localStorage.getItem("museum_id");
-    const resolved = fromQuery || fromLocal || "demo_museum";
-    setMuseumId(resolved);
-    trackEvent("camera_opened", resolved);
-  }, []);
+    let mounted = true;
+
+    async function initMuseum() {
+      const params = new URLSearchParams(window.location.search);
+      const fromQuery = params.get("museum");
+      const fromLocal = localStorage.getItem("museum_id");
+      const resolved = fromQuery || fromLocal;
+
+      if (!resolved) {
+        router.replace("/error?code=MUSEUM_REQUIRED");
+        return;
+      }
+
+      try {
+        const museum = await validateMuseum(resolved);
+        if (!mounted) return;
+
+        setMuseumId(museum.id);
+        localStorage.setItem("museum_id", museum.id);
+        setMuseumName(
+          language === "en"
+            ? museum.name_en || museum.name || museum.id
+            : museum.name || museum.name_en || museum.id
+        );
+        setMuseumValidated(true);
+        trackEvent("camera_opened", museum.id);
+      } catch {
+        if (!mounted) return;
+        router.replace("/error?code=MUSEUM_NOT_FOUND");
+      }
+    }
+
+    initMuseum();
+    return () => {
+      mounted = false;
+    };
+  }, [language, router]);
 
   const LANGUAGE_FLAGS: Record<LanguageCode, string> = {
     vi: "🇻🇳",
     en: "🇬🇧",
+    es: "🇪🇸",
     fr: "🇫🇷",
     zh: "🇨🇳",
     ja: "🇯🇵",
@@ -89,7 +123,7 @@ export default function CameraTourPage() {
   }, []);
 
   const handleCapture = async () => {
-    if (!videoRef.current || state === "processing") return;
+    if (!videoRef.current || state === "processing" || !museumValidated) return;
     
     setState("processing");
     
@@ -155,25 +189,55 @@ export default function CameraTourPage() {
 
   const handleExplore = () => {
     if (!detected) return;
-    router.push(`/exhibit/${detected.artifact_id}`);
+    router.push(`/exhibit/${detected.artifact_id}?museum=${encodeURIComponent(museumId)}`);
   };
 
-  const handleQRScan = (data: { museum_id?: string; exhibit_id?: string; artifact_id?: string }) => {
+  const handleQRScan = async (data: QRScanPayload) => {
+    if (data.error === "non_system") {
+      setShowQRScanner(false);
+      alert(t(language, "camera.qr_not_museai"));
+      return;
+    }
+
+    if (data.error === "unreadable") {
+      setShowQRScanner(false);
+      alert(t(language, "camera.qr_read_failed"));
+      return;
+    }
+
+    if (data.error) {
+      setShowQRScanner(false);
+      alert(t(language, "camera.invalid_qr"));
+      return;
+    }
+
     const exhibitId = data.exhibit_id || data.artifact_id;
     if (exhibitId) {
       setShowQRScanner(false);
-      if (data.museum_id) {
-        localStorage.setItem("museum_id", data.museum_id);
-        setMuseumId(data.museum_id);
+      const targetMuseumId = data.museum_id || museumId;
+      if (targetMuseumId) {
+        localStorage.setItem("museum_id", targetMuseumId);
+        setMuseumId(targetMuseumId);
       }
-      router.push(`/exhibit/${exhibitId}`);
+      router.push(`/exhibit/${exhibitId}?museum=${encodeURIComponent(targetMuseumId)}`);
       return;
     }
 
     if (data.museum_id) {
-      localStorage.setItem("museum_id", data.museum_id);
-      setMuseumId(data.museum_id);
-      alert(t(language, "camera.qr_museum_only"));
+      setShowQRScanner(false);
+      try {
+        const museum = await validateMuseum(data.museum_id);
+        localStorage.setItem("museum_id", museum.id);
+        setMuseumId(museum.id);
+        setMuseumName(
+          language === "en"
+            ? museum.name_en || museum.name || museum.id
+            : museum.name || museum.name_en || museum.id
+        );
+        alert(t(language, "camera.qr_museum_only"));
+      } catch {
+        alert(t(language, "error.museum_not_found"));
+      }
       return;
     }
 
@@ -191,7 +255,7 @@ export default function CameraTourPage() {
           <div>
             <div className="font-display text-[var(--gold)] text-xl">MuseAI</div>
             <div className="text-xs opacity-60" style={{ fontFamily: 'DM Sans' }}>
-              {museumId === 'demo_museum' ? t(language, "camera.demo_museum") : museumId}
+              {museumName || museumId}
             </div>
           </div>
           
