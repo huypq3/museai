@@ -5,6 +5,12 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  REGION: ${{ vars.CLOUD_RUN_REGION }}
+  SERVICE: ${{ vars.CLOUD_RUN_SERVICE }}
+  REPOSITORY: ${{ vars.ARTIFACT_REPOSITORY }}
+
 jobs:
   deploy-backend:
     name: Deploy Backend → Cloud Run
@@ -22,40 +28,38 @@ jobs:
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Configure Docker for GCR
-        run: gcloud auth configure-docker gcr.io --quiet
+      - name: Configure Docker
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
 
       - name: Build and push Docker image
         run: |
-          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}"
-          IMAGE_LATEST="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }}:latest"
-          docker build -t "$IMAGE" -t "$IMAGE_LATEST" ./backend
-          docker push "$IMAGE"
-          docker push "$IMAGE_LATEST"
+          IMAGE_BASE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/backend"
+          docker build -t "${IMAGE_BASE}:${{ github.sha }}" -t "${IMAGE_BASE}:latest" ./backend
+          docker push "${IMAGE_BASE}:${{ github.sha }}"
+          docker push "${IMAGE_BASE}:latest"
 
       - name: Deploy to Cloud Run
         run: |
-          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}"
-          gcloud run deploy ${{ vars.CLOUD_RUN_SERVICE }} \
+          IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }}"
+          gcloud run deploy ${{ env.SERVICE }} \
             --image "$IMAGE" \
             --platform managed \
-            --region ${{ vars.CLOUD_RUN_REGION }} \
+            --region ${{ env.REGION }} \
             --allow-unauthenticated \
             --memory 1Gi \
             --timeout 3600 \
             --set-env-vars "\
-              GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }},\
+              GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }},\
               ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }},\
-              GCS_BUCKET=${{ vars.GCS_BUCKET || vars.GCS_BUCKET_NAME }},\
-              GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME || vars.GCS_BUCKET }},\
+              GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }},\
               JWT_SECRET=${{ secrets.JWT_SECRET }},\
               GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},\
               REDIS_URL=${{ secrets.REDIS_URL }}"
 
       - name: Print Cloud Run URL
         run: |
-          URL=$(gcloud run services describe ${{ vars.CLOUD_RUN_SERVICE }} \
-            --region ${{ vars.CLOUD_RUN_REGION }} \
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} \
             --format='value(status.url)')
           echo "✅ Backend URL: $URL"
 
