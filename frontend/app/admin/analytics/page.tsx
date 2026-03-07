@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { adminFetch, getAdminSession } from '@/lib/adminAuth'
 import { DailyVisitsChart, HeatmapBars, LanguagePie } from '@/components/admin/Charts'
-import { useAdminI18n } from '@/lib/adminI18n'
+import { useAdminI18n } from '@/lib/i18n/admin'
 
 export default function AnalyticsPage() {
   const router = useRouter()

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { adminFetch, clearAdminToken, getAdminSession } from '@/lib/adminAuth'
-import { useAdminI18n } from '@/lib/adminI18n'
+import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Museum = {
   id: string

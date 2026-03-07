@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { adminFetch, getAdminSession, clearAdminToken } from '@/lib/adminAuth'
-import { useAdminI18n } from '@/lib/adminI18n'
+import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'artifacts' | 'analytics' | 'qr' | 'settings'
 

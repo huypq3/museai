@@ -1,6 +1,7 @@
 'use client'
 
-import { createContext, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, createElement, useContext, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 
 export type AdminLocale = 'vi' | 'en'
 
@@ -50,14 +51,14 @@ function getInitialLocale(): AdminLocale {
   return 'en'
 }
 
-export function AdminI18nProvider({ children }: { children: React.ReactNode }) {
-  const [locale, setLocale] = useState<AdminLocale>(getInitialLocale)
+export function AdminI18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<AdminLocale>(getInitialLocale)
 
   const value = useMemo<AdminI18nState>(
     () => ({
       locale,
       setLocale: (next) => {
-        setLocale(next)
+        setLocaleState(next)
         localStorage.setItem(STORAGE_KEY, next)
         // Backward compatibility for older builds/pages that still read old key.
         localStorage.setItem('admin_locale', next)
@@ -67,7 +68,7 @@ export function AdminI18nProvider({ children }: { children: React.ReactNode }) {
     [locale]
   )
 
-  return <AdminI18nContext.Provider value={value}>{children}</AdminI18nContext.Provider>
+  return createElement(AdminI18nContext.Provider, { value }, children)
 }
 
 export function useAdminI18n() {

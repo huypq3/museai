@@ -1,478 +1,767 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import QRScanner, { QRScanPayload } from "@/components/QRScanner";
-import { LanguageCode } from "@/lib/constants";
+import {
+  detectLandingLanguage,
+  LANDING_FAQ_KEYS,
+  LANDING_I18N,
+  LANGUAGE_LABELS,
+  LandingLang,
+  SUPPORTED_LANDING_LANGS,
+} from "@/lib/i18n/landing";
 
-type LandingLang = Extract<LanguageCode, "en" | "vi" | "fr" | "ja" | "ko" | "zh">;
-
-const LANG_OPTIONS: { code: LandingLang; label: string }[] = [
-  { code: "en", label: "EN" },
-  { code: "vi", label: "VI" },
-  { code: "fr", label: "FR" },
-  { code: "ja", label: "JP" },
-  { code: "ko", label: "KR" },
-  { code: "zh", label: "ZH" },
-];
-
-const COPY: Record<LandingLang, Record<string, string>> = {
-  en: {
-    powered: "✦ Powered by Gemini Live API",
-    heroTitle: "Your AI Museum Guide",
-    heroSub: "Point your phone at any exhibit. Ask anything. Get answers in real-time — in your language.",
-    ctaScan: "📷 Scan QR to Enter Museum",
-    ctaHint: "Find the QR code at the museum entrance",
-    forMuseums: "For Museums",
-    howTitle: "How It Works",
-    step1Title: "Find the QR",
-    step1Desc: "Look for the MuseAI QR code at the museum entrance or near exhibits",
-    step2Title: "Scan & Enter",
-    step2Desc: "Scan with your phone — no app download required",
-    step3Title: "Talk & Discover",
-    step3Desc: "Ask your AI guide anything about the exhibits in real-time",
-    featuresTitle: "Core Features",
-    f1Title: "Real-time Voice Guide",
-    f1Desc: "Natural conversation with AI. Interrupt, ask follow-ups, go deep on any topic.",
-    f2Title: "6 Languages",
-    f2Desc: "Vietnamese • English • French • Japanese • Korean • Chinese",
-    f3Title: "Zero Installation",
-    f3Desc: "Just a QR code. Works on any smartphone browser instantly.",
-    stat1: "Museums in Vietnam",
-    stat2: "Supported Languages",
-    stat3: "Apps to Download",
-    museumsTitle: "Bring AI to Your Museum",
-    museumsDesc: "Give every visitor a personal guide in their language. No staff required.",
-    b1: "Setup in minutes, not months",
-    b2: "Works with existing exhibits",
-    b3: "Analytics dashboard included",
-    b4: "Custom AI persona per museum",
-    b5: "Supports 6 languages out of the box",
-    getStarted: "Get Started",
-    contactAdmin: "Contact / Admin Login",
-    invalidQr: "Invalid QR code",
-    nonSystemQr: "This QR code is not from a MuseAI museum",
-    cameraPerm: "Camera permission is required. Please enable camera access.",
-    footerPrivacy: "Privacy",
-    footerContact: "Contact",
-  },
-  vi: {
-    powered: "✦ Powered by Gemini Live API",
-    heroTitle: "Hướng dẫn viên AI của bạn",
-    heroSub: "Hướng điện thoại vào hiện vật. Hỏi bất cứ điều gì. Nhận câu trả lời theo thời gian thực bằng ngôn ngữ của bạn.",
-    ctaScan: "📷 Quét QR để vào bảo tàng",
-    ctaHint: "Tìm mã QR ở cổng vào bảo tàng",
-    forMuseums: "Dành cho bảo tàng",
-    howTitle: "Cách hoạt động",
-    step1Title: "Tìm mã QR",
-    step1Desc: "Tìm mã QR MuseAI ở cổng vào hoặc gần hiện vật",
-    step2Title: "Quét và vào",
-    step2Desc: "Quét bằng điện thoại — không cần cài app",
-    step3Title: "Hỏi và khám phá",
-    step3Desc: "Hỏi AI về hiện vật theo thời gian thực",
-    featuresTitle: "Tính năng nổi bật",
-    f1Title: "Thuyết minh giọng nói real-time",
-    f1Desc: "Trò chuyện tự nhiên với AI. Ngắt lời, hỏi tiếp, đào sâu mọi chủ đề.",
-    f2Title: "6 ngôn ngữ",
-    f2Desc: "Tiếng Việt • English • Français • 日本語 • 한국어 • 中文",
-    f3Title: "Không cần cài đặt",
-    f3Desc: "Chỉ cần mã QR. Mở trình duyệt điện thoại là dùng ngay.",
-    stat1: "Bảo tàng tại Việt Nam",
-    stat2: "Ngôn ngữ hỗ trợ",
-    stat3: "Ứng dụng cần tải",
-    museumsTitle: "Mang AI đến bảo tàng của bạn",
-    museumsDesc: "Mang đến cho mỗi khách tham quan một hướng dẫn viên cá nhân bằng ngôn ngữ của họ. Không cần thêm nhân sự.",
-    b1: "Thiết lập trong vài phút, không phải vài tháng",
-    b2: "Tương thích với hiện vật sẵn có",
-    b3: "Có sẵn dashboard phân tích",
-    b4: "Tuỳ chỉnh AI persona theo bảo tàng",
-    b5: "Hỗ trợ sẵn 6 ngôn ngữ",
-    getStarted: "Bắt đầu",
-    contactAdmin: "Liên hệ / Đăng nhập Admin",
-    invalidQr: "QR code không hợp lệ",
-    nonSystemQr: "QR code này không thuộc hệ thống MuseAI",
-    cameraPerm: "Cần quyền camera. Vui lòng bật quyền truy cập camera.",
-    footerPrivacy: "Quyền riêng tư",
-    footerContact: "Liên hệ",
-  },
-  fr: {
-    powered: "✦ Powered by Gemini Live API",
-    heroTitle: "Votre guide IA du musée",
-    heroSub: "Pointez votre téléphone vers un objet. Posez n'importe quelle question. Obtenez des réponses en temps réel dans votre langue.",
-    ctaScan: "📷 Scanner le QR pour entrer",
-    ctaHint: "Trouvez le QR à l'entrée du musée",
-    forMuseums: "Pour les musées",
-    howTitle: "Comment ça marche",
-    step1Title: "Trouvez le QR",
-    step1Desc: "Cherchez le QR MuseAI à l'entrée ou près des objets",
-    step2Title: "Scannez et entrez",
-    step2Desc: "Scannez avec votre téléphone — aucune application à installer",
-    step3Title: "Parlez et découvrez",
-    step3Desc: "Posez des questions à votre guide IA en temps réel",
-    featuresTitle: "Fonctionnalités clés",
-    f1Title: "Guide vocal en temps réel",
-    f1Desc: "Conversation naturelle avec l'IA. Interrompez, relancez, approfondissez.",
-    f2Title: "6 langues",
-    f2Desc: "Vietnamien • Anglais • Français • Japonais • Coréen • Chinois",
-    f3Title: "Zéro installation",
-    f3Desc: "Juste un QR code. Fonctionne instantanément dans le navigateur.",
-    stat1: "Musées au Vietnam",
-    stat2: "Langues prises en charge",
-    stat3: "Applications à télécharger",
-    museumsTitle: "Apportez l'IA à votre musée",
-    museumsDesc: "Offrez à chaque visiteur un guide personnel dans sa langue.",
-    b1: "Installation en quelques minutes",
-    b2: "Compatible avec vos objets existants",
-    b3: "Tableau de bord analytique inclus",
-    b4: "Persona IA personnalisable",
-    b5: "6 langues prises en charge",
-    getStarted: "Commencer",
-    contactAdmin: "Contact / Admin Login",
-    invalidQr: "Code QR invalide",
-    nonSystemQr: "Ce QR code ne provient pas d'un musée MuseAI",
-    cameraPerm: "L'autorisation caméra est requise.",
-    footerPrivacy: "Confidentialité",
-    footerContact: "Contact",
-  },
-  ja: {
-    powered: "✦ Powered by Gemini Live API",
-    heroTitle: "あなたのAIミュージアムガイド",
-    heroSub: "展示物にスマホを向けて質問するだけ。リアルタイムであなたの言語で回答します。",
-    ctaScan: "📷 QRをスキャンして入館",
-    ctaHint: "博物館入口のQRコードを見つけてください",
-    forMuseums: "博物館向け",
-    howTitle: "使い方",
-    step1Title: "QRを見つける",
-    step1Desc: "入口や展示物付近のMuseAI QRを探します",
-    step2Title: "スキャンして入る",
-    step2Desc: "スマホでスキャン。アプリ不要",
-    step3Title: "話して発見",
-    step3Desc: "AIガイドにリアルタイムで質問",
-    featuresTitle: "主な機能",
-    f1Title: "リアルタイム音声ガイド",
-    f1Desc: "自然な会話。割り込みや深掘り質問も可能。",
-    f2Title: "6言語対応",
-    f2Desc: "ベトナム語 • 英語 • フランス語 • 日本語 • 韓国語 • 中国語",
-    f3Title: "インストール不要",
-    f3Desc: "QRを読むだけでブラウザですぐ利用可能。",
-    stat1: "ベトナムの博物館",
-    stat2: "対応言語",
-    stat3: "ダウンロード不要アプリ",
-    museumsTitle: "博物館にAIを導入",
-    museumsDesc: "来館者ごとに母語で案内する個別ガイドを提供。",
-    b1: "数分で導入",
-    b2: "既存展示に対応",
-    b3: "分析ダッシュボード付き",
-    b4: "博物館別AIペルソナ",
-    b5: "6言語を標準サポート",
-    getStarted: "はじめる",
-    contactAdmin: "お問い合わせ / 管理者ログイン",
-    invalidQr: "無効なQRコードです",
-    nonSystemQr: "MuseAI博物館のQRコードではありません",
-    cameraPerm: "カメラ権限が必要です。",
-    footerPrivacy: "プライバシー",
-    footerContact: "お問い合わせ",
-  },
-  ko: {
-    powered: "✦ Powered by Gemini Live API",
-    heroTitle: "당신의 AI 박물관 가이드",
-    heroSub: "전시물에 휴대폰을 비추고 질문하세요. 실시간으로 당신의 언어로 답변합니다.",
-    ctaScan: "📷 QR 스캔 후 입장",
-    ctaHint: "박물관 입구의 QR 코드를 찾으세요",
-    forMuseums: "박물관용",
-    howTitle: "이용 방법",
-    step1Title: "QR 찾기",
-    step1Desc: "입구 또는 전시물 근처 MuseAI QR을 찾으세요",
-    step2Title: "스캔하고 입장",
-    step2Desc: "휴대폰으로 스캔 — 앱 설치 불필요",
-    step3Title: "대화하며 탐색",
-    step3Desc: "AI 가이드에게 실시간 질문",
-    featuresTitle: "핵심 기능",
-    f1Title: "실시간 음성 가이드",
-    f1Desc: "자연스러운 대화, 끊기/후속 질문/심화 질문 가능",
-    f2Title: "6개 언어",
-    f2Desc: "베트남어 • 영어 • 프랑스어 • 일본어 • 한국어 • 중국어",
-    f3Title: "설치 없음",
-    f3Desc: "QR 코드만으로 스마트폰 브라우저에서 즉시 사용",
-    stat1: "베트남 박물관",
-    stat2: "지원 언어",
-    stat3: "다운로드할 앱",
-    museumsTitle: "박물관에 AI 도입",
-    museumsDesc: "방문객에게 각자 언어로 개인 가이드를 제공합니다.",
-    b1: "몇 분 내 설정",
-    b2: "기존 전시와 호환",
-    b3: "분석 대시보드 제공",
-    b4: "박물관별 AI 페르소나",
-    b5: "기본 6개 언어 지원",
-    getStarted: "시작하기",
-    contactAdmin: "문의 / 관리자 로그인",
-    invalidQr: "유효하지 않은 QR 코드",
-    nonSystemQr: "MuseAI 박물관 QR 코드가 아닙니다",
-    cameraPerm: "카메라 권한이 필요합니다.",
-    footerPrivacy: "개인정보",
-    footerContact: "문의",
-  },
-  zh: {
-    powered: "✦ Powered by Gemini Live API",
-    heroTitle: "您的 AI 博物馆导览",
-    heroSub: "将手机对准展品并提问。系统将以您的语言实时回答。",
-    ctaScan: "📷 扫码进入博物馆",
-    ctaHint: "请在博物馆入口寻找二维码",
-    forMuseums: "面向博物馆",
-    howTitle: "使用流程",
-    step1Title: "找到二维码",
-    step1Desc: "在入口或展品附近找到 MuseAI 二维码",
-    step2Title: "扫码进入",
-    step2Desc: "手机扫码即可，无需安装应用",
-    step3Title: "对话探索",
-    step3Desc: "实时向 AI 导览提问",
-    featuresTitle: "核心功能",
-    f1Title: "实时语音导览",
-    f1Desc: "自然对话，可打断、追问、深度讲解。",
-    f2Title: "6种语言",
-    f2Desc: "越南语 • 英语 • 法语 • 日语 • 韩语 • 中文",
-    f3Title: "零安装",
-    f3Desc: "只需二维码，手机浏览器即开即用。",
-    stat1: "越南博物馆",
-    stat2: "支持语言",
-    stat3: "需下载应用",
-    museumsTitle: "为博物馆引入 AI",
-    museumsDesc: "为每位访客提供其语言的专属导览。",
-    b1: "几分钟完成部署",
-    b2: "兼容现有展品",
-    b3: "内置数据分析看板",
-    b4: "可自定义博物馆 AI 角色",
-    b5: "开箱支持 6 种语言",
-    getStarted: "立即开始",
-    contactAdmin: "联系 / 管理员登录",
-    invalidQr: "无效二维码",
-    nonSystemQr: "该二维码不属于 MuseAI 博物馆",
-    cameraPerm: "需要相机权限，请先开启。",
-    footerPrivacy: "隐私",
-    footerContact: "联系",
-  },
+const BRAND = {
+  bg: "#0A0A0A",
+  surface: "#111111",
+  card: "#161616",
+  gold: "#C9A84C",
+  goldMuted: "rgba(201,168,76,0.12)",
+  goldBorder: "rgba(201,168,76,0.2)",
+  text: "#F5F0E8",
+  textSecondary: "rgba(245,240,232,0.6)",
+  textMuted: "rgba(245,240,232,0.3)",
 };
 
-function detectVisitorLanguage(): LandingLang {
-  if (typeof window === "undefined") return "en";
-  const saved = localStorage.getItem("lang");
-  if (saved && LANG_OPTIONS.some((x) => x.code === saved)) return saved as LandingLang;
+const STATS = [
+  { value: "197+", key: "statMuseumsLabel" as const },
+  { value: "7", key: "statLangLabel" as const },
+  { value: "0", key: "statAppsLabel" as const },
+  { value: "<2s", key: "statLatencyLabel" as const },
+];
 
-  const nav = (navigator.language || "").toLowerCase();
-  if (nav.startsWith("vi")) return "vi";
-  if (nav.startsWith("fr")) return "fr";
-  if (nav.startsWith("ja")) return "ja";
-  if (nav.startsWith("ko")) return "ko";
-  if (nav.startsWith("zh")) return "zh";
-  if (nav.startsWith("en")) return "en";
-  return "en";
-}
+const FEATURE_ITEMS = [
+  { icon: "🎙️", title: "f1Title", desc: "f1Desc" },
+  { icon: "📷", title: "f2Title", desc: "f2Desc" },
+  { icon: "🧭", title: "f3Title", desc: "f3Desc" },
+  { icon: "🌐", title: "f4Title", desc: "f4Desc" },
+  { icon: "⚡", title: "f5Title", desc: "f5Desc" },
+  { icon: "📊", title: "f6Title", desc: "f6Desc" },
+] as const;
 
 export default function HomePage() {
   const router = useRouter();
-  const [lang, setLang] = useState<LandingLang>("en");
-  const [showScanner, setShowScanner] = useState(false);
-  const [toast, setToast] = useState<{ text: string; kind: "error" | "ok" } | null>(null);
+  const [language, setLanguage] = useState<LandingLang>("en");
+  const [openScanner, setOpenScanner] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [toast, setToast] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [expandedFaq, setExpandedFaq] = useState<number>(0);
 
-  const c = COPY[lang];
+  const tr = LANDING_I18N[language];
 
   useEffect(() => {
-    setLang(detectVisitorLanguage());
+    const detected = detectLandingLanguage();
+    setLanguage(detected);
+    localStorage.setItem("lang", detected);
+    localStorage.setItem("language", detected);
   }, []);
 
   useEffect(() => {
-    localStorage.setItem("lang", lang);
-    localStorage.setItem("language", lang);
-  }, [lang]);
+    localStorage.setItem("lang", language);
+    localStorage.setItem("language", language);
+  }, [language]);
+
+  useEffect(() => {
+    const onScroll = () => setIsScrolled(window.scrollY > 10);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
-    const timer = setTimeout(() => setToast(null), 2600);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setToast(null), 2800);
+    return () => window.clearTimeout(timer);
   }, [toast]);
 
-  const handleScanResult = (payload: QRScanPayload) => {
+  const faqItems = useMemo(
+    () => LANDING_FAQ_KEYS.map(({ q, a }) => ({ q: tr[q], a: tr[a] })),
+    [tr]
+  );
+
+  const appendLang = (url: string) => {
+    const u = new URL(url, window.location.origin);
+    u.searchParams.set("lang", language);
+    return `${u.pathname}${u.search}`;
+  };
+
+  const navigateWithLang = (path: string) => router.push(appendLang(path));
+
+  const handleScan = (payload: QRScanPayload) => {
     if (payload.error) {
-      setShowScanner(false);
-      if (payload.error === "non_system") {
-        setToast({ text: c.nonSystemQr, kind: "error" });
-      } else if (payload.error === "unreadable") {
-        setToast({ text: c.cameraPerm, kind: "error" });
-      } else {
-        setToast({ text: c.invalidQr, kind: "error" });
-      }
+      setOpenScanner(false);
+      const text =
+        payload.error === "non_system"
+          ? tr.toastNotMuse
+          : payload.error === "unreadable"
+          ? tr.toastNoCamera
+          : tr.toastInvalid;
+      setToast({ type: "error", text });
       return;
     }
 
     const museumId = payload.museum_id;
     const exhibitId = payload.exhibit_id || payload.artifact_id;
-    if (museumId) localStorage.setItem("museum_id", museumId);
 
-    setShowScanner(false);
+    setOpenScanner(false);
 
     if (museumId && exhibitId) {
-      router.push(`/welcome?museum=${encodeURIComponent(museumId)}&exhibit=${encodeURIComponent(exhibitId)}&lang=${lang}`);
+      navigateWithLang(`/welcome?museum=${encodeURIComponent(museumId)}&exhibit=${encodeURIComponent(exhibitId)}`);
       return;
     }
 
     if (museumId) {
-      router.push(`/welcome?museum=${encodeURIComponent(museumId)}&lang=${lang}`);
+      navigateWithLang(`/welcome?museum=${encodeURIComponent(museumId)}`);
       return;
     }
 
     if (exhibitId) {
-      router.push(`/exhibit/${encodeURIComponent(exhibitId)}?lang=${lang}`);
+      navigateWithLang(`/exhibit/${encodeURIComponent(exhibitId)}`);
       return;
     }
 
-    setToast({ text: c.invalidQr, kind: "error" });
+    setToast({ type: "error", text: tr.toastInvalid });
   };
 
-  const scrollToMuseums = () => {
-    document.getElementById("for-museums")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  const scrollTo = (id: string) => {
+    setMobileMenuOpen(false);
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
-
-  const stats = useMemo(
-    () => [
-      { n: "197+", label: c.stat1 },
-      { n: "6", label: c.stat2 },
-      { n: "0", label: c.stat3 },
-    ],
-    [c]
-  );
 
   return (
-    <div style={{ background: "#0A0A0A", color: "#F5F0E8" }}>
-      <nav className="fixed top-0 left-0 right-0 z-40" style={{ background: "rgba(10,10,10,0.88)", borderBottom: "1px solid rgba(201,168,76,0.15)", backdropFilter: "blur(8px)" }}>
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div>
-            <div style={{ color: "#C9A84C", fontFamily: "Cormorant Garamond, serif", fontSize: 30, lineHeight: 1 }}>MuseAI</div>
-            <div style={{ opacity: 0.65, fontSize: 12, fontFamily: "DM Sans" }}>by GuideQR.ai</div>
+    <main
+      style={{
+        background: BRAND.bg,
+        color: BRAND.text,
+        fontFamily: "DM Sans, system-ui, sans-serif",
+        scrollBehavior: "smooth",
+      }}
+    >
+      <div
+        aria-hidden
+        style={{
+          position: "fixed",
+          inset: 0,
+          pointerEvents: "none",
+          backgroundImage:
+            "url('data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'140\' height=\'140\' viewBox=\'0 0 140 140\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.86\' numOctaves=\'2\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'140\' height=\'140\' filter=\'url(%23n)\' opacity=\'0.03\'/%3E%3C/svg%3E')",
+          zIndex: 1,
+          opacity: 0.9,
+        }}
+      />
+
+      <header
+        style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 72,
+          zIndex: 50,
+          borderBottom: isScrolled ? `1px solid ${BRAND.goldBorder}` : "1px solid transparent",
+          background: isScrolled ? "rgba(10,10,10,0.88)" : "rgba(10,10,10,0.28)",
+          backdropFilter: isScrolled ? "blur(12px)" : "blur(4px)",
+          transition: "all 0.6s ease",
+        }}
+      >
+        <div className="mx-auto max-w-7xl h-full px-4 md:px-6 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 28 }}>MuseAI</span>
+            <span style={{ width: 1, height: 26, background: "rgba(201,168,76,0.3)" }} />
+            <span
+              style={{
+                color: BRAND.textMuted,
+                textTransform: "uppercase",
+                letterSpacing: "0.2em",
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+            >
+              by GuideQR.ai
+            </span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <nav className="hidden lg:flex items-center gap-7">
+            <button onClick={() => scrollTo("visitors")} className="landing-link">
+              {tr.navVisitors}
+            </button>
+            <button onClick={() => scrollTo("for-museums")} className="landing-link">
+              {tr.navMuseums}
+            </button>
+            <button onClick={() => scrollTo("features")} className="landing-link">
+              {tr.navFeatures}
+            </button>
+            <button onClick={() => scrollTo("how-it-works")} className="landing-link">
+              {tr.navHow}
+            </button>
+          </nav>
+
+          <div className="hidden md:flex items-center gap-3">
             <select
-              value={lang}
-              onChange={(e) => setLang(e.target.value as LandingLang)}
-              className="px-3 py-2 rounded-lg text-sm"
-              style={{ border: "1px solid rgba(201,168,76,0.25)", background: "#111111", color: "#F5F0E8", fontFamily: "DM Sans" }}
+              value={language}
+              onChange={(e) => {
+                const next = e.target.value as LandingLang;
+                if (SUPPORTED_LANDING_LANGS.includes(next)) setLanguage(next);
+              }}
+              style={{
+                background: BRAND.surface,
+                border: `1px solid ${BRAND.goldBorder}`,
+                color: BRAND.text,
+                borderRadius: 6,
+                padding: "8px 10px",
+                fontSize: 12,
+              }}
+              aria-label="Language"
             >
-              {LANG_OPTIONS.map((opt) => (
-                <option key={opt.code} value={opt.code}>
-                  {opt.label}
+              {SUPPORTED_LANDING_LANGS.map((code) => (
+                <option key={code} value={code}>
+                  {`${LANGUAGE_LABELS[code].flag} ${LANGUAGE_LABELS[code].code}`}
                 </option>
               ))}
             </select>
-            <button onClick={scrollToMuseums} className="px-3 py-2 rounded-lg text-sm" style={{ border: "1px solid rgba(201,168,76,0.25)", color: "#C9A84C" }}>
-              {c.forMuseums}
+            <span style={{ width: 1, height: 22, background: "rgba(201,168,76,0.3)" }} />
+            <Link href="/admin/login" className="landing-link">
+              {tr.navAdmin}
+            </Link>
+            <button onClick={() => setOpenScanner(true)} className="landing-btn-outline">
+              {tr.navScan}
             </button>
           </div>
-        </div>
-      </nav>
 
-      <section className="max-w-6xl mx-auto px-4 pt-28 md:pt-32 min-h-screen grid md:grid-cols-5 gap-8 items-center">
-        <div className="md:col-span-3">
-          <div className="inline-flex items-center rounded-full px-3 py-1 mb-5" style={{ border: "1px solid rgba(201,168,76,0.3)", color: "#C9A84C", fontSize: 12, fontFamily: "DM Sans" }}>
-            {c.powered}
-          </div>
-          <h1 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: "clamp(42px,7vw,78px)", lineHeight: 0.95 }}>{c.heroTitle}</h1>
-          <p className="mt-5 max-w-xl" style={{ color: "rgba(245,240,232,0.82)", fontFamily: "DM Sans", fontSize: 18, lineHeight: 1.6 }}>
-            {c.heroSub}
-          </p>
-
-          <button onClick={() => setShowScanner(true)} className="mt-7 px-6 py-4 rounded-2xl text-lg font-medium transition-all" style={{ background: "#C9A84C", color: "#0A0A0A", fontFamily: "DM Sans" }}>
-            {c.ctaScan}
+          <button
+            className="md:hidden landing-btn-outline"
+            style={{ padding: "8px 10px" }}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-label="Toggle menu"
+          >
+            ☰
           </button>
-          <p className="mt-3 text-sm" style={{ color: "rgba(245,240,232,0.58)", fontFamily: "DM Sans" }}>{c.ctaHint}</p>
         </div>
 
-        <div className="md:col-span-2 hidden md:block">
-          <div className="rounded-3xl p-4" style={{ border: "1px solid rgba(201,168,76,0.2)", background: "#111111" }}>
-            <img src="https://images.unsplash.com/photo-1566127992631-137a642a90f4?w=800" alt="Museum interior" loading="lazy" className="w-full h-[440px] object-cover rounded-2xl" />
+        {mobileMenuOpen && (
+          <div
+            className="md:hidden"
+            style={{
+              borderTop: `1px solid ${BRAND.goldBorder}`,
+              background: "rgba(10,10,10,0.98)",
+              padding: "12px 16px 18px",
+            }}
+          >
+            <div className="flex flex-col gap-3">
+              <button className="landing-link text-left" onClick={() => scrollTo("visitors")}>{tr.navVisitors}</button>
+              <button className="landing-link text-left" onClick={() => scrollTo("for-museums")}>{tr.navMuseums}</button>
+              <button className="landing-link text-left" onClick={() => scrollTo("features")}>{tr.navFeatures}</button>
+              <button className="landing-link text-left" onClick={() => scrollTo("how-it-works")}>{tr.navHow}</button>
+              <div className="flex items-center gap-2 mt-2">
+                <select
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as LandingLang)}
+                  style={{
+                    background: BRAND.surface,
+                    border: `1px solid ${BRAND.goldBorder}`,
+                    color: BRAND.text,
+                    borderRadius: 6,
+                    padding: "8px 10px",
+                    fontSize: 12,
+                    flex: 1,
+                  }}
+                >
+                  {SUPPORTED_LANDING_LANGS.map((code) => (
+                    <option key={code} value={code}>{`${LANGUAGE_LABELS[code].flag} ${LANGUAGE_LABELS[code].code}`}</option>
+                  ))}
+                </select>
+                <button onClick={() => setOpenScanner(true)} className="landing-btn-outline">{tr.navScan}</button>
+              </div>
+            </div>
           </div>
-        </div>
-      </section>
+        )}
+      </header>
 
-      <section className="max-w-6xl mx-auto px-4 py-16">
-        <h2 className="text-3xl md:text-4xl mb-8" style={{ fontFamily: "Cormorant Garamond, serif", color: "#C9A84C" }}>{c.howTitle}</h2>
-        <div className="grid md:grid-cols-3 gap-4">
-          {[{ i: "🔳", t: c.step1Title, d: c.step1Desc }, { i: "📱", t: c.step2Title, d: c.step2Desc }, { i: "🎤", t: c.step3Title, d: c.step3Desc }].map((s) => (
-            <div key={s.t} className="rounded-2xl p-5" style={{ border: "1px solid rgba(201,168,76,0.15)", background: "#111111" }}>
-              <div className="text-2xl mb-3">{s.i}</div>
-              <div className="text-xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>{s.t}</div>
-              <p style={{ fontFamily: "DM Sans", color: "rgba(245,240,232,0.76)", lineHeight: 1.5 }}>{s.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 py-10">
-        <h2 className="text-3xl md:text-4xl mb-8" style={{ fontFamily: "Cormorant Garamond, serif", color: "#C9A84C" }}>{c.featuresTitle}</h2>
-        <div className="grid md:grid-cols-3 gap-4">
-          {[{ i: "🎙️", t: c.f1Title, d: c.f1Desc }, { i: "🌐", t: c.f2Title, d: c.f2Desc }, { i: "⚡", t: c.f3Title, d: c.f3Desc }].map((f) => (
-            <div key={f.t} className="rounded-2xl p-5" style={{ border: "1px solid rgba(201,168,76,0.15)", background: "#111111" }}>
-              <div className="text-2xl mb-3">{f.i}</div>
-              <div className="text-xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif" }}>{f.t}</div>
-              <p style={{ fontFamily: "DM Sans", color: "rgba(245,240,232,0.76)", lineHeight: 1.5 }}>{f.d}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section className="max-w-6xl mx-auto px-4 py-12">
-        <div className="rounded-2xl p-5 md:p-8 grid md:grid-cols-3 gap-4" style={{ border: "1px solid rgba(201,168,76,0.2)", background: "#111111" }}>
-          {stats.map((s, idx) => (
-            <div key={s.n + s.label} className="text-center md:text-left md:px-6" style={{ borderRight: idx < 2 ? "1px solid rgba(201,168,76,0.2)" : "none" }}>
-              <div style={{ fontSize: 42, color: "#C9A84C", fontFamily: "Cormorant Garamond, serif" }}>{s.n}</div>
-              <div style={{ fontFamily: "DM Sans", color: "rgba(245,240,232,0.76)" }}>{s.label}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <section id="for-museums" className="max-w-6xl mx-auto px-4 py-16">
-        <div className="rounded-2xl p-6 md:p-10" style={{ background: "#111111", borderTop: "1px solid rgba(201,168,76,0.35)", borderLeft: "1px solid rgba(201,168,76,0.15)", borderRight: "1px solid rgba(201,168,76,0.15)", borderBottom: "1px solid rgba(201,168,76,0.15)" }}>
-          <h2 className="text-3xl md:text-4xl mb-3" style={{ fontFamily: "Cormorant Garamond, serif", color: "#C9A84C" }}>{c.museumsTitle}</h2>
-          <p className="mb-8" style={{ fontFamily: "DM Sans", color: "rgba(245,240,232,0.78)" }}>{c.museumsDesc}</p>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <ul className="space-y-3" style={{ fontFamily: "DM Sans" }}>
-              {[c.b1, c.b2, c.b3, c.b4, c.b5].map((b) => (
-                <li key={b} className="flex items-start gap-2"><span style={{ color: "#C9A84C" }}>✓</span><span>{b}</span></li>
-              ))}
-            </ul>
-
-            <div className="rounded-2xl p-6" style={{ border: "1px solid rgba(201,168,76,0.2)", background: "rgba(10,10,10,0.75)" }}>
-              <div className="text-2xl mb-2" style={{ fontFamily: "Cormorant Garamond, serif", color: "#C9A84C" }}>{c.getStarted}</div>
-              <button onClick={() => router.push("/admin/login")} className="mt-3 px-5 py-3 rounded-xl" style={{ background: "#C9A84C", color: "#0A0A0A", fontFamily: "DM Sans", fontWeight: 600 }}>
-                {c.contactAdmin}
+      <section
+        style={{
+          position: "relative",
+          minHeight: "100vh",
+          paddingTop: 112,
+          paddingBottom: 120,
+          zIndex: 2,
+          background:
+            "radial-gradient(80% 65% at 8% 8%, rgba(201,168,76,0.14) 0%, rgba(201,168,76,0.03) 35%, rgba(10,10,10,0) 72%), #0A0A0A",
+        }}
+      >
+        <div className="mx-auto max-w-7xl px-4 md:px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
+          <div>
+            <div className="landing-eyebrow" style={{ marginBottom: 18 }}>{tr.powered}</div>
+            <h1
+              style={{
+                fontFamily: "Cormorant Garamond, serif",
+                fontWeight: 500,
+                lineHeight: 0.95,
+                fontSize: "clamp(54px, 8vw, 84px)",
+                maxWidth: 740,
+              }}
+            >
+              {tr.heroTitleA}
+              <br />
+              <span style={{ color: BRAND.gold, fontStyle: "italic" }}>{tr.heroTitleB}</span>
+            </h1>
+            <p style={{ marginTop: 24, maxWidth: 540, color: BRAND.textSecondary, fontSize: 18, lineHeight: 1.7 }}>
+              {tr.heroSubtitle}
+            </p>
+            <div style={{ marginTop: 30, width: 80, height: 1, background: "rgba(201,168,76,0.5)" }} />
+            <div className="mt-8 flex flex-col sm:flex-row sm:items-center gap-4">
+              <button className="landing-btn-primary" onClick={() => setOpenScanner(true)}>
+                {tr.heroPrimary}
+              </button>
+              <button className="landing-link" onClick={() => scrollTo("for-museums")}>
+                {tr.heroSecondary}
               </button>
             </div>
+            <p style={{ marginTop: 12, color: BRAND.textMuted, fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
+              {tr.heroCaption}
+            </p>
+          </div>
+
+          <div className="hidden md:block">
+            <div
+              style={{
+                border: `1px solid ${BRAND.goldBorder}`,
+                background: BRAND.surface,
+                borderRadius: 8,
+                padding: 18,
+                position: "relative",
+                overflow: "hidden",
+              }}
+            >
+              <img
+                src="https://images.unsplash.com/photo-1566127992631-137a642a90f4?w=800&q=85"
+                alt="Museum interior"
+                loading="lazy"
+                style={{ width: "100%", height: 460, objectFit: "cover", borderRadius: 6, opacity: 0.5 }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 30,
+                  border: `1px solid ${BRAND.goldBorder}`,
+                  borderRadius: 8,
+                  background: "rgba(10,10,10,0.68)",
+                  backdropFilter: "blur(2px)",
+                  padding: 16,
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "space-between",
+                }}
+              >
+                <div>
+                  <div style={{ color: BRAND.gold, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase" }}>{tr.phoneStatus}</div>
+                  <div style={{ marginTop: 8, fontFamily: "Cormorant Garamond, serif", fontSize: 28 }}>Tượng Trần Hưng Đạo</div>
+                </div>
+                <div className="flex items-end gap-1 h-10" aria-hidden>
+                  {Array.from({ length: 28 }).map((_, idx) => (
+                    <span
+                      key={idx}
+                      className="landing-wave"
+                      style={{
+                        width: 4,
+                        height: `${8 + (idx % 8) * 2}px`,
+                        background: BRAND.gold,
+                        animationDelay: `${idx * 0.06}s`,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      <footer className="border-t" style={{ borderColor: "rgba(201,168,76,0.15)" }}>
-        <div className="max-w-6xl mx-auto px-4 py-8 flex flex-col md:flex-row items-center justify-between gap-3">
+      <section style={{ zIndex: 2, position: "relative", background: BRAND.surface, borderTop: `1px solid ${BRAND.goldBorder}`, borderBottom: `1px solid ${BRAND.goldBorder}` }}>
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 grid grid-cols-2 lg:grid-cols-4 gap-8">
+          {STATS.map((stat) => (
+            <div key={stat.value + stat.key} className="text-center lg:text-left">
+              <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 52, lineHeight: 1 }}>{stat.value}</div>
+              <div style={{ color: BRAND.textSecondary, marginTop: 6, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase" }}>{tr[stat.key]}</div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section id="visitors" className="landing-section" style={{ zIndex: 2, position: "relative" }}>
+        <div className="mx-auto max-w-7xl px-4 md:px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-12 items-center">
           <div>
-            <div style={{ color: "#C9A84C", fontFamily: "Cormorant Garamond, serif", fontSize: 22, lineHeight: 1 }}>MuseAI</div>
-            <div style={{ fontFamily: "DM Sans", opacity: 0.66, fontSize: 12 }}>© 2026 GuideQR.ai — MuseAI</div>
+            <div className="landing-label">{tr.visitorsEyebrow}</div>
+            <h2 className="landing-title" style={{ marginTop: 16 }}>{tr.visitorsTitle}</h2>
+            <div className="grid md:grid-cols-3 gap-4 mt-8">
+              {[
+                { title: tr.vp1Title, desc: tr.vp1Desc },
+                { title: tr.vp2Title, desc: tr.vp2Desc },
+                { title: tr.vp3Title, desc: tr.vp3Desc },
+              ].map((item) => (
+                <div key={item.title} className="landing-card">
+                  <div style={{ color: BRAND.gold }}>✦</div>
+                  <div style={{ fontWeight: 500, marginTop: 8 }}>{item.title}</div>
+                  <p style={{ color: BRAND.textSecondary, marginTop: 8, lineHeight: 1.7 }}>{item.desc}</p>
+                </div>
+              ))}
+            </div>
+            <button className="landing-btn-outline mt-8" onClick={() => setOpenScanner(true)}>
+              {tr.visitorsCta}
+            </button>
           </div>
-          <div className="flex items-center gap-4 text-sm" style={{ fontFamily: "DM Sans" }}>
-            <button onClick={() => router.push("/admin/login")}>Admin Login</button>
-            <a href="#">{c.footerPrivacy}</a>
-            <a href="mailto:hello@guideqr.ai">{c.footerContact}</a>
+          <img
+            src="https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?w=700&q=80"
+            alt="Visitor using phone in museum"
+            loading="lazy"
+            style={{ width: "100%", borderRadius: 8, border: `1px solid ${BRAND.goldBorder}` }}
+          />
+        </div>
+      </section>
+
+      <section id="how-it-works" className="landing-section" style={{ paddingTop: 0, zIndex: 2, position: "relative" }}>
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="landing-label">{tr.howEyebrow}</div>
+          <h2 className="landing-title" style={{ marginTop: 14 }}>{tr.howTitle}</h2>
+          <div className="grid md:grid-cols-3 gap-5 mt-10">
+            {[
+              { n: "01", t: tr.how1Title, d: tr.how1Desc },
+              { n: "02", t: tr.how2Title, d: tr.how2Desc },
+              { n: "03", t: tr.how3Title, d: tr.how3Desc },
+            ].map((step) => (
+              <article key={step.n} className="landing-card" style={{ position: "relative", overflow: "hidden", minHeight: 210 }}>
+                <span style={{ position: "absolute", top: -22, right: 8, fontFamily: "Cormorant Garamond, serif", fontSize: 110, color: "rgba(201,168,76,0.08)", lineHeight: 1 }}>
+                  {step.n}
+                </span>
+                <h3 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 30 }}>{step.t}</h3>
+                <p style={{ marginTop: 8, color: BRAND.textSecondary, lineHeight: 1.7 }}>{step.d}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="features" className="landing-section" style={{ paddingTop: 0, zIndex: 2, position: "relative" }}>
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="landing-label">{tr.featuresEyebrow}</div>
+          <h2 className="landing-title" style={{ marginTop: 14 }}>{tr.featuresTitle}</h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mt-10">
+            {FEATURE_ITEMS.map((item) => (
+              <article key={item.title} className="landing-card landing-feature-card">
+                <div style={{ fontSize: 26 }}>{item.icon}</div>
+                <h3 style={{ marginTop: 10, fontFamily: "Cormorant Garamond, serif", fontSize: 31 }}>{tr[item.title]}</h3>
+                <p style={{ marginTop: 8, color: BRAND.textSecondary, lineHeight: 1.7 }}>{tr[item.desc]}</p>
+              </article>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section id="for-museums" className="landing-section" style={{ zIndex: 2, position: "relative", background: BRAND.surface, borderTop: `1px solid ${BRAND.goldBorder}` }}>
+        <div className="mx-auto max-w-7xl px-4 md:px-6">
+          <div className="landing-label">{tr.museumsEyebrow}</div>
+          <h2 className="landing-title" style={{ marginTop: 14, maxWidth: 800 }}>{tr.museumsTitle}</h2>
+          <div className="grid lg:grid-cols-[1fr_1fr] gap-8 mt-10 items-start">
+            <div className="grid grid-cols-3 gap-3">
+              {[{ n: "~$15,000", l: tr.roi1Label }, { n: "$299", l: tr.roi2Label }, { n: "98%", l: tr.roi3Label }].map((roi) => (
+                <div key={roi.n} className="landing-card" style={{ textAlign: "center" }}>
+                  <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 40 }}>{roi.n}</div>
+                  <div style={{ marginTop: 5, color: BRAND.textSecondary, fontSize: 12 }}>{roi.l}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="landing-card" style={{ background: BRAND.card }}>
+              <ul className="space-y-2">
+                {[tr.m1, tr.m2, tr.m3, tr.m4, tr.m5, tr.m6, tr.m7].map((it) => (
+                  <li key={it} style={{ display: "flex", gap: 10, color: BRAND.textSecondary }}>
+                    <span style={{ color: BRAND.gold }}>✦</span>
+                    <span>{it}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          <div
+            className="mt-8"
+            style={{
+              border: `1px solid ${BRAND.goldBorder}`,
+              borderRadius: 8,
+              padding: 24,
+              background: "radial-gradient(55% 100% at 0% 0%, rgba(201,168,76,0.11), rgba(22,22,22,0.92) 70%)",
+              boxShadow: "0 0 60px rgba(201,168,76,0.08)",
+            }}
+          >
+            <h3 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 40, color: BRAND.gold }}>{tr.earlyTitle}</h3>
+            <p style={{ color: BRAND.textSecondary, marginTop: 8 }}>{tr.earlySubtitle}</p>
+            <div className="mt-5 grid md:grid-cols-[1fr_1fr_auto] gap-3">
+              <input className="landing-input" placeholder={tr.museumInput} />
+              <input className="landing-input" placeholder={tr.emailInput} />
+              <button className="landing-btn-primary" onClick={() => router.push("/admin/login")}>{tr.earlyBtn}</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="landing-section" style={{ paddingTop: 88, zIndex: 2, position: "relative" }}>
+        <div className="mx-auto max-w-5xl px-4 md:px-6">
+          <h2 className="landing-title" style={{ textAlign: "center" }}>{tr.faqTitle}</h2>
+          <div className="mt-8 space-y-3">
+            {faqItems.map((item, idx) => {
+              const open = idx === expandedFaq;
+              return (
+                <article key={item.q} className="landing-card" style={{ padding: 0, overflow: "hidden" }}>
+                  <button
+                    onClick={() => setExpandedFaq(open ? -1 : idx)}
+                    style={{
+                      width: "100%",
+                      textAlign: "left",
+                      padding: "16px 18px",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "space-between",
+                      color: BRAND.text,
+                    }}
+                  >
+                    <span style={{ fontWeight: 500 }}>{item.q}</span>
+                    <span style={{ color: BRAND.gold }}>{open ? "−" : "+"}</span>
+                  </button>
+                  {open && <p style={{ padding: "0 18px 18px", color: BRAND.textSecondary, lineHeight: 1.7 }}>{item.a}</p>}
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      </section>
+
+      <section
+        className="landing-section"
+        style={{
+          paddingTop: 140,
+          paddingBottom: 150,
+          zIndex: 2,
+          position: "relative",
+          background: "radial-gradient(55% 80% at 50% 40%, rgba(201,168,76,0.18), rgba(10,10,10,0.92) 70%)",
+        }}
+      >
+        <div className="mx-auto max-w-4xl px-4 md:px-6 text-center">
+          <h2 className="landing-title">{tr.finalTitle}</h2>
+          <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-4">
+            <button className="landing-btn-primary" onClick={() => router.push("/admin/login")}>{tr.finalPrimary}</button>
+            <a href="https://github.com" target="_blank" rel="noreferrer" className="landing-link">{tr.finalSecondary} ↗</a>
+          </div>
+        </div>
+      </section>
+
+      <footer style={{ borderTop: `1px solid ${BRAND.goldBorder}`, position: "relative", zIndex: 2 }}>
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 grid md:grid-cols-4 gap-8">
+          <div>
+            <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 28 }}>MuseAI</div>
+            <div style={{ color: BRAND.textMuted, marginTop: 8, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+              Point. Scan. Discover.
+            </div>
+            <div style={{ marginTop: 12, color: BRAND.textSecondary, fontSize: 13 }}>{tr.footerCopy}</div>
+          </div>
+          <div>
+            <div className="landing-footer-heading">{tr.footerProduct}</div>
+            <div className="space-y-2 mt-3">
+              <button className="landing-link text-left" onClick={() => scrollTo("features")}>{tr.navFeatures}</button>
+              <button className="landing-link text-left" onClick={() => scrollTo("how-it-works")}>{tr.navHow}</button>
+              <button className="landing-link text-left" onClick={() => scrollTo("for-museums")}>{tr.navMuseums}</button>
+              <button className="landing-link text-left" onClick={() => scrollTo("visitors")}>{tr.navVisitors}</button>
+            </div>
+          </div>
+          <div>
+            <div className="landing-footer-heading">{tr.footerResources}</div>
+            <div className="space-y-2 mt-3">
+              <Link className="landing-link" href="/admin/login">{tr.navAdmin}</Link>
+              <a className="landing-link" href="https://github.com" target="_blank" rel="noreferrer">GitHub</a>
+            </div>
+          </div>
+          <div>
+            <div className="landing-footer-heading">{tr.footerContact}</div>
+            <div className="space-y-2 mt-3">
+              <a className="landing-link" href="mailto:hello@guideqr.ai">hello@guideqr.ai</a>
+              <a className="landing-link" href="https://guideqr.ai" target="_blank" rel="noreferrer">guideqr.ai</a>
+            </div>
           </div>
         </div>
       </footer>
 
       {toast && (
-        <div className="fixed z-[60] left-1/2 -translate-x-1/2 bottom-6 px-4 py-3 rounded-xl" style={{ background: toast.kind === "error" ? "#7f1d1d" : "#14532d", border: `1px solid ${toast.kind === "error" ? "#f87171" : "#86efac"}`, color: "#F5F0E8", fontFamily: "DM Sans" }}>
+        <div
+          role="status"
+          style={{
+            position: "fixed",
+            left: "50%",
+            bottom: "max(20px, env(safe-area-inset-bottom))",
+            transform: "translateX(-50%)",
+            zIndex: 100,
+            padding: "12px 16px",
+            borderRadius: 8,
+            border: `1px solid ${toast.type === "error" ? "#ef4444" : BRAND.gold}`,
+            background: toast.type === "error" ? "rgba(127, 29, 29, 0.92)" : "rgba(24, 24, 24, 0.92)",
+            color: BRAND.text,
+          }}
+        >
           {toast.text}
         </div>
       )}
 
-      {showScanner && <QRScanner onScan={handleScanResult} onClose={() => setShowScanner(false)} language={lang} />}
-    </div>
+      {openScanner && (
+        <div style={{ position: "fixed", inset: 0, zIndex: 90, background: "rgba(0,0,0,0.92)" }}>
+          <QRScanner onScan={handleScan} onClose={() => setOpenScanner(false)} language={language} />
+          <p
+            style={{
+              position: "fixed",
+              bottom: "max(18px, env(safe-area-inset-bottom))",
+              width: "100%",
+              textAlign: "center",
+              zIndex: 95,
+              color: BRAND.gold,
+              fontSize: 12,
+              letterSpacing: "0.12em",
+              textTransform: "uppercase",
+            }}
+          >
+            {tr.scanHint}
+          </p>
+        </div>
+      )}
+
+      <style jsx global>{`
+        .landing-section {
+          padding-top: 120px;
+          padding-bottom: 120px;
+        }
+        .landing-title {
+          font-family: Cormorant Garamond, serif;
+          font-size: clamp(38px, 5vw, 58px);
+          line-height: 1.06;
+          font-weight: 500;
+        }
+        .landing-label {
+          font-size: 11px;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          color: ${BRAND.textMuted};
+          font-weight: 500;
+        }
+        .landing-eyebrow {
+          display: inline-flex;
+          align-items: center;
+          border: 1px solid ${BRAND.goldBorder};
+          padding: 6px 12px;
+          border-radius: 6px;
+          color: ${BRAND.gold};
+          font-size: 11px;
+          letter-spacing: 0.1em;
+          text-transform: uppercase;
+          font-weight: 500;
+        }
+        .landing-card {
+          background: ${BRAND.card};
+          border: 1px solid rgba(201, 168, 76, 0.15);
+          border-radius: 8px;
+          padding: 18px;
+          transition: transform 0.7s ease, border-color 0.7s ease, box-shadow 0.7s ease;
+        }
+        .landing-feature-card:hover {
+          transform: translateY(-4px);
+          border-color: rgba(201, 168, 76, 0.4);
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+        }
+        .landing-btn-primary {
+          border: 1px solid ${BRAND.gold};
+          background: ${BRAND.gold};
+          color: ${BRAND.bg};
+          border-radius: 6px;
+          padding: 12px 18px;
+          font-weight: 500;
+          transition: all 0.65s ease;
+        }
+        .landing-btn-primary:hover {
+          filter: brightness(1.06);
+          transform: translateY(-1px);
+        }
+        .landing-btn-outline {
+          border: 1px solid ${BRAND.goldBorder};
+          color: ${BRAND.gold};
+          background: rgba(10, 10, 10, 0.32);
+          border-radius: 6px;
+          padding: 10px 14px;
+          transition: all 0.65s ease;
+        }
+        .landing-btn-outline:hover {
+          background: ${BRAND.gold};
+          color: ${BRAND.bg};
+          border-color: ${BRAND.gold};
+        }
+        .landing-link {
+          color: ${BRAND.textSecondary};
+          transition: color 0.6s ease;
+        }
+        .landing-link:hover {
+          color: ${BRAND.gold};
+        }
+        .landing-input {
+          border: 1px solid ${BRAND.goldBorder};
+          background: rgba(10, 10, 10, 0.5);
+          color: ${BRAND.text};
+          border-radius: 6px;
+          padding: 12px 14px;
+          outline: none;
+        }
+        .landing-input:focus {
+          border-color: ${BRAND.gold};
+          box-shadow: 0 0 0 3px ${BRAND.goldMuted};
+        }
+        .landing-footer-heading {
+          color: ${BRAND.gold};
+          font-size: 11px;
+          letter-spacing: 0.15em;
+          text-transform: uppercase;
+          font-weight: 500;
+        }
+        .landing-wave {
+          display: block;
+          border-radius: 3px;
+          animation: landingWave 1.1s ease-in-out infinite;
+        }
+        @keyframes landingWave {
+          0%,
+          100% {
+            transform: scaleY(0.35);
+            opacity: 0.45;
+          }
+          50% {
+            transform: scaleY(1);
+            opacity: 1;
+          }
+        }
+        @media (max-width: 767px) {
+          .landing-section {
+            padding-top: 84px;
+            padding-bottom: 84px;
+          }
+        }
+        @media (prefers-reduced-motion: reduce) {
+          html:focus-within {
+            scroll-behavior: auto;
+          }
+          *,
+          *::before,
+          *::after {
+            animation-duration: 0.01ms !important;
+            animation-iteration-count: 1 !important;
+            transition-duration: 0.01ms !important;
+            scroll-behavior: auto !important;
+          }
+        }
+      `}</style>
+    </main>
   );
 }

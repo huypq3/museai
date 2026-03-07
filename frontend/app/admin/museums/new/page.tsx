@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { adminFetch } from '@/lib/adminAuth'
 import { MUSEUM_REQUIRED_FIELDS, calculateCompletion } from '@/lib/validation'
 import ImageUpload from '@/components/admin/ImageUpload'
-import { useAdminI18n } from '@/lib/adminI18n'
+import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'basic' | 'ops' | 'ai' | 'account'
 

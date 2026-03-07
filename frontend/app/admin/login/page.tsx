@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { setAdminSession } from '@/lib/adminAuth'
-import { useAdminI18n } from '@/lib/adminI18n'
+import { useAdminI18n } from '@/lib/i18n/admin'
 
 export default function AdminLogin() {
   const router = useRouter()

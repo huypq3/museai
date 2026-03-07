@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import QRCode from 'qrcode'
 import { adminFetch } from '@/lib/adminAuth'
-import { useAdminI18n } from '@/lib/adminI18n'
+import { useAdminI18n } from '@/lib/i18n/admin'
 
 export default function ArtifactQRPage() {
   const router = useRouter()

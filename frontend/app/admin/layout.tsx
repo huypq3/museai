@@ -3,7 +3,7 @@
 import { useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { clearAdminToken, getAdminSession } from '@/lib/adminAuth'
-import { AdminI18nProvider, useAdminI18n } from '@/lib/adminI18n'
+import { AdminI18nProvider, useAdminI18n } from '@/lib/i18n/admin'
 
 export default function AdminLayout({
   children,

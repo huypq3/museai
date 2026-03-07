@@ -7,7 +7,7 @@ import ImageUpload from '@/components/admin/ImageUpload'
 import MultiImageUpload from '@/components/admin/MultiImageUpload'
 import TagInput from '@/components/admin/TagInput'
 import { validateArtifactPublishable } from '@/lib/validation'
-import { useAdminI18n } from '@/lib/adminI18n'
+import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'basic' | 'vision' | 'knowledge' | 'scenes'
 
