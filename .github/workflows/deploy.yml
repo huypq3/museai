@@ -48,9 +48,11 @@ jobs:
             --allow-unauthenticated \
             --memory 1Gi \
             --timeout 3600 \
+            --remove-secrets=GEMINI_API_KEY,JWT_SECRET,REDIS_URL \
             --set-env-vars "\
               GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }},\
               ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }},\
+              GCS_BUCKET=${{ vars.GCS_BUCKET_NAME }},\
               GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }},\
               JWT_SECRET=${{ secrets.JWT_SECRET }},\
               GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},\
