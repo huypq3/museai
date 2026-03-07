@@ -23,19 +23,21 @@ jobs:
         uses: google-github-actions/setup-gcloud@v2
 
       - name: Configure Docker for GCR
-        run: gcloud auth configure-docker
+        run: gcloud auth configure-docker gcr.io --quiet
 
       - name: Build and push Docker image
         run: |
-          gcloud builds submit \
-            --tag gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }} \
-            --suppress-logs \
-            ./backend
+          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}"
+          IMAGE_LATEST="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }}:latest"
+          docker build -t "$IMAGE" -t "$IMAGE_LATEST" ./backend
+          docker push "$IMAGE"
+          docker push "$IMAGE_LATEST"
 
       - name: Deploy to Cloud Run
         run: |
+          IMAGE="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }}:${{ github.sha }}"
           gcloud run deploy ${{ vars.CLOUD_RUN_SERVICE }} \
-            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ vars.CLOUD_RUN_SERVICE }} \
+            --image "$IMAGE" \
             --platform managed \
             --region ${{ vars.CLOUD_RUN_REGION }} \
             --allow-unauthenticated \
@@ -44,7 +46,8 @@ jobs:
             --set-env-vars "\
               GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }},\
               ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }},\
-              GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }},\
+              GCS_BUCKET=${{ vars.GCS_BUCKET || vars.GCS_BUCKET_NAME }},\
+              GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME || vars.GCS_BUCKET }},\
               JWT_SECRET=${{ secrets.JWT_SECRET }},\
               GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},\
               REDIS_URL=${{ secrets.REDIS_URL }}"
