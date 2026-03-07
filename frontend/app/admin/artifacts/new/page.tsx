@@ -1,17 +1,17 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 export default function AdminArtifactsNewLegacyRedirect() {
   const router = useRouter();
-  const search = useSearchParams();
 
   useEffect(() => {
-    const museum = search.get("museum");
+    const params = new URLSearchParams(window.location.search);
+    const museum = params.get("museum");
     const q = museum ? `?museum=${encodeURIComponent(museum)}` : "";
     router.replace(`/admin/exhibits/new${q}`);
-  }, [router, search]);
+  }, [router]);
 
   return null;
 }
