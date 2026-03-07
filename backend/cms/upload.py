@@ -86,6 +86,7 @@ async def upload_pdf(
         doc_ref = db.collection("documents").document(artifact_id)
         
         await doc_ref.set({
+            "exhibit_id": artifact_id,
             "artifact_id": artifact_id,
             "filename": filename,
             "gcs_path": gcs_path,
@@ -140,8 +141,11 @@ async def get_document_status(
         doc_snapshot = await doc_ref.get()
         
         # Count chunks
-        chunks_ref = db.collection("artifact_chunks").where("artifact_id", "==", artifact_id)
+        chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", artifact_id)
         chunks_docs = await chunks_ref.get()
+        if not chunks_docs:
+            chunks_ref = db.collection("artifact_chunks").where("artifact_id", "==", artifact_id)
+            chunks_docs = await chunks_ref.get()
         chunk_count = len(chunks_docs)
         
         if doc_snapshot.exists:

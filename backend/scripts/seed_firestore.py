@@ -1,6 +1,6 @@
 """
-Seed Firestore với demo data cho Sprint 3.
-Tạo museum "demo_museum" với 3 artifacts và 3 personas.
+Seed Firestore with demo data.
+Creates museum "demo_museum" with 3 exhibits and 3 personas.
 """
 
 import os
@@ -14,13 +14,13 @@ from google.cloud import firestore
 
 
 async def seed_firestore(project_id="museai-2026"):
-    """Seed demo data vào Firestore."""
+    """Seed demo data into Firestore."""
     
     print("🌱 Starting Firestore seed...")
     
     db = firestore.AsyncClient(project=project_id)
     
-    # Artifacts data
+    # Exhibits data
     artifacts_data = [
         {
             "id": "statue_tran_hung_dao",
@@ -142,12 +142,17 @@ async def seed_firestore(project_id="museai-2026"):
         }
     ]
     
-    # Seed artifacts
+    # Seed exhibits and mirror to legacy artifacts collection for compatibility
+    exhibits_collection = db.collection("exhibits")
     artifacts_collection = db.collection("artifacts")
     for artifact in artifacts_data:
-        doc_ref = artifacts_collection.document(artifact["id"])
-        await doc_ref.set(artifact["data"])
-        print(f"  ✅ Created artifact: {artifact['id']}")
+        data = dict(artifact["data"])
+        data["exhibit_id"] = artifact["id"]
+        exhibit_ref = exhibits_collection.document(artifact["id"])
+        legacy_ref = artifacts_collection.document(artifact["id"])
+        await exhibit_ref.set(data)
+        await legacy_ref.set(data)
+        print(f"  ✅ Created exhibit: {artifact['id']}")
     
     # Seed personas
     personas_collection = db.collection("personas")
@@ -156,7 +161,7 @@ async def seed_firestore(project_id="museai-2026"):
         await doc_ref.set(persona["data"])
         print(f"  ✅ Created persona: {persona['id']}")
     
-    print(f"\n🎉 Seeded {len(artifacts_data)} artifacts, {len(personas_data)} personas")
+    print(f"\n🎉 Seeded {len(artifacts_data)} exhibits, {len(personas_data)} personas")
     print(f"   Museum ID: demo_museum")
     print(f"   Ready for Vision testing!")
 

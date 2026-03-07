@@ -93,7 +93,7 @@ async def embed_and_store_chunks(
     project_id: str = "museai-2026"
 ):
     """
-    Embed each chunk and store it in Firestore "artifact_chunks".
+    Embed each chunk and store it in Firestore "exhibit_chunks" and legacy "artifact_chunks".
     
     Args:
         chunks: List of chunks from chunker
@@ -106,8 +106,9 @@ async def embed_and_store_chunks(
         # Initialize Firestore client.
         db = firestore.AsyncClient(project=project_id)
         
-        # Target collection for chunk storage.
-        chunks_collection = db.collection("artifact_chunks")
+        # Target collections for chunk storage.
+        chunks_collection = db.collection("exhibit_chunks")
+        legacy_chunks_collection = db.collection("artifact_chunks")
         
         # Embed and store each chunk.
         for i, chunk in enumerate(chunks):
@@ -118,6 +119,7 @@ async def embed_and_store_chunks(
             
             # Prepare document payload.
             doc_data = {
+                "exhibit_id": artifact_id,
                 "artifact_id": artifact_id,
                 "chunk_index": chunk["chunk_index"],
                 "content": chunk["content"],
@@ -129,6 +131,8 @@ async def embed_and_store_chunks(
             # Store in Firestore with ID = chunk["id"].
             doc_ref = chunks_collection.document(chunk["id"])
             await doc_ref.set(doc_data)
+            legacy_doc_ref = legacy_chunks_collection.document(chunk["id"])
+            await legacy_doc_ref.set(doc_data)
             
             logger.debug(f"Stored chunk {chunk['id']} with embedding dim={len(embedding)}")
         

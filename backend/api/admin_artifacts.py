@@ -19,12 +19,14 @@ from live.rag_context import add_embeddings_to_chunks  # noqa: E402
 from middleware.audit_log import audit_log  # noqa: E402
 
 router = APIRouter(prefix="/admin/artifacts", tags=["admin"])
+PRIMARY_COLLECTION = "exhibits"
+LEGACY_COLLECTION = "artifacts"
 
 
 def _slugify(value: str) -> str:
     slug = value.strip().lower()
     slug = re.sub(r"[^a-z0-9]+", "_", slug)
-    return slug.strip("_") or "artifact"
+    return slug.strip("_") or "exhibit"
 
 
 ARTIFACT_REQUIRED_FIELDS = [
@@ -105,7 +107,9 @@ class ArtifactUpdate(BaseModel):
 
 async def _get_artifact_or_404(artifact_id: str) -> tuple[dict[str, Any], firestore.AsyncClient]:
     db = get_db()
-    doc = await db.collection("artifacts").document(artifact_id).get()
+    doc = await db.collection(PRIMARY_COLLECTION).document(artifact_id).get()
+    if not doc.exists:
+        doc = await db.collection(LEGACY_COLLECTION).document(artifact_id).get()
     if not doc.exists:
         raise HTTPException(status_code=404, detail="Artifact not found")
     data = doc.to_dict() or {}
@@ -127,10 +131,22 @@ async def list_artifacts(
             raise HTTPException(status_code=403, detail="Access denied")
         effective_museum_id = admin.get("museum_id")
     if not effective_museum_id:
-        query = db.collection("artifacts")
+        query = db.collection(PRIMARY_COLLECTION)
     else:
-        query = db.collection("artifacts").where("museum_id", "==", effective_museum_id)
+        query = db.collection(PRIMARY_COLLECTION).where("museum_id", "==", effective_museum_id)
 
+    async for doc in query.stream():
+        data = doc.to_dict() or {}
+        data["id"] = doc.id
+        artifacts.append(data)
+    if artifacts:
+        return artifacts
+
+    # Backward compatibility if exhibits collection is empty.
+    if not effective_museum_id:
+        query = db.collection(LEGACY_COLLECTION)
+    else:
+        query = db.collection(LEGACY_COLLECTION).where("museum_id", "==", effective_museum_id)
     async for doc in query.stream():
         data = doc.to_dict() or {}
         data["id"] = doc.id
@@ -144,8 +160,9 @@ async def create_artifact(body: ArtifactCreate, admin=Depends(get_current_admin)
     db = get_db()
 
     artifact_id = _slugify(body.name_en or body.name)
-    ref = db.collection("artifacts").document(artifact_id)
-    if (await ref.get()).exists:
+    ref = db.collection(PRIMARY_COLLECTION).document(artifact_id)
+    legacy_ref = db.collection(LEGACY_COLLECTION).document(artifact_id)
+    if (await ref.get()).exists or (await legacy_ref.get()).exists:
         raise HTTPException(status_code=409, detail="Artifact already exists")
 
     data = body.model_dump()
@@ -181,6 +198,8 @@ async def create_artifact(body: ArtifactCreate, admin=Depends(get_current_admin)
                 },
             )
     await ref.set(data)
+    # Keep legacy collection in sync during migration window.
+    await legacy_ref.set(data, merge=True)
 
     await db.collection("museums").document(body.museum_id).set(
         {"artifact_count": firestore.Increment(1)}, merge=True
@@ -245,7 +264,8 @@ async def update_artifact(artifact_id: str, body: ArtifactUpdate, admin=Depends(
             )
 
     if update_data:
-        await db.collection("artifacts").document(artifact_id).update(update_data)
+        await db.collection(PRIMARY_COLLECTION).document(artifact_id).set(update_data, merge=True)
+        await db.collection(LEGACY_COLLECTION).document(artifact_id).set(update_data, merge=True)
         if update_data.get("status") == "published":
             await audit_log(
                 event="artifact_published",
@@ -261,7 +281,8 @@ async def delete_artifact(artifact_id: str, admin=Depends(get_current_admin)):
     ensure_museum_scope(admin, str(existing.get("museum_id", "")))
 
     museum_id = existing.get("museum_id")
-    await db.collection("artifacts").document(artifact_id).delete()
+    await db.collection(PRIMARY_COLLECTION).document(artifact_id).delete()
+    await db.collection(LEGACY_COLLECTION).document(artifact_id).delete()
     if museum_id:
         await db.collection("museums").document(museum_id).set(
             {"artifact_count": firestore.Increment(-1)}, merge=True

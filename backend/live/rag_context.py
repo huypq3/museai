@@ -48,7 +48,10 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
 
 
 async def get_artifact_name(artifact_id: str) -> str:
-    doc = await _get_db().collection("artifacts").document(artifact_id).get()
+    db = _get_db()
+    doc = await db.collection("exhibits").document(artifact_id).get()
+    if not doc.exists:
+        doc = await db.collection("artifacts").document(artifact_id).get()
     if not doc.exists:
         return artifact_id
     data = doc.to_dict() or {}
@@ -82,7 +85,10 @@ async def get_artifact_context(artifact_id: str, top_k: int = 8) -> str:
     """
     Load knowledge chunks for artifact and format as plain-text context.
     """
-    doc = await _get_db().collection("artifacts").document(artifact_id).get()
+    db = _get_db()
+    doc = await db.collection("exhibits").document(artifact_id).get()
+    if not doc.exists:
+        doc = await db.collection("artifacts").document(artifact_id).get()
     if not doc.exists:
         return ""
 
@@ -114,7 +120,10 @@ async def semantic_search(artifact_id: str, query: str, top_k: int = 3) -> str:
     if not query.strip():
         return ""
 
-    doc = await _get_db().collection("artifacts").document(artifact_id).get()
+    db = _get_db()
+    doc = await db.collection("exhibits").document(artifact_id).get()
+    if not doc.exists:
+        doc = await db.collection("artifacts").document(artifact_id).get()
     if not doc.exists:
         return ""
 

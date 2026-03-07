@@ -94,8 +94,11 @@ async def generate_commentary(
         # Load artifact and persona data from Firestore.
         db = firestore.AsyncClient(project=project_id)
         
-        artifact_ref = db.collection("artifacts").document(artifact_id)
+        artifact_ref = db.collection("exhibits").document(artifact_id)
         artifact_doc = await artifact_ref.get()
+        if not artifact_doc.exists:
+            artifact_ref = db.collection("artifacts").document(artifact_id)
+            artifact_doc = await artifact_ref.get()
         
         if not artifact_doc.exists:
             return "Sorry, I could not find information for this artifact."

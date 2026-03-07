@@ -32,7 +32,13 @@ export default function WelcomePage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    setMuseum(params.get("museum") || "demo_museum");
+    const museumFromQr = params.get("museum") || "demo_museum";
+    const exhibitFromQr = params.get("exhibit") || params.get("artifact");
+    setMuseum(museumFromQr);
+    localStorage.setItem("museum_id", museumFromQr);
+    if (exhibitFromQr) {
+      router.replace(`/exhibit/${exhibitFromQr}`);
+    }
   }, []);
 
   const handleStart = () => {

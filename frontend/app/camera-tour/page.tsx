@@ -74,7 +74,7 @@ export default function CameraTourPage() {
         }
       } catch (error) {
         console.error("Camera error:", error);
-        alert("Không thể truy cập camera. Vui lòng cấp quyền.");
+        alert(t(language, "camera.permission_error"));
       }
     }
 
@@ -129,7 +129,7 @@ export default function CameraTourPage() {
             });
             setDetected({
               artifact_id: result.artifact_id,
-              name: result.artifact_name || "Hiện vật",
+              name: result.artifact_name || t(language, "camera.artifact_fallback"),
               era: result.era,
               location: result.location,
               confidence: result.confidence,
@@ -155,15 +155,29 @@ export default function CameraTourPage() {
 
   const handleExplore = () => {
     if (!detected) return;
-    router.push(`/artifact/${detected.artifact_id}`);
+    router.push(`/exhibit/${detected.artifact_id}`);
   };
 
-  const handleQRScan = (data: { museum_id?: string; artifact_id?: string }) => {
-    setShowQRScanner(false);
-    
-    if (data.artifact_id) {
-      router.push(`/artifact/${data.artifact_id}`);
+  const handleQRScan = (data: { museum_id?: string; exhibit_id?: string; artifact_id?: string }) => {
+    const exhibitId = data.exhibit_id || data.artifact_id;
+    if (exhibitId) {
+      setShowQRScanner(false);
+      if (data.museum_id) {
+        localStorage.setItem("museum_id", data.museum_id);
+        setMuseumId(data.museum_id);
+      }
+      router.push(`/exhibit/${exhibitId}`);
+      return;
     }
+
+    if (data.museum_id) {
+      localStorage.setItem("museum_id", data.museum_id);
+      setMuseumId(data.museum_id);
+      alert(t(language, "camera.qr_museum_only"));
+      return;
+    }
+
+    alert(t(language, "camera.invalid_qr"));
   };
 
   return (
@@ -177,7 +191,7 @@ export default function CameraTourPage() {
           <div>
             <div className="font-display text-[var(--gold)] text-xl">MuseAI</div>
             <div className="text-xs opacity-60" style={{ fontFamily: 'DM Sans' }}>
-              {museumId === 'demo_museum' ? 'Bảo tàng Demo' : museumId}
+              {museumId === 'demo_museum' ? t(language, "camera.demo_museum") : museumId}
             </div>
           </div>
           
@@ -422,7 +436,9 @@ export default function CameraTourPage() {
             background: 'rgba(255,255,255,0.08)',
             border: '1px solid rgba(255,255,255,0.1)',
           }}>
-          📱
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 4h5v2H6v3H4V4Zm11 0h5v5h-2V6h-3V4ZM4 15h2v3h3v2H4v-5Zm14 0h2v5h-5v-2h3v-3ZM8 8h8v8H8V8Zm2 2v4h4v-4h-4Z" fill="currentColor"/>
+          </svg>
         </button>
       </div>
 
@@ -480,6 +496,7 @@ export default function CameraTourPage() {
         <QRScanner
           onScan={handleQRScan}
           onClose={() => setShowQRScanner(false)}
+          language={language}
         />
       )}
 

@@ -44,9 +44,12 @@ async def search_similar_chunks(
         # Initialize Firestore client.
         db = firestore.AsyncClient(project=project_id)
         
-        # Fetch all chunks for artifact.
-        chunks_ref = db.collection("artifact_chunks").where("artifact_id", "==", artifact_id)
+        # Fetch all chunks for exhibit (fallback to legacy artifact_chunks).
+        chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", artifact_id)
         chunks_docs = await chunks_ref.get()
+        if not chunks_docs:
+            chunks_ref = db.collection("artifact_chunks").where("artifact_id", "==", artifact_id)
+            chunks_docs = await chunks_ref.get()
         
         if not chunks_docs:
             logger.warning(f"No chunks found for artifact: {artifact_id}")

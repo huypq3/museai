@@ -1,40 +1,77 @@
-# Secrets — KHÔNG BAO GIỜ commit
-*.json
-!package.json
-!tsconfig.json
+# =========================
+# Python / FastAPI backend
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.venv/
+venv/
+env/
+
+*.egg-info/
+build/
+dist/
+
+# =========================
+# Next.js frontend
+# =========================
+node_modules/
+.next/
+out/
+.vercel/
+
+# Keep backup build artifacts out of git
+frontend/.next_bak_*/
+
+# =========================
+# Secrets / env files
+# =========================
 .env
+.env.local
+.env.production
+.env.*.local
 .env.*
 !.env.example
 !backend/.env.example
-*-sa-key.json
-serviceAccountKey.json
 
-# Python
-__pycache__/
-*.pyc
-.venv/
-venv/
+secrets/
+credentials/
+gcloud-credentials/
 
-# Node
-node_modules/
-.next/
-dist/
-frontend/.next_bak_1772698718/
+# =========================
+# Google Cloud credentials
+# =========================
+service-account*.json
+*service-account*.json
+*-credentials.json
+application_default_credentials.json
 
-# Markdown: only keep README files
+# =========================
+# IDE / OS
+# =========================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# =========================
+# Logs / temp
+# =========================
+*.log
+logs/
+tmp/
+temp/
+
+# =========================
+# Local AI instruction files
+# =========================
+.cursorrules
+PROJECT_CONTEXT.md
 *.md
 !README.md
 !**/README.md
-
-# macOS
-.DS_Store
-
-# Terraform
-infra/terraform/.terraform/
-infra/terraform/*.tfstate
-infra/terraform/*.tfstate.backup
-infra/terraform/.terraform.lock.hcl
-
-#prompt
-.cursorrules
-PROJECT_CONTEXT.md

@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+.vercel/
+
+.env
+.env.local
+.env.production
+.env.*.local
+
+*.log
+logs/
+tmp/
+temp/
+
+.DS_Store
+.git/

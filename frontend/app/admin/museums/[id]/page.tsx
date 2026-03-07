@@ -32,7 +32,7 @@ export default function MuseumDetailPage() {
 
   const loadArtifacts = async () => {
     try {
-      const data = await adminFetch(`/admin/artifacts/?museum_id=${museumId}`)
+      const data = await adminFetch(`/admin/exhibits/?museum_id=${museumId}`)
       setArtifacts(data)
       
       // Get museum name
@@ -48,7 +48,7 @@ export default function MuseumDetailPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm(tr('Xóa hiện vật này?', 'Delete this artifact?'))) return
-    await adminFetch(`/admin/artifacts/${id}`, { method: 'DELETE' })
+    await adminFetch(`/admin/exhibits/${id}`, { method: 'DELETE' })
     loadArtifacts()
   }
 
@@ -92,7 +92,7 @@ export default function MuseumDetailPage() {
             </div>
           </div>
           <button
-            onClick={() => router.push(`/admin/artifacts/new?museum=${museumId}`)}
+            onClick={() => router.push(`/admin/exhibits/new?museum=${museumId}`)}
             style={{
               padding: '10px 20px',
               background: '#C9A84C',
@@ -143,7 +143,7 @@ export default function MuseumDetailPage() {
                 cursor: 'pointer',
                 transition: 'border-color 0.2s',
               }}
-              onClick={() => router.push(`/admin/artifacts/${a.id}`)}
+              onClick={() => router.push(`/admin/exhibits/${a.id}`)}
             >
               {/* Image */}
               <div style={{

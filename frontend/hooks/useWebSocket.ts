@@ -27,9 +27,15 @@ export function useWebSocket(artifactId: string | null, language: string) {
     isConnectingRef.current = true;
     let wsToken = "";
     try {
-      const tokenResp = await fetch(`${BACKEND_URL}/api/session/token/${artifactId}`, {
+      let tokenResp = await fetch(`${BACKEND_URL}/api/session/token/exhibits/${artifactId}`, {
         method: "POST",
       });
+      if (!tokenResp.ok) {
+        // Legacy fallback
+        tokenResp = await fetch(`${BACKEND_URL}/api/session/token/${artifactId}`, {
+          method: "POST",
+        });
+      }
       if (!tokenResp.ok) {
         throw new Error(`session token request failed: ${tokenResp.status}`);
       }
@@ -42,7 +48,7 @@ export function useWebSocket(artifactId: string | null, language: string) {
       return;
     }
 
-    const wsUrl = `${WS_BACKEND_URL}/ws/persona/${artifactId}?language=${language}&token=${encodeURIComponent(wsToken)}`;
+    const wsUrl = `${WS_BACKEND_URL}/ws/persona/exhibits/${artifactId}?language=${language}&token=${encodeURIComponent(wsToken)}`;
     console.log("🔌 Connecting to:", wsUrl);
 
     const ws = new WebSocket(wsUrl);

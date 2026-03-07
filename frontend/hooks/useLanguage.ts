@@ -1,31 +1,31 @@
 import { useState, useEffect } from "react";
 import { LanguageCode } from "@/lib/constants";
 
+const SUPPORTED: LanguageCode[] = ["vi", "en", "fr", "ja", "ko", "zh"];
+
+function readInitialLanguage(): LanguageCode {
+  if (typeof window === "undefined") return "vi";
+  const saved = localStorage.getItem("language");
+  if (saved && SUPPORTED.includes(saved as LanguageCode)) {
+    return saved as LanguageCode;
+  }
+  return "vi";
+}
+
 export function useLanguage() {
-  const [language, setLanguage] = useState<LanguageCode>("vi");
-  const [isAutoDetected, setIsAutoDetected] = useState(true);
+  const [language, setLanguage] = useState<LanguageCode>(readInitialLanguage);
+  const [isAutoDetected, setIsAutoDetected] = useState(false);
 
   useEffect(() => {
-    // Check localStorage
+    // Keep local state aligned with persisted user preference.
     const saved = localStorage.getItem("language");
-    if (saved) {
+    if (saved && SUPPORTED.includes(saved as LanguageCode)) {
       setLanguage(saved as LanguageCode);
       setIsAutoDetected(false);
       return;
     }
-
-    // Auto-detect from browser
-    const browserLang = navigator.language.toLowerCase();
-    let detected: LanguageCode = "en";
-
-    if (browserLang.startsWith("vi")) detected = "vi";
-    else if (browserLang.startsWith("fr")) detected = "fr";
-    else if (browserLang.startsWith("ja")) detected = "ja";
-    else if (browserLang.startsWith("ko")) detected = "ko";
-    else if (browserLang.startsWith("zh")) detected = "zh";
-
-    setLanguage(detected);
-    setIsAutoDetected(true);
+    setLanguage("vi");
+    setIsAutoDetected(false);
   }, []);
 
   const changeLanguage = (lang: LanguageCode) => {

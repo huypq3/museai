@@ -1,0 +1,27 @@
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+.venv/
+venv/
+env/
+
+.env
+.env.*
+!.env.example
+
+*.log
+logs/
+tmp/
+temp/
+
+.DS_Store
+
+# Keep build context minimal
+tests/
+docs/
+.git/
+.github/

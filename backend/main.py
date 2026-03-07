@@ -6,7 +6,14 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT_DIR / ".env")
+BACKEND_ENV_PATH = Path(__file__).resolve().parent / ".env"
+ROOT_ENV_PATH = ROOT_DIR / ".env"
+
+# Standard: backend uses backend/.env
+load_dotenv(BACKEND_ENV_PATH)
+# Backward-compatible fallback for legacy root .env setups
+if not BACKEND_ENV_PATH.exists() and ROOT_ENV_PATH.exists():
+    load_dotenv(ROOT_ENV_PATH)
 
 import os
 import logging
@@ -30,7 +37,18 @@ from security.rate_limit import check_rate_limit, check_ws_limits, register_ws_s
 from auth.ephemeral import create_ephemeral_token, verify_ephemeral_token
 
 # Import admin routers
-from api import admin_auth, admin_museums, admin_artifacts, admin_upload, admin_qr, admin_analytics, admin_users, public_analytics, admin_settings
+from api import (
+    admin_auth,
+    admin_museums,
+    admin_artifacts,
+    admin_exhibits,
+    admin_upload,
+    admin_qr,
+    admin_analytics,
+    admin_users,
+    public_analytics,
+    admin_settings,
+)
 
 
 # Logging config
@@ -53,10 +71,7 @@ def _normalize_origin(origin: str) -> str:
 
 
 default_dev_origins = [
-    "http://localhost:3001",
-    "http://localhost:3002",
-    "http://localhost:3003",
-    "http://localhost:3004",
+    "http://localhost:3000",
 ]
 raw_origins = os.getenv("ALLOWED_ORIGINS", ",".join(default_dev_origins))
 ALLOWED_ORIGINS = [_normalize_origin(o) for o in raw_origins.split(",") if o.strip()]
@@ -135,7 +150,12 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.middleware("http")
 async def museum_api_rate_limit(request: Request, call_next):
     # public/museum-facing APIs
-    if request.url.path.startswith("/vision/") or request.url.path.startswith("/qa/") or request.url.path.startswith("/artifacts/"):
+    if (
+        request.url.path.startswith("/vision/")
+        or request.url.path.startswith("/qa/")
+        or request.url.path.startswith("/artifacts/")
+        or request.url.path.startswith("/exhibits/")
+    ):
         ip = request.client.host if request.client else "unknown"
         await check_rate_limit(scope="museum_api", key=f"ip:{ip}", limit=300, window_seconds=60)
     return await call_next(request)
@@ -144,6 +164,7 @@ async def museum_api_rate_limit(request: Request, call_next):
 app.include_router(admin_auth.router)
 app.include_router(admin_museums.router)
 app.include_router(admin_artifacts.router)
+app.include_router(admin_exhibits.router)
 app.include_router(admin_upload.router)
 app.include_router(admin_qr.router)
 app.include_router(admin_analytics.router)
@@ -165,6 +186,18 @@ def get_firestore() -> firestore.AsyncClient:
     return _db
 
 
+async def _get_exhibit_doc(db: firestore.AsyncClient, exhibit_id: str):
+    """
+    Prefer new collection `exhibits`, fallback legacy `artifacts`.
+    """
+    exhibit_ref = db.collection("exhibits").document(exhibit_id)
+    exhibit_doc = await exhibit_ref.get()
+    if exhibit_doc.exists:
+        return exhibit_doc
+    legacy_ref = db.collection("artifacts").document(exhibit_id)
+    return await legacy_ref.get()
+
+
 @app.get("/")
 async def root():
     """Root endpoint."""
@@ -173,11 +206,12 @@ async def root():
         "version": "0.1.0",
         "endpoints": {
             "health": "/health",
-            "artifact": "/artifacts/{artifact_id}",
-            "websocket": "/ws/persona/{artifact_id}?language=vi",
-            "upload_pdf": "/admin/upload-pdf/{artifact_id}",
-            "document_status": "/admin/document-status/{artifact_id}",
-            "rag_qa": "/rag/qa/{artifact_id}",
+            "exhibit": "/exhibits/{exhibit_id}",
+            "exhibit_legacy_alias": "/artifacts/{artifact_id}",
+            "websocket": "/ws/persona/{exhibit_id}?language=vi",
+            "upload_pdf": "/admin/upload-pdf/{exhibit_id}",
+            "document_status": "/admin/document-status/{exhibit_id}",
+            "rag_qa": "/rag/qa/{exhibit_id}",
             "qa_legacy_alias": "/qa/{artifact_id}",
             "vision_recognize": "/vision/recognize/{museum_id}",
             "camera_tour": "/vision/camera-tour/{museum_id}"
@@ -199,54 +233,59 @@ async def health():
     }
 
 
-@app.get("/artifacts/{artifact_id}")
-async def get_artifact(artifact_id: str):
+@app.get("/exhibits/{exhibit_id}")
+async def get_exhibit(exhibit_id: str):
     """
-    Get artifact information from Firestore.
+    Get exhibit information from Firestore.
     
     Args:
-        artifact_id: Artifact ID in Firestore
+        exhibit_id: Exhibit ID in Firestore
     
     Returns:
-        Dict with artifact and persona data
+        Dict with exhibit and persona data
     """
     try:
         db = get_firestore()
         
-        # Load artifact document
-        artifact_ref = db.collection("artifacts").document(artifact_id)
-        artifact_doc = await artifact_ref.get()
+        exhibit_doc = await _get_exhibit_doc(db, exhibit_id)
         
-        if not artifact_doc.exists:
-            raise HTTPException(status_code=404, detail=f"Artifact {artifact_id} not found")
+        if not exhibit_doc.exists:
+            raise HTTPException(status_code=404, detail=f"Exhibit {exhibit_id} not found")
         
-        artifact_data = artifact_doc.to_dict()
-        artifact_data["id"] = artifact_id
+        exhibit_data = exhibit_doc.to_dict()
+        exhibit_data["id"] = exhibit_id
         
         # Load persona data (if persona_id exists)
-        persona_id = artifact_data.get("persona_id")
+        persona_id = exhibit_data.get("persona_id")
         if persona_id:
             persona_ref = db.collection("personas").document(persona_id)
             persona_doc = await persona_ref.get()
             
             if persona_doc.exists:
-                artifact_data["persona"] = persona_doc.to_dict()
+                exhibit_data["persona"] = persona_doc.to_dict()
             else:
-                logger.warning(f"Persona {persona_id} not found for artifact {artifact_id}")
-                artifact_data["persona"] = {}
+                logger.warning(f"Persona {persona_id} not found for exhibit {exhibit_id}")
+                exhibit_data["persona"] = {}
         else:
-            artifact_data["persona"] = {}
+            exhibit_data["persona"] = {}
         
         return {
-            "artifact_id": artifact_id,
-            "data": artifact_data
+            "exhibit_id": exhibit_id,
+            "artifact_id": exhibit_id,  # legacy compatibility
+            "data": exhibit_data
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error getting artifact {artifact_id}: {e}", exc_info=True)
+        logger.error(f"Error getting exhibit {exhibit_id}: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/artifacts/{artifact_id}")
+async def get_artifact_legacy_alias(artifact_id: str):
+    """Legacy alias for old clients."""
+    return await get_exhibit(artifact_id)
 
 
 @app.websocket("/ws/persona/{artifact_id}")
@@ -280,14 +319,14 @@ async def websocket_persona(
                 await websocket.close(code=4001)
                 return
             payload = verify_ephemeral_token(token)
-            if payload.get("artifact_id") != artifact_id:
+            requested_id = payload.get("exhibit_id") or payload.get("artifact_id")
+            if requested_id != artifact_id:
                 await websocket.close(code=4003)
                 return
 
-        # Load artifact data from Firestore
+        # Load exhibit data from Firestore
         db = get_firestore()
-        artifact_ref = db.collection("artifacts").document(artifact_id)
-        artifact_doc = await artifact_ref.get()
+        artifact_doc = await _get_exhibit_doc(db, artifact_id)
         
         if not artifact_doc.exists:
             await websocket.accept()
@@ -343,6 +382,26 @@ async def websocket_live_alias(
     await websocket_persona(websocket=websocket, artifact_id=artifact_id, language=language, token=token)
 
 
+@app.websocket("/ws/persona/exhibits/{exhibit_id}")
+async def websocket_persona_exhibit_alias(
+    websocket: WebSocket,
+    exhibit_id: str,
+    language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
+    token: str | None = Query(default=None),
+):
+    await websocket_persona(websocket=websocket, artifact_id=exhibit_id, language=language, token=token)
+
+
+@app.websocket("/live/ws/exhibits/{exhibit_id}")
+async def websocket_live_exhibit_alias(
+    websocket: WebSocket,
+    exhibit_id: str,
+    language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
+    token: str | None = Query(default=None),
+):
+    await websocket_persona(websocket=websocket, artifact_id=exhibit_id, language=language, token=token)
+
+
 # Pydantic models for request bodies
 class QARequest(BaseModel):
     """Request body for Q&A endpoint."""
@@ -365,7 +424,19 @@ async def create_ws_ephemeral_session_token(
 ):
     ip = request.client.host if request.client else "unknown"
     await check_rate_limit(scope="session_token", key=f"ip:{ip}", limit=30, window_seconds=60)
-    token = create_ephemeral_token(artifact_id=artifact_id, museum_id=museum_id)
+    token = create_ephemeral_token(exhibit_id=artifact_id, museum_id=museum_id)
+    return {"token": token, "expires_in": int(os.getenv("EPHEMERAL_TOKEN_EXPIRE_SECONDS", "3600"))}
+
+
+@app.post("/api/session/token/exhibits/{exhibit_id}")
+async def create_ws_ephemeral_session_token_exhibit(
+    request: Request,
+    exhibit_id: str,
+    museum_id: str | None = Query(default=None),
+):
+    ip = request.client.host if request.client else "unknown"
+    await check_rate_limit(scope="session_token", key=f"ip:{ip}", limit=30, window_seconds=60)
+    token = create_ephemeral_token(exhibit_id=exhibit_id, museum_id=museum_id)
     return {"token": token, "expires_in": int(os.getenv("EPHEMERAL_TOKEN_EXPIRE_SECONDS", "3600"))}
 
 
@@ -415,6 +486,14 @@ async def upload_pdf_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.post("/admin/upload-pdf/exhibits/{exhibit_id}")
+async def upload_pdf_endpoint_exhibit(
+    exhibit_id: str,
+    file: UploadFile = File(...),
+):
+    return await upload_pdf_endpoint(exhibit_id, file)
+
+
 @app.get("/admin/document-status/{artifact_id}")
 async def document_status_endpoint(artifact_id: str):
     """
@@ -433,6 +512,11 @@ async def document_status_endpoint(artifact_id: str):
     except Exception as e:
         logger.error(f"Error getting document status: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/admin/document-status/exhibits/{exhibit_id}")
+async def document_status_endpoint_exhibit(exhibit_id: str):
+    return await document_status_endpoint(exhibit_id)
 
 
 @app.post("/rag/qa/{artifact_id}")
@@ -464,6 +548,14 @@ async def rag_qa_endpoint(
     except Exception as e:
         logger.error(f"Error in RAG Q&A endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.post("/rag/qa/exhibits/{exhibit_id}")
+async def rag_qa_endpoint_exhibit(
+    exhibit_id: str,
+    request: QARequest,
+):
+    return await rag_qa_endpoint(exhibit_id, request)
 
 
 @app.post("/qa/{artifact_id}")

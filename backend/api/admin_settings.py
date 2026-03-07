@@ -24,7 +24,7 @@ SETTINGS_DOC_ID = "core"
 class SystemSettingsUpdate(BaseModel):
     app_env: str = Field(default="development", min_length=3, max_length=32)
     enforce_https: bool = False
-    allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3005"])
+    allowed_origins: list[str] = Field(default_factory=lambda: ["http://localhost:3000"])
     ws_require_ephemeral_token: bool = True
     ws_max_per_ip: int = Field(default=3, ge=1, le=20)
     ws_max_per_hour: int = Field(default=20, ge=1, le=500)
@@ -46,7 +46,7 @@ def _default_settings() -> dict[str, Any]:
     return {
         "app_env": os.getenv("APP_ENV", os.getenv("ENV", "development")).lower(),
         "enforce_https": os.getenv("ENFORCE_HTTPS", "false").lower() == "true",
-        "allowed_origins": [x.strip() for x in os.getenv("ALLOWED_ORIGINS", "http://localhost:3005").split(",") if x.strip()],
+        "allowed_origins": [x.strip() for x in os.getenv("ALLOWED_ORIGINS", "http://localhost:3000").split(",") if x.strip()],
         "ws_require_ephemeral_token": os.getenv("WS_REQUIRE_EPHEMERAL_TOKEN", "true").lower() == "true",
         "ws_max_per_ip": int(os.getenv("WS_MAX_PER_IP", "3")),
         "ws_max_per_hour": int(os.getenv("WS_MAX_PER_HOUR", "20")),
@@ -85,4 +85,3 @@ async def update_system_settings(body: SystemSettingsUpdate, admin=Depends(get_c
         details={"keys": list(payload.keys())},
     )
     return {"success": True, "settings": payload}
-

@@ -21,6 +21,7 @@ router = APIRouter(prefix="/admin/analytics", tags=["admin"])
 
 class TrackEventBody(BaseModel):
     museum_id: str
+    exhibit_id: str | None = None
     artifact_id: str | None = None
     event_type: str
     language: str = "vi"
@@ -48,6 +49,10 @@ async def track_event(body: TrackEventBody, admin=Depends(get_current_admin)):
         ensure_museum_scope(admin, body.museum_id)
     db = get_db()
     payload = body.model_dump()
+    entity_id = body.exhibit_id or body.artifact_id
+    if entity_id:
+        payload["exhibit_id"] = entity_id
+        payload["artifact_id"] = entity_id  # legacy compatibility
     payload["timestamp"] = _parse_ts(body.timestamp)
     payload["created_at"] = firestore.SERVER_TIMESTAMP
     await db.collection("analytics_events").add(payload)
@@ -69,8 +74,11 @@ async def analytics_overview(admin=Depends(get_current_admin)):
 
     total_museums = len(museums)
     total_artifacts = 0
-    async for _ in db.collection("artifacts").stream():
+    async for _ in db.collection("exhibits").stream():
         total_artifacts += 1
+    if total_artifacts == 0:
+        async for _ in db.collection("artifacts").stream():
+            total_artifacts += 1
 
     total_events = 0
     top_museum_counter: Counter[str] = Counter()
@@ -80,8 +88,9 @@ async def analytics_overview(admin=Depends(get_current_admin)):
         event = doc.to_dict() or {}
         if event.get("museum_id"):
             top_museum_counter[str(event["museum_id"])] += 1
-        if event.get("artifact_id"):
-            top_artifact_counter[str(event["artifact_id"])] += 1
+        entity_id = event.get("exhibit_id") or event.get("artifact_id")
+        if entity_id:
+            top_artifact_counter[str(entity_id)] += 1
 
     return {
         "total_museums": total_museums,
@@ -92,7 +101,7 @@ async def analytics_overview(admin=Depends(get_current_admin)):
             for m_id, count in top_museum_counter.most_common(10)
         ],
         "top_artifacts": [
-            {"artifact_id": a_id, "count": count}
+            {"exhibit_id": a_id, "artifact_id": a_id, "count": count}
             for a_id, count in top_artifact_counter.most_common(10)
         ],
     }
@@ -125,8 +134,9 @@ async def analytics_museum(museum_id: str, admin=Depends(get_current_admin)):
     languages: Counter[str] = Counter()
     by_type: Counter[str] = Counter()
     for e in events:
-        if e.get("artifact_id"):
-            top_artifacts[str(e["artifact_id"])] += 1
+        entity_id = e.get("exhibit_id") or e.get("artifact_id")
+        if entity_id:
+            top_artifacts[str(entity_id)] += 1
         if e.get("language"):
             languages[str(e["language"])] += 1
         if e.get("event_type"):
@@ -136,8 +146,8 @@ async def analytics_museum(museum_id: str, admin=Depends(get_current_admin)):
         "museum_id": museum_id,
         "events_total": len(events),
         "daily_visits": daily,
-        "top_artifacts": [{"artifact_id": k, "count": v} for k, v in top_artifacts.most_common(20)],
+        "top_artifacts": [{"exhibit_id": k, "artifact_id": k, "count": v} for k, v in top_artifacts.most_common(20)],
         "language_distribution": [{"language": k, "count": v} for k, v in languages.most_common()],
         "event_distribution": [{"event_type": k, "count": v} for k, v in by_type.most_common()],
-        "heatmap": [{"artifact_id": k, "scan_count": v} for k, v in top_artifacts.most_common(20)],
+        "heatmap": [{"exhibit_id": k, "artifact_id": k, "scan_count": v} for k, v in top_artifacts.most_common(20)],
     }

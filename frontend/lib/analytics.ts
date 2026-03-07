@@ -18,7 +18,7 @@ function getCurrentLanguage() {
 export const trackEvent = async (
   event_type: string,
   museum_id: string,
-  artifact_id?: string,
+  exhibit_id?: string,
   extra?: Record<string, unknown>
 ) => {
   try {
@@ -28,7 +28,8 @@ export const trackEvent = async (
       body: JSON.stringify({
         event_type,
         museum_id,
-        artifact_id,
+        exhibit_id,
+        artifact_id: exhibit_id,
         language: getCurrentLanguage(),
         timestamp: new Date().toISOString(),
         session_id: getSessionId(),

@@ -41,8 +41,11 @@ async def recognize_artifact(
         
         # Step 1: Load artifact candidates from Firestore.
         db = firestore.AsyncClient(project=project_id)
-        artifacts_ref = db.collection("artifacts").where("museum_id", "==", museum_id)
+        artifacts_ref = db.collection("exhibits").where("museum_id", "==", museum_id)
         artifacts_docs = await artifacts_ref.get()
+        if not artifacts_docs:
+            artifacts_ref = db.collection("artifacts").where("museum_id", "==", museum_id)
+            artifacts_docs = await artifacts_ref.get()
         
         if not artifacts_docs:
             logger.warning(f"No artifacts found for museum: {museum_id}")

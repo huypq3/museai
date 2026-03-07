@@ -1,0 +1,20 @@
+{
+  "name": "MuseAI - Hướng dẫn viên bảo tàng AI",
+  "short_name": "MuseAI",
+  "theme_color": "#1A56DB",
+  "background_color": "#1E293B",
+  "display": "standalone",
+  "start_url": "/",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

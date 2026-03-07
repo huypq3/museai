@@ -1,5 +1,5 @@
 """
-Seed artifact knowledge_base with embeddings into Firestore.
+Seed exhibit knowledge_base with embeddings into Firestore.
 Run:
   cd backend
   python scripts/seed_knowledge_base.py
@@ -71,8 +71,11 @@ KNOWLEDGE_BASE = {
 async def seed():
     for artifact_id, chunks in KNOWLEDGE_BASE.items():
         add_embeddings_to_chunks(chunks)
-        ref = db.collection("artifacts").document(artifact_id)
-        await ref.set({"knowledge_base": chunks}, merge=True)
+        exhibit_ref = db.collection("exhibits").document(artifact_id)
+        legacy_ref = db.collection("artifacts").document(artifact_id)
+        payload = {"knowledge_base": chunks, "exhibit_id": artifact_id}
+        await exhibit_ref.set(payload, merge=True)
+        await legacy_ref.set(payload, merge=True)
         print(f"✅ Seeded {len(chunks)} chunks for {artifact_id}")
 
 

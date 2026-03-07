@@ -1,9 +1,14 @@
 import { BACKEND_URL } from "./constants";
 
-export async function getArtifact(artifactId: string) {
-  const res = await fetch(`${BACKEND_URL}/artifacts/${artifactId}`);
-  if (!res.ok) throw new Error("Failed to fetch artifact");
+export async function getExhibit(exhibitId: string) {
+  const res = await fetch(`${BACKEND_URL}/exhibits/${exhibitId}`);
+  if (!res.ok) throw new Error("Failed to fetch exhibit");
   return res.json();
+}
+
+// Legacy alias
+export async function getArtifact(artifactId: string) {
+  return getExhibit(artifactId);
 }
 
 export async function recognizeArtifact(museumId: string, imageFile: File) {

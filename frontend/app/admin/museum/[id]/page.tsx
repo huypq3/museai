@@ -24,7 +24,7 @@ export default function MuseumAdminHome() {
   const loadAll = async () => {
     const [m, a] = await Promise.all([
       adminFetch(`/admin/museums/${museumId}`),
-      adminFetch(`/admin/artifacts?museum_id=${museumId}`),
+      adminFetch(`/admin/exhibits?museum_id=${museumId}`),
     ])
     setMuseum(m)
     setArtifacts(a)
@@ -77,7 +77,7 @@ export default function MuseumAdminHome() {
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
             <div style={{ fontWeight: 600 }}>{tr('Danh sách hiện vật', 'Artifact list')}</div>
-            <button onClick={() => router.push(`/admin/artifacts/new?museum=${museumId}`)} style={btnPrimary}>+ {tr('Thêm hiện vật', 'Add artifact')}</button>
+            <button onClick={() => router.push(`/admin/exhibits/new?museum=${museumId}`)} style={btnPrimary}>+ {tr('Thêm hiện vật', 'Add exhibit')}</button>
           </div>
           {artifacts.map((a) => (
             <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '56px 1fr auto auto', gap: 10, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.07)', padding: '10px 0' }}>
@@ -87,7 +87,7 @@ export default function MuseumAdminHome() {
                 <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.65)' }}>{typeof a.location === 'object' ? a.location?.hall : a.location || '-'}</div>
               </div>
               <div style={{ fontSize: 12, color: '#C9A84C' }}>Scans: {a.total_scans || 0}</div>
-              <button onClick={() => router.push(`/admin/artifacts/${a.id}`)} style={btn}>{tr('Sửa', 'Edit')}</button>
+              <button onClick={() => router.push(`/admin/exhibits/${a.id}`)} style={btn}>{tr('Sửa', 'Edit')}</button>
             </div>
           ))}
         </div>

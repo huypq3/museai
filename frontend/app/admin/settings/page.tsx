@@ -20,7 +20,7 @@ type SystemSettings = {
 const defaultSettings: SystemSettings = {
   app_env: 'development',
   enforce_https: false,
-  allowed_origins: ['http://localhost:3005'],
+  allowed_origins: ['http://localhost:3000'],
   ws_require_ephemeral_token: true,
   ws_max_per_ip: 3,
   ws_max_per_hour: 20,
@@ -56,7 +56,7 @@ export default function AdminSettingsPage() {
           setSettings({
             app_env: res.settings.app_env || 'development',
             enforce_https: !!res.settings.enforce_https,
-            allowed_origins: Array.isArray(res.settings.allowed_origins) ? res.settings.allowed_origins : ['http://localhost:3005'],
+            allowed_origins: Array.isArray(res.settings.allowed_origins) ? res.settings.allowed_origins : ['http://localhost:3000'],
             ws_require_ephemeral_token: !!res.settings.ws_require_ephemeral_token,
             ws_max_per_ip: Number(res.settings.ws_max_per_ip || 3),
             ws_max_per_hour: Number(res.settings.ws_max_per_hour || 20),

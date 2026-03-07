@@ -2,13 +2,16 @@
 
 import { useState, useRef, useEffect } from "react";
 import jsQR from "jsqr";
+import { t } from "@/lib/i18n";
+import { LanguageCode } from "@/lib/constants";
 
 type Props = {
-  onScan: (data: { museum_id?: string; artifact_id?: string }) => void;
+  onScan: (data: { museum_id?: string; exhibit_id?: string; artifact_id?: string }) => void;
   onClose: () => void;
+  language: LanguageCode;
 };
 
-export default function QRScanner({ onScan, onClose }: Props) {
+export default function QRScanner({ onScan, onClose, language }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -38,7 +41,7 @@ export default function QRScanner({ onScan, onClose }: Props) {
       }
     } catch (err) {
       console.error("Camera error:", err);
-      setError("Không thể truy cập camera. Vui lòng cấp quyền.");
+      setError(t(language, "camera.permission_error"));
     }
   };
 
@@ -86,21 +89,26 @@ export default function QRScanner({ onScan, onClose }: Props) {
     stopCamera();
     
     try {
-      // Parse URL format: https://museai.app?museum=xxx&artifact=yyy
+      // Parse URL format:
+      // - https://guideqr.ai?...&exhibit=yyy (new)
+      // - https://guideqr.ai?...&artifact=yyy (legacy)
       const url = new URL(data);
       const museum_id = url.searchParams.get("museum") || undefined;
-      const artifact_id = url.searchParams.get("artifact") || undefined;
+      const exhibit_id =
+        url.searchParams.get("exhibit") ||
+        url.searchParams.get("artifact") ||
+        undefined;
       
-      onScan({ museum_id, artifact_id });
+      onScan({ museum_id, exhibit_id, artifact_id: exhibit_id });
     } catch (e) {
-      // Fallback: plain text format like "museum_id:artifact_id"
+      // Fallback: plain text format like "museum_id:exhibit_id"
       const parts = data.split(":");
       if (parts.length === 2) {
-        onScan({ museum_id: parts[0], artifact_id: parts[1] });
+        onScan({ museum_id: parts[0], exhibit_id: parts[1], artifact_id: parts[1] });
       } else if (parts.length === 1) {
-        onScan({ artifact_id: parts[0] });
+        onScan({ exhibit_id: parts[0], artifact_id: parts[0] });
       } else {
-        setError("QR code không hợp lệ");
+        setError(t(language, "camera.invalid_qr"));
       }
     }
   };
@@ -109,7 +117,7 @@ export default function QRScanner({ onScan, onClose }: Props) {
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
       {/* Header */}
       <div className="bg-slate-900 p-4 flex items-center justify-between">
-        <h2 className="text-white text-lg font-semibold">Quét QR Code</h2>
+        <h2 className="text-white text-lg font-semibold">{t(language, "camera.scan_qr_title")}</h2>
         <button
           onClick={() => {
             stopCamera();
@@ -156,7 +164,7 @@ export default function QRScanner({ onScan, onClose }: Props) {
           <p className="text-red-400 text-sm">{error}</p>
         ) : (
           <p className="text-gray-300 text-sm">
-            Đưa QR code vào khung hình để quét
+            {t(language, "camera.scan_qr_hint")}
           </p>
         )}
       </div>

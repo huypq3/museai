@@ -81,12 +81,12 @@ export default function VoiceChat({ artifactId, language, onLanguageChange, muse
     setShowIntroButton(false);
   }, []);
 
-  // ─── Load artifact name ────────────────────────────────────────────────
+  // ─── Load exhibit name ────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/artifacts/${artifactId}`)
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/exhibits/${artifactId}`)
       .then((r) => r.json())
       .then((data) => setArtifactName(data.data?.name || ""))
-      .catch((e) => console.error("Failed to load artifact:", e));
+      .catch((e) => console.error("Failed to load exhibit:", e));
   }, [artifactId]);
 
   useEffect(() => {

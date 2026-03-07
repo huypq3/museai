@@ -139,10 +139,14 @@ class MuseumUpdate(BaseModel):
 
 async def _museum_stats(museum_id: str) -> dict[str, int]:
     db = get_db()
-    artifacts = db.collection("artifacts").where("museum_id", "==", museum_id)
+    artifacts = db.collection("exhibits").where("museum_id", "==", museum_id)
     artifact_count = 0
     async for _ in artifacts.stream():
         artifact_count += 1
+    if artifact_count == 0:
+        artifacts = db.collection("artifacts").where("museum_id", "==", museum_id)
+        async for _ in artifacts.stream():
+            artifact_count += 1
     return {"artifact_count": artifact_count}
 
 

@@ -1,12 +1,13 @@
 """
-Script seed scenes data vào Firestore cho artifact Trần Hưng Đạo
+Seed scene data into Firestore for exhibit Trần Hưng Đạo.
 """
 import asyncio
+import inspect
 from google.cloud import firestore
 import os
 
 async def seed_scenes():
-    """Thêm scenes data vào artifact statue_tran_hung_dao"""
+    """Add scenes data for exhibit statue_tran_hung_dao."""
     
     # Initialize Firestore
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "museai-2026")
@@ -42,19 +43,22 @@ async def seed_scenes():
         },
     ]
     
-    print(f"📝 Updating artifact: {artifact_id}")
+    print(f"📝 Updating exhibit: {artifact_id}")
     print(f"   Adding {len(scenes)} scenes...")
     
     try:
-        # Update artifact document
-        await db.collection("artifacts").document(artifact_id).update({
-            "scenes": scenes
-        })
+        # Update exhibit document and mirror legacy artifacts collection.
+        await db.collection("exhibits").document(artifact_id).set(
+            {"scenes": scenes, "exhibit_id": artifact_id}, merge=True
+        )
+        await db.collection("artifacts").document(artifact_id).set(
+            {"scenes": scenes, "exhibit_id": artifact_id}, merge=True
+        )
         
         print(f"✅ Successfully added {len(scenes)} scenes to {artifact_id}")
         
         # Verify
-        doc = await db.collection("artifacts").document(artifact_id).get()
+        doc = await db.collection("exhibits").document(artifact_id).get()
         if doc.exists:
             data = doc.to_dict()
             print(f"✅ Verified: document now has {len(data.get('scenes', []))} scenes")
@@ -66,7 +70,10 @@ async def seed_scenes():
         raise
     
     finally:
-        await db.close()
+        # google-cloud-firestore versions differ: close() can be sync or async.
+        close_result = db.close()
+        if inspect.isawaitable(close_result):
+            await close_result
 
 if __name__ == "__main__":
     print("🚀 Starting scene seeding...")
