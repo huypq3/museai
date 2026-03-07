@@ -41,6 +41,18 @@ jobs:
           docker push "${IMAGE_BASE}:${{ github.sha }}"
           docker push "${IMAGE_BASE}:latest"
 
+      - name: Create env vars file
+        run: |
+          cat > /tmp/env-vars.yaml << 'EOF'
+          GOOGLE_CLOUD_PROJECT: "${{ env.PROJECT_ID }}"
+          ALLOWED_ORIGINS: "${{ vars.ALLOWED_ORIGINS }}"
+          GCS_BUCKET: "${{ vars.GCS_BUCKET_NAME }}"
+          GCS_BUCKET_NAME: "${{ vars.GCS_BUCKET_NAME }}"
+          JWT_SECRET: "${{ secrets.JWT_SECRET }}"
+          GEMINI_API_KEY: "${{ secrets.GEMINI_API_KEY }}"
+          REDIS_URL: "${{ secrets.REDIS_URL }}"
+          EOF
+
       - name: Deploy to Cloud Run
         run: |
           IMAGE="${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/backend:${{ github.sha }}"
@@ -52,14 +64,7 @@ jobs:
             --memory 1Gi \
             --timeout 3600 \
             --remove-secrets=GEMINI_API_KEY,JWT_SECRET,REDIS_URL \
-            --set-env-vars "\
-              GOOGLE_CLOUD_PROJECT=${{ env.PROJECT_ID }},\
-              ALLOWED_ORIGINS=${{ vars.ALLOWED_ORIGINS }},\
-              GCS_BUCKET=${{ vars.GCS_BUCKET_NAME }},\
-              GCS_BUCKET_NAME=${{ vars.GCS_BUCKET_NAME }},\
-              JWT_SECRET=${{ secrets.JWT_SECRET }},\
-              GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }},\
-              REDIS_URL=${{ secrets.REDIS_URL }}"
+            --env-vars-file /tmp/env-vars.yaml
 
       - name: Print Cloud Run URL
         run: |
