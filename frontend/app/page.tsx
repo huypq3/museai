@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { RefObject } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import QRScanner, { QRScanPayload } from "@/components/QRScanner";
@@ -25,30 +26,76 @@ const BRAND = {
   textMuted: "rgba(245,240,232,0.3)",
 };
 
-const STATS = [
-  { value: "197+", key: "statMuseumsLabel" as const },
-  { value: "7", key: "statLangLabel" as const },
-  { value: "0", key: "statAppsLabel" as const },
-  { value: "<2s", key: "statLatencyLabel" as const },
-];
+type CountUpResult = {
+  count: number;
+  ref: RefObject<HTMLDivElement>;
+};
 
-const FEATURE_ITEMS = [
-  { icon: "🎙️", title: "f1Title", desc: "f1Desc" },
-  { icon: "📷", title: "f2Title", desc: "f2Desc" },
-  { icon: "🧭", title: "f3Title", desc: "f3Desc" },
-  { icon: "🌐", title: "f4Title", desc: "f4Desc" },
-  { icon: "⚡", title: "f5Title", desc: "f5Desc" },
-  { icon: "📊", title: "f6Title", desc: "f6Desc" },
-] as const;
+function useCountUp(end: number, duration = 2000): CountUpResult {
+  const [count, setCount] = useState(0);
+  const ref = useRef<HTMLDivElement>(null);
+  const hasAnimated = useRef(false);
+
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || hasAnimated.current) return;
+        hasAnimated.current = true;
+
+        let value = 0;
+        const step = end / (duration / 16);
+        const timer = window.setInterval(() => {
+          value += step;
+          if (value >= end) {
+            setCount(end);
+            window.clearInterval(timer);
+          } else {
+            setCount(Math.floor(value));
+          }
+        }, 16);
+      },
+      { threshold: 0.5 }
+    );
+
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [duration, end]);
+
+  return { count, ref };
+}
+
+type CountStatProps = {
+  label: string;
+  end: number;
+  suffix?: string;
+};
+
+function CountStat({ label, end, suffix = "" }: CountStatProps) {
+  const { count, ref } = useCountUp(end);
+  return (
+    <div ref={ref} className="text-center lg:text-left">
+      <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 52, lineHeight: 1 }}>
+        {count}
+        {suffix}
+      </div>
+      <div style={{ color: BRAND.textSecondary, marginTop: 6, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</div>
+    </div>
+  );
+}
 
 export default function HomePage() {
   const router = useRouter();
   const [language, setLanguage] = useState<LandingLang>("en");
   const [openScanner, setOpenScanner] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [langDropdownOpen, setLangDropdownOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const [toast, setToast] = useState<{ type: "error" | "success"; text: string } | null>(null);
-  const [expandedFaq, setExpandedFaq] = useState<number>(0);
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const tr = LANDING_I18N[language];
 
@@ -70,6 +117,18 @@ export default function HomePage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  useEffect(() => {
+    if (!langDropdownOpen) return;
+    const onDown = (ev: MouseEvent) => {
+      if (!dropdownRef.current) return;
+      if (!dropdownRef.current.contains(ev.target as Node)) {
+        setLangDropdownOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [langDropdownOpen]);
 
   useEffect(() => {
     if (!toast) return;
@@ -164,13 +223,13 @@ export default function HomePage() {
           borderBottom: isScrolled ? `1px solid ${BRAND.goldBorder}` : "1px solid transparent",
           background: isScrolled ? "rgba(10,10,10,0.88)" : "rgba(10,10,10,0.28)",
           backdropFilter: isScrolled ? "blur(12px)" : "blur(4px)",
-          transition: "all 0.6s ease",
+          transition: "all 0.7s ease",
         }}
       >
-        <div className="mx-auto max-w-7xl h-full px-4 md:px-6 flex items-center justify-between gap-4">
+        <div className="mx-auto w-full max-w-[1200px] h-full px-5 lg:px-12 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <span style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 28 }}>MuseAI</span>
-            <span style={{ width: 1, height: 26, background: "rgba(201,168,76,0.3)" }} />
+            <span style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 24 }}>MuseAI</span>
+            <span style={{ width: 1, height: 24, background: "rgba(201,168,76,0.3)" }} />
             <span
               style={{
                 color: BRAND.textMuted,
@@ -185,50 +244,64 @@ export default function HomePage() {
           </div>
 
           <nav className="hidden lg:flex items-center gap-7">
-            <button onClick={() => scrollTo("visitors")} className="landing-link">
-              {tr.navVisitors}
-            </button>
-            <button onClick={() => scrollTo("for-museums")} className="landing-link">
-              {tr.navMuseums}
-            </button>
-            <button onClick={() => scrollTo("features")} className="landing-link">
-              {tr.navFeatures}
-            </button>
-            <button onClick={() => scrollTo("how-it-works")} className="landing-link">
-              {tr.navHow}
-            </button>
+            <button onClick={() => scrollTo("visitors")} className="landing-link">{tr.navVisitors}</button>
+            <button onClick={() => scrollTo("for-museums")} className="landing-link">{tr.navMuseums}</button>
+            <button onClick={() => scrollTo("features")} className="landing-link">{tr.navFeatures}</button>
+            <button onClick={() => scrollTo("how-it-works")} className="landing-link">{tr.navHow}</button>
           </nav>
 
-          <div className="hidden md:flex items-center gap-3">
-            <select
-              value={language}
-              onChange={(e) => {
-                const next = e.target.value as LandingLang;
-                if (SUPPORTED_LANDING_LANGS.includes(next)) setLanguage(next);
-              }}
-              style={{
-                background: BRAND.surface,
-                border: `1px solid ${BRAND.goldBorder}`,
-                color: BRAND.text,
-                borderRadius: 6,
-                padding: "8px 10px",
-                fontSize: 12,
-              }}
-              aria-label="Language"
-            >
-              {SUPPORTED_LANDING_LANGS.map((code) => (
-                <option key={code} value={code}>
-                  {`${LANGUAGE_LABELS[code].flag} ${LANGUAGE_LABELS[code].code}`}
-                </option>
-              ))}
-            </select>
+          <div className="hidden md:flex items-center gap-3" ref={dropdownRef}>
+            <div style={{ position: "relative" }}>
+              <button
+                onClick={() => setLangDropdownOpen((v) => !v)}
+                className="landing-btn-outline"
+                style={{ minWidth: 104, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}
+              >
+                <span>{`${LANGUAGE_LABELS[language].flag} ${LANGUAGE_LABELS[language].code}`}</span>
+                <span style={{ color: BRAND.textMuted }}>▾</span>
+              </button>
+              {langDropdownOpen && (
+                <div
+                  style={{
+                    position: "absolute",
+                    top: "calc(100% + 8px)",
+                    right: 0,
+                    width: 220,
+                    borderRadius: 8,
+                    border: `1px solid ${BRAND.goldBorder}`,
+                    background: BRAND.card,
+                    boxShadow: "0 16px 40px rgba(0,0,0,0.45)",
+                    overflow: "hidden",
+                  }}
+                >
+                  {SUPPORTED_LANDING_LANGS.map((code) => (
+                    <button
+                      key={code}
+                      onClick={() => {
+                        setLanguage(code);
+                        setLangDropdownOpen(false);
+                      }}
+                      style={{
+                        width: "100%",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "10px 12px",
+                        color: code === language ? BRAND.gold : BRAND.text,
+                        background: code === language ? "rgba(201,168,76,0.12)" : "transparent",
+                        textAlign: "left",
+                      }}
+                    >
+                      <span>{LANGUAGE_LABELS[code].flag}</span>
+                      <span>{LANGUAGE_LABELS[code].name}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
             <span style={{ width: 1, height: 22, background: "rgba(201,168,76,0.3)" }} />
-            <Link href="/admin/login" className="landing-link">
-              {tr.navAdmin}
-            </Link>
-            <button onClick={() => setOpenScanner(true)} className="landing-btn-outline">
-              {tr.navScan}
-            </button>
+            <Link href="/admin/login" className="landing-link">{tr.navAdmin}</Link>
+            <button onClick={() => setOpenScanner(true)} className="landing-btn-outline">{tr.navScan}</button>
           </div>
 
           <button
@@ -247,7 +320,7 @@ export default function HomePage() {
             style={{
               borderTop: `1px solid ${BRAND.goldBorder}`,
               background: "rgba(10,10,10,0.98)",
-              padding: "12px 16px 18px",
+              padding: "12px 20px 18px",
             }}
           >
             <div className="flex flex-col gap-3">
@@ -255,26 +328,50 @@ export default function HomePage() {
               <button className="landing-link text-left" onClick={() => scrollTo("for-museums")}>{tr.navMuseums}</button>
               <button className="landing-link text-left" onClick={() => scrollTo("features")}>{tr.navFeatures}</button>
               <button className="landing-link text-left" onClick={() => scrollTo("how-it-works")}>{tr.navHow}</button>
-              <div className="flex items-center gap-2 mt-2">
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as LandingLang)}
-                  style={{
-                    background: BRAND.surface,
-                    border: `1px solid ${BRAND.goldBorder}`,
-                    color: BRAND.text,
-                    borderRadius: 6,
-                    padding: "8px 10px",
-                    fontSize: 12,
-                    flex: 1,
-                  }}
+              <div style={{ position: "relative", marginTop: 8 }}>
+                <button
+                  onClick={() => setLangDropdownOpen((v) => !v)}
+                  className="landing-btn-outline"
+                  style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                 >
-                  {SUPPORTED_LANDING_LANGS.map((code) => (
-                    <option key={code} value={code}>{`${LANGUAGE_LABELS[code].flag} ${LANGUAGE_LABELS[code].code}`}</option>
-                  ))}
-                </select>
-                <button onClick={() => setOpenScanner(true)} className="landing-btn-outline">{tr.navScan}</button>
+                  <span>{`${LANGUAGE_LABELS[language].flag} ${LANGUAGE_LABELS[language].code}`}</span>
+                  <span style={{ color: BRAND.textMuted }}>▾</span>
+                </button>
+                {langDropdownOpen && (
+                  <div
+                    style={{
+                      marginTop: 8,
+                      borderRadius: 8,
+                      border: `1px solid ${BRAND.goldBorder}`,
+                      background: BRAND.card,
+                      overflow: "hidden",
+                    }}
+                  >
+                    {SUPPORTED_LANDING_LANGS.map((code) => (
+                      <button
+                        key={code}
+                        onClick={() => {
+                          setLanguage(code);
+                          setLangDropdownOpen(false);
+                          setMobileMenuOpen(false);
+                        }}
+                        style={{
+                          width: "100%",
+                          padding: "10px 12px",
+                          display: "flex",
+                          gap: 10,
+                          color: code === language ? BRAND.gold : BRAND.text,
+                          background: code === language ? "rgba(201,168,76,0.12)" : "transparent",
+                        }}
+                      >
+                        <span>{LANGUAGE_LABELS[code].flag}</span>
+                        <span>{LANGUAGE_LABELS[code].name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
+              <button onClick={() => setOpenScanner(true)} className="landing-btn-outline">{tr.navScan}</button>
             </div>
           </div>
         )}
@@ -291,7 +388,7 @@ export default function HomePage() {
             "radial-gradient(80% 65% at 8% 8%, rgba(201,168,76,0.14) 0%, rgba(201,168,76,0.03) 35%, rgba(10,10,10,0) 72%), #0A0A0A",
         }}
       >
-        <div className="mx-auto max-w-7xl px-4 md:px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12 grid lg:grid-cols-[1.1fr_0.9fr] gap-10 items-center">
           <div>
             <div className="landing-eyebrow" style={{ marginBottom: 18 }}>{tr.powered}</div>
             <h1
@@ -299,7 +396,7 @@ export default function HomePage() {
                 fontFamily: "Cormorant Garamond, serif",
                 fontWeight: 500,
                 lineHeight: 0.95,
-                fontSize: "clamp(54px, 8vw, 84px)",
+                fontSize: "clamp(54px, 8vw, 80px)",
                 maxWidth: 740,
               }}
             >
@@ -307,7 +404,7 @@ export default function HomePage() {
               <br />
               <span style={{ color: BRAND.gold, fontStyle: "italic" }}>{tr.heroTitleB}</span>
             </h1>
-            <p style={{ marginTop: 24, maxWidth: 540, color: BRAND.textSecondary, fontSize: 18, lineHeight: 1.7 }}>
+            <p style={{ marginTop: 24, maxWidth: 600, color: BRAND.textSecondary, fontSize: 18, lineHeight: 1.7 }}>
               {tr.heroSubtitle}
             </p>
             <div style={{ marginTop: 30, width: 80, height: 1, background: "rgba(201,168,76,0.5)" }} />
@@ -315,64 +412,98 @@ export default function HomePage() {
               <button className="landing-btn-primary" onClick={() => setOpenScanner(true)}>
                 {tr.heroPrimary}
               </button>
-              <button className="landing-link" onClick={() => scrollTo("for-museums")}>
-                {tr.heroSecondary}
-              </button>
+              <button className="landing-link" onClick={() => scrollTo("for-museums")}>{tr.heroSecondary}</button>
             </div>
-            <p style={{ marginTop: 12, color: BRAND.textMuted, fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>
-              {tr.heroCaption}
-            </p>
+            <p style={{ marginTop: 12, color: BRAND.textMuted, fontSize: 12, letterSpacing: "0.1em", textTransform: "uppercase" }}>{tr.heroCaption}</p>
           </div>
 
-          <div className="hidden md:block">
+          <div className="hidden md:flex justify-center lg:justify-end">
             <div
               style={{
-                border: `1px solid ${BRAND.goldBorder}`,
-                background: BRAND.surface,
-                borderRadius: 8,
-                padding: 18,
-                position: "relative",
+                width: 280,
+                height: 560,
+                background: "#0D0D0D",
+                border: "1.5px solid rgba(255,255,255,0.12)",
+                borderRadius: 40,
                 overflow: "hidden",
+                position: "relative",
+                boxShadow: "0 40px 80px rgba(0,0,0,0.6)",
+                padding: "14px 14px 18px",
               }}
             >
-              <img
-                src="https://images.unsplash.com/photo-1566127992631-137a642a90f4?w=800&q=85"
-                alt="Museum interior"
-                loading="lazy"
-                style={{ width: "100%", height: 460, objectFit: "cover", borderRadius: 6, opacity: 0.5 }}
-              />
               <div
                 style={{
-                  position: "absolute",
-                  inset: 30,
-                  border: `1px solid ${BRAND.goldBorder}`,
-                  borderRadius: 8,
-                  background: "rgba(10,10,10,0.68)",
-                  backdropFilter: "blur(2px)",
-                  padding: 16,
-                  display: "flex",
-                  flexDirection: "column",
-                  justifyContent: "space-between",
+                  width: 100,
+                  height: 28,
+                  background: "#0D0D0D",
+                  borderRadius: "0 0 16px 16px",
+                  margin: "-14px auto 10px",
+                  position: "relative",
+                  zIndex: 2,
+                  border: "1px solid rgba(255,255,255,0.08)",
+                }}
+              />
+
+              <div style={{ color: BRAND.textSecondary, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase" }}>{tr.phoneMuseum}</div>
+
+              <div
+                style={{
+                  marginTop: 10,
+                  border: "1px solid rgba(201,168,76,0.3)",
+                  borderRadius: 14,
+                  height: 210,
+                  position: "relative",
+                  overflow: "hidden",
                 }}
               >
-                <div>
-                  <div style={{ color: BRAND.gold, fontSize: 12, letterSpacing: "0.08em", textTransform: "uppercase" }}>{tr.phoneStatus}</div>
-                  <div style={{ marginTop: 8, fontFamily: "Cormorant Garamond, serif", fontSize: 28 }}>Tượng Trần Hưng Đạo</div>
-                </div>
-                <div className="flex items-end gap-1 h-10" aria-hidden>
-                  {Array.from({ length: 28 }).map((_, idx) => (
-                    <span
-                      key={idx}
-                      className="landing-wave"
-                      style={{
-                        width: 4,
-                        height: `${8 + (idx % 8) * 2}px`,
-                        background: BRAND.gold,
-                        animationDelay: `${idx * 0.06}s`,
-                      }}
-                    />
-                  ))}
-                </div>
+                <img
+                  src="https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?w=700&q=80"
+                  alt="Museum artifact preview"
+                  loading="lazy"
+                  style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.72 }}
+                />
+                <div className="phone-corner tl" />
+                <div className="phone-corner tr" />
+                <div className="phone-corner bl" />
+                <div className="phone-corner br" />
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  padding: "10px 12px",
+                  borderRadius: 10,
+                  border: `1px solid ${BRAND.goldBorder}`,
+                  background: "rgba(201,168,76,0.08)",
+                  fontSize: 13,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <span style={{ color: BRAND.gold }}>✓</span>
+                <span>{tr.phoneExhibit}</span>
+              </div>
+
+              <div style={{ marginTop: 14, color: BRAND.gold, fontSize: 11, letterSpacing: "0.1em", textTransform: "uppercase" }}>{tr.phoneStatus}</div>
+              <div className="waveform" aria-hidden>
+                {Array.from({ length: 7 }).map((_, idx) => (
+                  <span key={idx} className="bar" style={{ animationDelay: `${idx * 0.1}s` }} />
+                ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 12,
+                  fontSize: 12,
+                  color: BRAND.text,
+                  opacity: 0.7,
+                  lineHeight: 1.5,
+                  borderTop: "1px solid rgba(201,168,76,0.12)",
+                  paddingTop: 10,
+                }}
+              >
+                “{tr.phoneTranscript}”
               </div>
             </div>
           </div>
@@ -380,22 +511,23 @@ export default function HomePage() {
       </section>
 
       <section style={{ zIndex: 2, position: "relative", background: BRAND.surface, borderTop: `1px solid ${BRAND.goldBorder}`, borderBottom: `1px solid ${BRAND.goldBorder}` }}>
-        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 grid grid-cols-2 lg:grid-cols-4 gap-8">
-          {STATS.map((stat) => (
-            <div key={stat.value + stat.key} className="text-center lg:text-left">
-              <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 52, lineHeight: 1 }}>{stat.value}</div>
-              <div style={{ color: BRAND.textSecondary, marginTop: 6, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase" }}>{tr[stat.key]}</div>
-            </div>
-          ))}
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12 py-10 grid grid-cols-2 lg:grid-cols-4 gap-8">
+          <CountStat label={tr.statMuseumsLabel} end={197} suffix="+" />
+          <CountStat label={tr.statLangLabel} end={7} />
+          <CountStat label={tr.statAppsLabel} end={0} />
+          <div className="text-center lg:text-left">
+            <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 52, lineHeight: 1 }}>&lt;2s</div>
+            <div style={{ color: BRAND.textSecondary, marginTop: 6, fontSize: 13, letterSpacing: "0.08em", textTransform: "uppercase" }}>{tr.statLatencyLabel}</div>
+          </div>
         </div>
       </section>
 
       <section id="visitors" className="landing-section" style={{ zIndex: 2, position: "relative" }}>
-        <div className="mx-auto max-w-7xl px-4 md:px-6 grid lg:grid-cols-[1.1fr_0.9fr] gap-12 items-center">
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12 grid lg:grid-cols-[1.1fr_0.9fr] gap-12 items-center">
           <div>
             <div className="landing-label">{tr.visitorsEyebrow}</div>
             <h2 className="landing-title" style={{ marginTop: 16 }}>{tr.visitorsTitle}</h2>
-            <div className="grid md:grid-cols-3 gap-4 mt-8">
+            <div className="grid md:grid-cols-3 gap-6 mt-8">
               {[
                 { title: tr.vp1Title, desc: tr.vp1Desc },
                 { title: tr.vp2Title, desc: tr.vp2Desc },
@@ -408,9 +540,7 @@ export default function HomePage() {
                 </div>
               ))}
             </div>
-            <button className="landing-btn-outline mt-8" onClick={() => setOpenScanner(true)}>
-              {tr.visitorsCta}
-            </button>
+            <button className="landing-btn-outline mt-8" onClick={() => setOpenScanner(true)}>{tr.visitorsCta}</button>
           </div>
           <img
             src="https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?w=700&q=80"
@@ -422,21 +552,20 @@ export default function HomePage() {
       </section>
 
       <section id="how-it-works" className="landing-section" style={{ paddingTop: 0, zIndex: 2, position: "relative" }}>
-        <div className="mx-auto max-w-7xl px-4 md:px-6">
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12">
           <div className="landing-label">{tr.howEyebrow}</div>
           <h2 className="landing-title" style={{ marginTop: 14 }}>{tr.howTitle}</h2>
-          <div className="grid md:grid-cols-3 gap-5 mt-10">
+          <div className="how-grid mt-10">
+            <div className="how-dashed" />
             {[
               { n: "01", t: tr.how1Title, d: tr.how1Desc },
               { n: "02", t: tr.how2Title, d: tr.how2Desc },
               { n: "03", t: tr.how3Title, d: tr.how3Desc },
             ].map((step) => (
-              <article key={step.n} className="landing-card" style={{ position: "relative", overflow: "hidden", minHeight: 210 }}>
-                <span style={{ position: "absolute", top: -22, right: 8, fontFamily: "Cormorant Garamond, serif", fontSize: 110, color: "rgba(201,168,76,0.08)", lineHeight: 1 }}>
-                  {step.n}
-                </span>
-                <h3 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 30 }}>{step.t}</h3>
-                <p style={{ marginTop: 8, color: BRAND.textSecondary, lineHeight: 1.7 }}>{step.d}</p>
+              <article key={step.n} className="landing-card how-card" style={{ position: "relative", overflow: "hidden", minHeight: 220 }}>
+                <span className="how-num">{step.n}</span>
+                <h3 className="how-title">{step.t}</h3>
+                <p className="how-desc">{step.d}</p>
               </article>
             ))}
           </div>
@@ -444,15 +573,22 @@ export default function HomePage() {
       </section>
 
       <section id="features" className="landing-section" style={{ paddingTop: 0, zIndex: 2, position: "relative" }}>
-        <div className="mx-auto max-w-7xl px-4 md:px-6">
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12">
           <div className="landing-label">{tr.featuresEyebrow}</div>
           <h2 className="landing-title" style={{ marginTop: 14 }}>{tr.featuresTitle}</h2>
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-5 mt-10">
-            {FEATURE_ITEMS.map((item) => (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mt-10">
+            {[
+              { icon: "🎙️", title: tr.f1Title, desc: tr.f1Desc },
+              { icon: "📷", title: tr.f2Title, desc: tr.f2Desc },
+              { icon: "🧭", title: tr.f3Title, desc: tr.f3Desc },
+              { icon: "🌐", title: tr.f4Title, desc: tr.f4Desc },
+              { icon: "⚡", title: tr.f5Title, desc: tr.f5Desc },
+              { icon: "📊", title: tr.f6Title, desc: tr.f6Desc },
+            ].map((item) => (
               <article key={item.title} className="landing-card landing-feature-card">
                 <div style={{ fontSize: 26 }}>{item.icon}</div>
-                <h3 style={{ marginTop: 10, fontFamily: "Cormorant Garamond, serif", fontSize: 31 }}>{tr[item.title]}</h3>
-                <p style={{ marginTop: 8, color: BRAND.textSecondary, lineHeight: 1.7 }}>{tr[item.desc]}</p>
+                <h3 style={{ marginTop: 10, fontFamily: "Cormorant Garamond, serif", fontSize: 30 }}>{item.title}</h3>
+                <p style={{ marginTop: 8, color: BRAND.textSecondary, lineHeight: 1.7 }}>{item.desc}</p>
               </article>
             ))}
           </div>
@@ -460,21 +596,30 @@ export default function HomePage() {
       </section>
 
       <section id="for-museums" className="landing-section" style={{ zIndex: 2, position: "relative", background: BRAND.surface, borderTop: `1px solid ${BRAND.goldBorder}` }}>
-        <div className="mx-auto max-w-7xl px-4 md:px-6">
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12">
           <div className="landing-label">{tr.museumsEyebrow}</div>
-          <h2 className="landing-title" style={{ marginTop: 14, maxWidth: 800 }}>{tr.museumsTitle}</h2>
-          <div className="grid lg:grid-cols-[1fr_1fr] gap-8 mt-10 items-start">
-            <div className="grid grid-cols-3 gap-3">
-              {[{ n: "~$15,000", l: tr.roi1Label }, { n: "$299", l: tr.roi2Label }, { n: "98%", l: tr.roi3Label }].map((roi) => (
-                <div key={roi.n} className="landing-card" style={{ textAlign: "center" }}>
-                  <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 40 }}>{roi.n}</div>
-                  <div style={{ marginTop: 5, color: BRAND.textSecondary, fontSize: 12 }}>{roi.l}</div>
-                </div>
-              ))}
-            </div>
+          <h2 className="landing-title" style={{ marginTop: 14, maxWidth: 820 }}>{tr.museumsTitle}</h2>
 
+          <div className="grid md:grid-cols-3 gap-6 mt-10">
+            {[{ n: "~$15,000", l: tr.roi1Label, highlight: false }, { n: "$299", l: tr.roi2Label, highlight: true }, { n: "98%", l: tr.roi3Label, highlight: false }].map((roi) => (
+              <div
+                key={roi.n}
+                className="landing-card"
+                style={{
+                  textAlign: "center",
+                  borderColor: roi.highlight ? BRAND.gold : "rgba(201,168,76,0.15)",
+                  boxShadow: roi.highlight ? "0 0 0 1px rgba(201,168,76,0.25) inset" : "none",
+                }}
+              >
+                <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 42 }}>{roi.n}</div>
+                <div style={{ marginTop: 6, color: BRAND.textSecondary, fontSize: 13 }}>{roi.l}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid lg:grid-cols-[1fr_1fr] gap-8 mt-8 items-start">
             <div className="landing-card" style={{ background: BRAND.card }}>
-              <ul className="space-y-2">
+              <ul className="space-y-3">
                 {[tr.m1, tr.m2, tr.m3, tr.m4, tr.m5, tr.m6, tr.m7].map((it) => (
                   <li key={it} style={{ display: "flex", gap: 10, color: BRAND.textSecondary }}>
                     <span style={{ color: BRAND.gold }}>✦</span>
@@ -483,39 +628,39 @@ export default function HomePage() {
                 ))}
               </ul>
             </div>
-          </div>
 
-          <div
-            className="mt-8"
-            style={{
-              border: `1px solid ${BRAND.goldBorder}`,
-              borderRadius: 8,
-              padding: 24,
-              background: "radial-gradient(55% 100% at 0% 0%, rgba(201,168,76,0.11), rgba(22,22,22,0.92) 70%)",
-              boxShadow: "0 0 60px rgba(201,168,76,0.08)",
-            }}
-          >
-            <h3 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 40, color: BRAND.gold }}>{tr.earlyTitle}</h3>
-            <p style={{ color: BRAND.textSecondary, marginTop: 8 }}>{tr.earlySubtitle}</p>
-            <div className="mt-5 grid md:grid-cols-[1fr_1fr_auto] gap-3">
-              <input className="landing-input" placeholder={tr.museumInput} />
-              <input className="landing-input" placeholder={tr.emailInput} />
-              <button className="landing-btn-primary" onClick={() => router.push("/admin/login")}>{tr.earlyBtn}</button>
+            <div
+              className="landing-card"
+              style={{
+                border: `1px solid ${BRAND.goldBorder}`,
+                borderRadius: 8,
+                padding: 24,
+                background: "radial-gradient(55% 100% at 0% 0%, rgba(201,168,76,0.11), rgba(22,22,22,0.92) 70%)",
+                boxShadow: "0 0 60px rgba(201,168,76,0.08)",
+              }}
+            >
+              <h3 style={{ fontFamily: "Cormorant Garamond, serif", fontSize: 38, color: BRAND.gold }}>{tr.earlyTitle}</h3>
+              <p style={{ color: BRAND.textSecondary, marginTop: 8 }}>{tr.earlySubtitle}</p>
+              <div className="mt-5 grid gap-3">
+                <input className="landing-input" placeholder={tr.museumInput} />
+                <input className="landing-input" placeholder={tr.emailInput} />
+                <button className="landing-btn-primary" onClick={() => router.push("/admin/login")}>{tr.earlyBtn}</button>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="landing-section" style={{ paddingTop: 88, zIndex: 2, position: "relative" }}>
-        <div className="mx-auto max-w-5xl px-4 md:px-6">
+      <section className="landing-section" style={{ paddingTop: 100, zIndex: 2, position: "relative" }}>
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12">
           <h2 className="landing-title" style={{ textAlign: "center" }}>{tr.faqTitle}</h2>
-          <div className="mt-8 space-y-3">
+          <div className="mt-8 space-y-3 max-w-[900px] mx-auto">
             {faqItems.map((item, idx) => {
-              const open = idx === expandedFaq;
+              const open = openIndex === idx;
               return (
                 <article key={item.q} className="landing-card" style={{ padding: 0, overflow: "hidden" }}>
                   <button
-                    onClick={() => setExpandedFaq(open ? -1 : idx)}
+                    onClick={() => setOpenIndex(open ? null : idx)}
                     style={{
                       width: "100%",
                       textAlign: "left",
@@ -547,7 +692,7 @@ export default function HomePage() {
           background: "radial-gradient(55% 80% at 50% 40%, rgba(201,168,76,0.18), rgba(10,10,10,0.92) 70%)",
         }}
       >
-        <div className="mx-auto max-w-4xl px-4 md:px-6 text-center">
+        <div className="mx-auto max-w-[900px] px-5 lg:px-12 text-center">
           <h2 className="landing-title">{tr.finalTitle}</h2>
           <div className="mt-7 flex flex-col sm:flex-row items-center justify-center gap-4">
             <button className="landing-btn-primary" onClick={() => router.push("/admin/login")}>{tr.finalPrimary}</button>
@@ -557,12 +702,10 @@ export default function HomePage() {
       </section>
 
       <footer style={{ borderTop: `1px solid ${BRAND.goldBorder}`, position: "relative", zIndex: 2 }}>
-        <div className="mx-auto max-w-7xl px-4 md:px-6 py-10 grid md:grid-cols-4 gap-8">
+        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12 py-10 grid md:grid-cols-4 gap-8">
           <div>
             <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 28 }}>MuseAI</div>
-            <div style={{ color: BRAND.textMuted, marginTop: 8, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>
-              Point. Scan. Discover.
-            </div>
+            <div style={{ color: BRAND.textMuted, marginTop: 8, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>Point. Scan. Discover.</div>
             <div style={{ marginTop: 12, color: BRAND.textSecondary, fontSize: 13 }}>{tr.footerCopy}</div>
           </div>
           <div>
@@ -644,11 +787,13 @@ export default function HomePage() {
           font-weight: 500;
         }
         .landing-label {
+          font-family: DM Sans, sans-serif;
           font-size: 11px;
-          letter-spacing: 0.15em;
+          letter-spacing: 0.2em;
           text-transform: uppercase;
-          color: ${BRAND.textMuted};
+          color: ${BRAND.gold};
           font-weight: 500;
+          margin-bottom: 16px;
         }
         .landing-eyebrow {
           display: inline-flex;
@@ -726,26 +871,119 @@ export default function HomePage() {
           text-transform: uppercase;
           font-weight: 500;
         }
-        .landing-wave {
-          display: block;
-          border-radius: 3px;
-          animation: landingWave 1.1s ease-in-out infinite;
+        .waveform {
+          display: flex;
+          align-items: flex-end;
+          gap: 4px;
+          height: 28px;
+          margin-top: 8px;
         }
-        @keyframes landingWave {
+        .bar {
+          width: 3px;
+          height: 20px;
+          background: #c9a84c;
+          border-radius: 2px;
+          animation: wave 1s ease-in-out infinite;
+          transform-origin: bottom center;
+        }
+        @keyframes wave {
           0%,
           100% {
-            transform: scaleY(0.35);
-            opacity: 0.45;
+            transform: scaleY(0.3);
           }
           50% {
             transform: scaleY(1);
-            opacity: 1;
+          }
+        }
+        .phone-corner {
+          position: absolute;
+          width: 16px;
+          height: 16px;
+          border-color: ${BRAND.gold};
+          border-style: solid;
+          border-width: 0;
+          opacity: 0.95;
+        }
+        .phone-corner.tl {
+          left: 8px;
+          top: 8px;
+          border-top-width: 2px;
+          border-left-width: 2px;
+        }
+        .phone-corner.tr {
+          right: 8px;
+          top: 8px;
+          border-top-width: 2px;
+          border-right-width: 2px;
+        }
+        .phone-corner.bl {
+          left: 8px;
+          bottom: 8px;
+          border-bottom-width: 2px;
+          border-left-width: 2px;
+        }
+        .phone-corner.br {
+          right: 8px;
+          bottom: 8px;
+          border-bottom-width: 2px;
+          border-right-width: 2px;
+        }
+        .how-grid {
+          display: grid;
+          grid-template-columns: repeat(1, minmax(0, 1fr));
+          gap: 24px;
+          position: relative;
+        }
+        .how-card {
+          z-index: 2;
+        }
+        .how-num {
+          position: absolute;
+          top: -26px;
+          right: 8px;
+          font-family: Cormorant Garamond, serif;
+          font-weight: 300;
+          font-size: clamp(96px, 12vw, 140px);
+          color: rgba(201, 168, 76, 0.08);
+          line-height: 1;
+        }
+        .how-title {
+          color: ${BRAND.text};
+          font-size: 22px;
+          font-family: Cormorant Garamond, serif;
+          position: relative;
+          z-index: 2;
+        }
+        .how-desc {
+          margin-top: 8px;
+          color: ${BRAND.textSecondary};
+          font-size: 16px;
+          line-height: 1.7;
+          max-width: 320px;
+          position: relative;
+          z-index: 2;
+        }
+        .how-dashed {
+          display: none;
+        }
+        @media (min-width: 768px) {
+          .how-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+          }
+          .how-dashed {
+            display: block;
+            position: absolute;
+            left: 10%;
+            right: 10%;
+            top: 45%;
+            border-top: 1px dashed rgba(201, 168, 76, 0.2);
+            z-index: 1;
           }
         }
         @media (max-width: 767px) {
           .landing-section {
-            padding-top: 84px;
-            padding-bottom: 84px;
+            padding-top: 100px;
+            padding-bottom: 100px;
           }
         }
         @media (prefers-reduced-motion: reduce) {
