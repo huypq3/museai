@@ -6,9 +6,12 @@ import { adminFetch, getAdminSession } from '@/lib/adminAuth'
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
+type MuseumRow = { id: string; name: string; address?: string; artifact_count?: number; total_visits?: number; status?: string; logo_url?: string }
+
 type Overview = {
   total_museums: number
-  total_artifacts: number
+  total_exhibits: number
+  total_artifacts?: number
   total_events: number
   top_museums: { museum_id: string; name: string; count: number }[]
 }
@@ -18,8 +21,9 @@ export default function AdminDashboardPage() {
   const { t, locale } = useAdminI18n()
   const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
   const [overview, setOverview] = useState<Overview | null>(null)
-  const [museums, setMuseums] = useState<any[]>([])
+  const [museums, setMuseums] = useState<MuseumRow[]>([])
   const [users, setUsers] = useState<any[]>([])
+  const [museumTab, setMuseumTab] = useState<'active' | 'inactive'>('active')
 
   useEffect(() => {
     const s = getAdminSession()
@@ -47,10 +51,20 @@ export default function AdminDashboardPage() {
   const museumAdminName = (museumId: string) =>
     users.find((u) => u.role === 'museum_admin' && u.museum_id === museumId && (u.status || 'active') === 'active')?.username
 
+  const filteredMuseums = museums.filter((m) => {
+    const st = String(m.status || 'active').toLowerCase()
+    return museumTab === 'active' ? st !== 'inactive' : st === 'inactive'
+  })
+
   return (
     <div style={{ flex: 1, padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-        <h1 style={{ margin: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>Super Admin {t('dashboard')}</h1>
+        <div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            {tr('Bảng điều khiển Super Admin', 'Super admin dashboard')}
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: 10 }}>
           <button onClick={() => router.push('/admin/museums/new')} style={btnGhost}>+ {tr('Bảo tàng', 'Museum')}</button>
           <button onClick={() => router.push('/admin/users')} style={btnGhost}>+ {tr('Tài khoản', 'User')}</button>
@@ -59,7 +73,7 @@ export default function AdminDashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px,1fr))', gap: 12, marginBottom: 24 }}>
         <Card title={tr('Bảo tàng', 'Museums')} value={overview?.total_museums ?? 0} />
-        <Card title={tr('Hiện vật', 'Artifacts')} value={overview?.total_artifacts ?? 0} />
+        <Card title={tr('Hiện vật', 'Exhibits')} value={overview?.total_exhibits ?? overview?.total_artifacts ?? 0} />
         <Card title={tr('Sự kiện', 'Events')} value={overview?.total_events ?? 0} />
       </div>
 
@@ -85,20 +99,20 @@ export default function AdminDashboardPage() {
       </div>
 
       <div style={{ marginTop: 14, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
-        <div style={{ marginBottom: 10, color: '#F5F0E8', fontWeight: 600 }}>{tr('Danh sách bảo tàng', 'Museum list')}</div>
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 2fr 1fr 2fr', gap: 8, fontSize: 12, opacity: 0.65, paddingBottom: 8 }}>
-          <span>{tr('Tên', 'Name')}</span><span>{tr('Địa chỉ', 'Address')}</span><span>{tr('Hiện vật', 'Artifacts')}</span><span>{tr('Lượt xem', 'Visits')}</span><span>Admin</span><span>Status</span><span>{tr('Hành động', 'Actions')}</span>
+        <div style={{ marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}><div style={{ color: '#F5F0E8', fontWeight: 600 }}>{tr('Danh sách bảo tàng', 'Museum list')}</div><div style={{ display: 'flex', gap: 8 }}><button style={{ ...btnGhost, background: museumTab === 'active' ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.04)', color: museumTab === 'active' ? '#C9A84C' : '#F5F0E8' }} onClick={() => setMuseumTab('active')}>{tr('Active', 'Active')}</button><button style={{ ...btnGhost, background: museumTab === 'inactive' ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.04)', color: museumTab === 'inactive' ? '#C9A84C' : '#F5F0E8' }} onClick={() => setMuseumTab('inactive')}>{tr('Inactive', 'Inactive')}</button></div></div>
+        <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 2fr 1fr 1fr 2fr 1fr 2fr', gap: 8, fontSize: 12, opacity: 0.65, paddingBottom: 8 }}>
+          <span>{tr('Tên', 'Name')}</span><span>{tr('Địa chỉ', 'Address')}</span><span>{tr('Hiện vật', 'Exhibits')}</span><span>{tr('Lượt xem', 'Visits')}</span><span>Admin</span><span>Status</span><span>{tr('Hành động', 'Actions')}</span>
         </div>
-        {museums.map((m) => (
-          <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '2fr 2fr 1fr 1fr 2fr 1fr 2fr', gap: 8, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 0' }}>
-            <span>{m.name}</span>
+        {filteredMuseums.map((m) => (
+          <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '2.2fr 2fr 1fr 1fr 2fr 1fr 2fr', gap: 8, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 0' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><img src={m.logo_url || ''} alt={m.name} style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover', background: 'rgba(255,255,255,0.08)' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /><strong style={{ fontWeight: 500 }}>{m.name}</strong></span>
             <span style={{ fontSize: 12, opacity: 0.75 }}>{m.address || '-'}</span>
             <span>{m.artifact_count || 0}</span>
             <span>{m.total_visits || 0}</span>
             <span>{museumAdminName(m.id) ? `${museumAdminName(m.id)} ●` : <button style={btnGhost} onClick={() => router.push(`/admin/users?museum_id=${m.id}`)}>+ {tr('Tạo admin', 'Create admin')}</button>}</span>
             <span>{m.status || 'active'}</span>
             <div style={{ display: 'flex', gap: 6 }}>
-              <button style={btnGhost} onClick={() => router.push(`/admin/museum/${m.id}`)}>Edit</button>
+              <button style={btnGhost} onClick={() => router.push(`/admin/museums/${m.id}`)}>Edit</button>
               <button style={btnGhost} onClick={() => router.push(`/admin/analytics?museum_id=${m.id}`)}>Analytics</button>
               <button style={btnGhost} onClick={() => router.push(`/admin/qr?museum_id=${m.id}`)}>QR</button>
             </div>
@@ -119,10 +133,12 @@ function Card({ title, value }: { title: string; value: number }) {
 }
 
 const btnGhost: any = {
-  padding: '8px 12px',
-  borderRadius: 8,
+  padding: '10px 14px',
+  borderRadius: 10,
   border: '1px solid rgba(255,255,255,0.14)',
   background: 'rgba(255,255,255,0.04)',
   color: '#F5F0E8',
+  fontSize: 14,
+  fontWeight: 500,
   cursor: 'pointer',
 }

@@ -30,7 +30,7 @@ export default function AdminUsersPage() {
   const [museums, setMuseums] = useState<Museum[]>([])
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'suspended'>('all')
+  const [statusTab, setStatusTab] = useState<'active' | 'inactive'>('active')
   const [showCreate, setShowCreate] = useState(false)
   const [showCreds, setShowCreds] = useState(false)
   const [createdCreds, setCreatedCreds] = useState<any>(null)
@@ -89,7 +89,9 @@ export default function AdminUsersPage() {
   const filteredUsers = useMemo(() => {
     const q = query.trim().toLowerCase()
     return users.filter((u) => {
-      if (statusFilter !== 'all' && (u.status || 'active') !== statusFilter) return false
+      const st = String(u.status || 'active').toLowerCase()
+      if (statusTab === 'active' && st !== 'active') return false
+      if (statusTab === 'inactive' && st === 'active') return false
       if (!q) return true
       return (
         u.username?.toLowerCase().includes(q) ||
@@ -97,7 +99,7 @@ export default function AdminUsersPage() {
         String(u.email || '').toLowerCase().includes(q)
       )
     })
-  }, [users, query, statusFilter])
+  }, [users, query, statusTab])
 
   const suggestUsername = (museumId: string) => {
     const museum = museums.find((m) => m.id === museumId)
@@ -176,23 +178,31 @@ export default function AdminUsersPage() {
     <div style={{ flex: 1, padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <h1 style={{ margin: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>{tr('Quản lý tài khoản', 'User management')}</h1>
-          <div style={{ opacity: 0.7, fontSize: 13 }}>{tr('Super Admin tạo và quản lý Museum Admin', 'Super admin creates and manages museum admins')}</div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            {tr('Quản lý tài khoản', 'User management')}
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => router.push('/admin/dashboard')} style={btn}>{tr('Bảng điều khiển', 'Dashboard')}</button>
           <button onClick={() => setShowCreate(true)} style={btnPrimary}>+ {tr('Tạo', 'Create')}</button>
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value as any)} style={input}>
-          <option value="all">{tr('Tất cả', 'All')}</option>
-          <option value="active">Active</option>
-          <option value="suspended">Suspended</option>
-        </select>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+        <button
+          style={{ ...btn, background: statusTab === 'active' ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.04)', color: statusTab === 'active' ? '#C9A84C' : '#F5F0E8' }}
+          onClick={() => setStatusTab('active')}
+        >
+          {tr('Active', 'Active')}
+        </button>
+        <button
+          style={{ ...btn, background: statusTab === 'inactive' ? 'rgba(201,168,76,0.2)' : 'rgba(255,255,255,0.04)', color: statusTab === 'inactive' ? '#C9A84C' : '#F5F0E8' }}
+          onClick={() => setStatusTab('inactive')}
+        >
+          {tr('Inactive', 'Inactive')}
+        </button>
         <input
-          style={{ ...input, flex: 1 }}
+          style={{ ...input, flex: 1, marginBottom: 0 }}
           placeholder={tr('Tìm username / bảo tàng / email', 'Search username / museum / email')}
           value={query}
           onChange={(e) => setQuery(e.target.value)}
@@ -299,7 +309,7 @@ export default function AdminUsersPage() {
 
 const card: any = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 12 }
 const input: any = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', boxSizing: 'border-box', marginBottom: 8 }
-const btn: any = { padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', cursor: 'pointer' }
+const btn: any = { padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', fontSize: 14, fontWeight: 500, cursor: 'pointer' }
 const btnPrimary: any = { ...btn, background: '#C9A84C', color: '#0A0A0A', border: 'none', fontWeight: 600 }
 const btnDanger: any = { ...btn, background: 'rgba(127,29,29,0.8)', border: '1px solid rgba(248,113,113,0.5)' }
 const label: any = { display: 'block', fontSize: 13, opacity: 0.8, marginBottom: 4 }

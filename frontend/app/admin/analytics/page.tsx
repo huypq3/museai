@@ -30,7 +30,10 @@ export default function AnalyticsPage() {
 
   return (
     <div style={{ flex: 1, padding: 28 }}>
-      <h1 style={{ marginTop: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>Analytics</h1>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+        <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Analytics</div>
+      </div>
       {!data ? <p>{tr('Đang tải...', 'Loading...')}</p> : (
         <>
           {'daily_visits' in data && (
@@ -51,7 +54,7 @@ export default function AnalyticsPage() {
           )}
           {'heatmap' in data && (
             <div style={card}>
-              <div style={{ marginBottom: 8, fontWeight: 600 }}>{tr('Heatmap (hiện vật)', 'Heatmap (artifacts)')}</div>
+              <div style={{ marginBottom: 8, fontWeight: 600 }}>{tr('Heatmap (hiện vật)', 'Heatmap (exhibits)')}</div>
               <HeatmapBars data={data.heatmap || []} />
             </div>
           )}

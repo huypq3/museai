@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { LanguageCode } from "@/lib/constants";
 
-const SUPPORTED: LanguageCode[] = ["vi", "en", "fr", "ja", "ko", "zh"];
+const SUPPORTED: LanguageCode[] = ["vi", "en", "es", "fr", "ja", "ko", "zh"];
 
 function detectBrowserLanguage(): LanguageCode {
   if (typeof window === "undefined") return "en";
@@ -15,17 +15,8 @@ function detectBrowserLanguage(): LanguageCode {
   return "en";
 }
 
-function readInitialLanguage(): LanguageCode {
-  if (typeof window === "undefined") return "en";
-  const saved = localStorage.getItem("language");
-  if (saved && SUPPORTED.includes(saved as LanguageCode)) {
-    return saved as LanguageCode;
-  }
-  return detectBrowserLanguage();
-}
-
 export function useLanguage() {
-  const [language, setLanguage] = useState<LanguageCode>(readInitialLanguage);
+  const [language, setLanguage] = useState<LanguageCode>("en");
   const [isAutoDetected, setIsAutoDetected] = useState(false);
 
   useEffect(() => {

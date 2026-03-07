@@ -11,7 +11,7 @@ import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'basic' | 'vision' | 'knowledge' | 'scenes'
 
-export default function EditArtifactPage() {
+export default function EditExhibitPage() {
   const router = useRouter()
   const { locale } = useAdminI18n()
   const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
@@ -61,11 +61,16 @@ export default function EditArtifactPage() {
   }, [artifactId])
 
   const completion = useMemo(() => validateArtifactPublishable(form), [form])
+  const completionReason = completion.reasonCode
+    ? completion.reasonCode === 'knowledge_base_min_chunks'
+      ? tr('Knowledge Base phải có tối thiểu 2 chunks', 'Knowledge Base must have at least 2 chunks')
+      : tr('Thiếu trường bắt buộc', 'Missing required fields')
+    : ''
 
   const saveAll = async (status: 'draft' | 'published' | null = null) => {
     setSubmitted(true)
     if (status === 'published' && !completion.publishable) {
-      return alert(`${tr('Chưa đủ dữ liệu để xuất bản', 'Not enough data to publish')}: ${completion.reason}`)
+      return alert(`${tr('Chưa đủ dữ liệu để xuất bản', 'Not enough data to publish')}: ${completionReason}`)
     }
     setSaving(true)
     try {
@@ -88,15 +93,19 @@ export default function EditArtifactPage() {
   return (
     <div style={{ flex: 1, padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h1 style={{ margin: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>{form.name || tr('Chỉnh sửa hiện vật', 'Edit artifact')}</h1>
+        <div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            {form.name || tr('Chỉnh sửa hiện vật', 'Edit exhibit')}
+          </div>
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => router.push(`/admin/exhibits/${artifactId}/qr`)} style={btn}>📱 QR</button>
-          <button onClick={() => router.back()} style={btn}>← {tr('Quay lại', 'Back')}</button>
         </div>
       </div>
 
       <div style={{ marginBottom: 12, color: completion.publishable ? '#86efac' : '#fca5a5', fontSize: 13 }}>
-        {tr('Hồ sơ hiện vật', 'Artifact profile')}: {completion.completed}/{completion.total} {completion.publishable ? '✅' : '⚠️'} {completion.publishable ? '' : `— ${completion.reason}`}
+        {tr('Hồ sơ hiện vật', 'Exhibit profile')}: {completion.completed}/{completion.total} {completion.publishable ? '✅' : '⚠️'} {completion.publishable ? '' : `— ${completionReason}`}
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -109,10 +118,10 @@ export default function EditArtifactPage() {
       <div style={card}>
         {tab === 'basic' && (
           <div style={grid2}>
-            <Field label={tr('Tên hiện vật (vi) *', 'Artifact name (vi) *')}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input} /></Field>
-            {submitted && !form.name && <ErrorText>Vui lòng nhập tên hiện vật (vi)</ErrorText>}
-            <Field label={tr('Tên hiện vật (en) *', 'Artifact name (en) *')}><input value={form.name_en} onChange={(e) => setForm({ ...form, name_en: e.target.value })} style={input} /></Field>
-            {submitted && !form.name_en && <ErrorText>Vui lòng nhập tên hiện vật (en)</ErrorText>}
+            <Field label={tr('Tên hiện vật (vi) *', 'Exhibit name (vi) *')}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input} /></Field>
+            {submitted && !form.name && <ErrorText>{tr('Vui lòng nhập tên hiện vật (vi)', 'Please enter exhibit name (vi)')}</ErrorText>}
+            <Field label={tr('Tên hiện vật (en) *', 'Exhibit name (en) *')}><input value={form.name_en} onChange={(e) => setForm({ ...form, name_en: e.target.value })} style={input} /></Field>
+            {submitted && !form.name_en && <ErrorText>{tr('Vui lòng nhập tên hiện vật (en)', 'Please enter exhibit name (en)')}</ErrorText>}
             <Field label={tr('Danh mục *', 'Category *')}>
               <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input}>
                 {['statue', 'painting', 'document', 'weapon', 'ceramic', 'other'].map((x) => <option key={x}>{x}</option>)}
@@ -248,5 +257,5 @@ function ErrorText({ children }: any) {
 const card: any = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14 }
 const grid2: any = { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }
 const input: any = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', boxSizing: 'border-box' }
-const btn: any = { padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', cursor: 'pointer' }
+const btn: any = { padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', fontSize: 14, fontWeight: 500, cursor: 'pointer' }
 const btnPrimary: any = { ...btn, background: '#C9A84C', color: '#0A0A0A', border: 'none', fontWeight: 600 }

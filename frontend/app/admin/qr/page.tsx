@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { adminFetch, getAdminSession } from '@/lib/adminAuth'
+import { adminDownload, adminFetch, getAdminSession } from '@/lib/adminAuth'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
 export default function QRManagementPage() {
@@ -48,8 +48,13 @@ export default function QRManagementPage() {
 
         const qrData = await adminFetch(`/admin/qr/museum/${museumId}`)
         setData(qrData)
-      } catch {
-        router.replace('/admin/login')
+      } catch (e: any) {
+        const msg = typeof e?.message === 'string' ? e.message : ''
+        if (msg.includes('Unauthorized')) {
+          router.replace('/admin/login')
+          return
+        }
+        setError(msg || tr('Không tải được QR.', 'Failed to load QR.'))
       } finally {
         setLoading(false)
       }
@@ -63,7 +68,10 @@ export default function QRManagementPage() {
 
   return (
     <div style={{ flex: 1, padding: 24 }}>
-      <h1 style={{ marginTop: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>QR Codes</h1>
+      <div style={{ marginBottom: 16 }}>
+        <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+        <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>QR Codes</div>
+      </div>
       <div style={card}>
         <div style={{ marginBottom: 8, fontWeight: 600 }}>{tr('QR bảo tàng', 'Museum QR')}</div>
         <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
@@ -73,7 +81,7 @@ export default function QRManagementPage() {
             <div style={{ display: 'flex', gap: 8 }}>
               <a href={data.museum_qr.qr_data_url} download={`museum-${data.museum_id}.png`} style={btnLink}>{tr('Tải PNG', 'Download PNG')}</a>
               <button onClick={() => navigator.clipboard.writeText(data.museum_qr.qr_url)} style={btn}>{tr('Sao chép link', 'Copy link')}</button>
-              <button onClick={() => window.open(`${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/qr/museum/${data.museum_id}/zip`, '_blank')} style={btnPrimary}>{tr('Tải ZIP', 'Download ZIP')}</button>
+              <button onClick={() => adminDownload(`/admin/qr/museum/${data.museum_id}/zip`, `qr-${data.museum_id}.zip`).catch((e) => alert(e?.message || 'Download failed'))} style={btnPrimary}>{tr('Tải ZIP', 'Download ZIP')}</button>
             </div>
           </div>
         </div>
@@ -102,11 +110,13 @@ const card: any = {
   marginBottom: 12,
 }
 const btn: any = {
-  padding: '8px 12px',
-  borderRadius: 8,
+  padding: '10px 14px',
+  borderRadius: 10,
   border: '1px solid rgba(255,255,255,0.14)',
   background: 'rgba(255,255,255,0.04)',
   color: '#F5F0E8',
+  fontSize: 14,
+  fontWeight: 500,
   cursor: 'pointer',
 }
 const btnPrimary: any = {

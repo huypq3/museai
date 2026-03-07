@@ -1,5 +1,10 @@
 const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL
 
+function getBackendBase(): string {
+  if (!BACKEND) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured')
+  return BACKEND
+}
+
 export type AdminRole = 'super_admin' | 'museum_admin'
 
 export type AdminSession = {
@@ -47,7 +52,7 @@ export async function adminFetch(
 ): Promise<any> {
   const token = getAdminToken()
   if (!token) throw new Error('Not authenticated')
-  const res = await fetch(`${BACKEND}${path}`, {
+  const res = await fetch(`${getBackendBase()}${path}`, {
     ...options,
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -78,7 +83,7 @@ export async function adminUpload(file: File, museumId?: string): Promise<string
   const formData = new FormData()
   formData.append('file', file)
   if (museumId) formData.append('museum_id', museumId)
-  const res = await fetch(`${BACKEND}/admin/upload/image`, {
+  const res = await fetch(`${getBackendBase()}/admin/upload/image`, {
     method: 'POST',
     headers: { 'Authorization': `Bearer ${token}` },
     body: formData,
@@ -86,4 +91,23 @@ export async function adminUpload(file: File, museumId?: string): Promise<string
   if (!res.ok) throw new Error('Upload failed')
   const data = await res.json()
   return data.url
+}
+
+
+export async function adminDownload(path: string, filename: string): Promise<void> {
+  const token = getAdminToken()
+  if (!token) throw new Error('Not authenticated')
+  const res = await fetch(`${getBackendBase()}${path}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) throw new Error(await res.text())
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  URL.revokeObjectURL(url)
 }

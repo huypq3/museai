@@ -85,8 +85,12 @@ export default function NewMuseumPage() {
   return (
     <div style={{ flex: 1, padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-        <h1 style={{ margin: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>{tr('Tạo bảo tàng mới', 'Create new museum')}</h1>
-        <button onClick={() => router.push('/admin/museums')} style={btnGhost}>← {tr('Quay lại', 'Back')}</button>
+        <div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            {tr('Tạo bảo tàng mới', 'Create new museum')}
+          </div>
+        </div>
       </div>
 
       <div style={{ marginBottom: 14, color: completion.missing.length ? '#fca5a5' : '#86efac', fontSize: 13 }}>
@@ -104,25 +108,25 @@ export default function NewMuseumPage() {
         {tab === 'basic' && (
           <div style={grid2}>
             <Field label={tr('Tên bảo tàng (vi) *', 'Museum name (vi) *')}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input} /></Field>
-            {submitted && !form.name && <ErrorText>Vui lòng nhập tên bảo tàng (vi)</ErrorText>}
+            {submitted && !form.name && <ErrorText>{tr('Vui lòng nhập tên bảo tàng (vi)', 'Please enter museum name (vi)')}</ErrorText>}
             <Field label={tr('Tên bảo tàng (en) *', 'Museum name (en) *')}><input value={form.name_en} onChange={(e) => setForm({ ...form, name_en: e.target.value })} style={input} /></Field>
-            {submitted && !form.name_en && <ErrorText>Vui lòng nhập tên bảo tàng (en)</ErrorText>}
+            {submitted && !form.name_en && <ErrorText>{tr('Vui lòng nhập tên bảo tàng (en)', 'Please enter museum name (en)')}</ErrorText>}
             <Field label="Slug"><input value={form.slug} onChange={(e) => setForm({ ...form, slug: e.target.value })} style={input} /></Field>
             <Field label={tr('Địa chỉ *', 'Address *')}><input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} style={input} /></Field>
-            {submitted && !form.address && <ErrorText>Vui lòng nhập địa chỉ</ErrorText>}
+            {submitted && !form.address && <ErrorText>{tr('Vui lòng nhập địa chỉ', 'Please enter address')}</ErrorText>}
             <Field label={tr('Thành phố *', 'City *')}><input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} style={input} /></Field>
-            {submitted && !form.city && <ErrorText>Vui lòng nhập thành phố</ErrorText>}
+            {submitted && !form.city && <ErrorText>{tr('Vui lòng nhập thành phố', 'Please enter city')}</ErrorText>}
             <Field label={tr('Quốc gia', 'Country')}><input value={form.country} onChange={(e) => setForm({ ...form, country: e.target.value })} style={input} /></Field>
             <Field label={tr('Số điện thoại *', 'Phone *')}><input value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} style={input} /></Field>
-            {submitted && !form.phone && <ErrorText>Vui lòng nhập số điện thoại</ErrorText>}
+            {submitted && !form.phone && <ErrorText>{tr('Vui lòng nhập số điện thoại', 'Please enter phone number')}</ErrorText>}
             <Field label={tr('Email *', 'Email *')}><input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} style={input} /></Field>
-            {submitted && !form.email && <ErrorText>Vui lòng nhập email</ErrorText>}
+            {submitted && !form.email && <ErrorText>{tr('Vui lòng nhập email', 'Please enter email')}</ErrorText>}
             <Field label={tr('Website', 'Website')}><input value={form.website} onChange={(e) => setForm({ ...form, website: e.target.value })} style={input} /></Field>
             <div style={{ gridColumn: '1 / -1' }}>
               <ImageUpload value={form.logo_url} onChange={(logo_url) => setForm({ ...form, logo_url })} label={tr('Logo *', 'Logo *')} />
-              {submitted && !form.logo_url && <ErrorText>Thiếu logo</ErrorText>}
+              {submitted && !form.logo_url && <ErrorText>{tr('Thiếu logo', 'Missing logo')}</ErrorText>}
               <ImageUpload value={form.cover_image_url} onChange={(cover_image_url) => setForm({ ...form, cover_image_url })} label={tr('Ảnh bìa *', 'Cover image *')} />
-              {submitted && !form.cover_image_url && <ErrorText>Thiếu ảnh bìa</ErrorText>}
+              {submitted && !form.cover_image_url && <ErrorText>{tr('Thiếu ảnh bìa', 'Missing cover image')}</ErrorText>}
             </div>
           </div>
         )}

@@ -11,7 +11,7 @@ import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'basic' | 'vision' | 'knowledge' | 'scenes'
 
-export default function NewArtifactPage() {
+export default function NewExhibitPage() {
   const router = useRouter()
   const { locale } = useAdminI18n()
   const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
@@ -41,6 +41,11 @@ export default function NewArtifactPage() {
   }, [])
 
   const completion = useMemo(() => validateArtifactPublishable(form), [form])
+  const completionReason = completion.reasonCode
+    ? completion.reasonCode === 'knowledge_base_min_chunks'
+      ? tr('Knowledge Base phải có tối thiểu 2 chunks', 'Knowledge Base must have at least 2 chunks')
+      : tr('Thiếu trường bắt buộc', 'Missing required fields')
+    : ''
 
   const addChunk = () =>
     setForm((f: any) => ({
@@ -57,7 +62,7 @@ export default function NewArtifactPage() {
     setSubmitted(true)
     if (!museumId) return alert(tr('Thiếu museum_id', 'Missing museum_id'))
     if (status === 'published' && !completion.publishable) {
-      return alert(`${tr('Chưa đủ dữ liệu để xuất bản', 'Not enough data to publish')}: ${completion.reason}`)
+      return alert(`${tr('Chưa đủ dữ liệu để xuất bản', 'Not enough data to publish')}: ${completionReason}`)
     }
     setSaving(true)
     try {
@@ -81,12 +86,16 @@ export default function NewArtifactPage() {
   return (
     <div style={{ flex: 1, padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-        <h1 style={{ margin: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>{tr('Thêm hiện vật mới', 'Add new artifact')}</h1>
-        <button onClick={() => router.back()} style={btn}>← {tr('Quay lại', 'Back')}</button>
+        <div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            {tr('Thêm hiện vật mới', 'Add new exhibit')}
+          </div>
+        </div>
       </div>
 
       <div style={{ marginBottom: 12, color: completion.publishable ? '#86efac' : '#fca5a5', fontSize: 13 }}>
-        {tr('Hồ sơ hiện vật', 'Artifact profile')}: {completion.completed}/{completion.total} {completion.publishable ? '✅' : '⚠️'} {completion.publishable ? '' : `— ${completion.reason}`}
+        {tr('Hồ sơ hiện vật', 'Exhibit profile')}: {completion.completed}/{completion.total} {completion.publishable ? '✅' : '⚠️'} {completion.publishable ? '' : `— ${completionReason}`}
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -99,29 +108,29 @@ export default function NewArtifactPage() {
       <div style={card}>
         {tab === 'basic' && (
           <div style={grid2}>
-            <Field label={tr('Tên hiện vật (vi) *', 'Artifact name (vi) *')}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input} /></Field>
-            {submitted && !form.name && <ErrorText>Vui lòng nhập tên hiện vật (vi)</ErrorText>}
-            <Field label={tr('Tên hiện vật (en) *', 'Artifact name (en) *')}><input value={form.name_en} onChange={(e) => setForm({ ...form, name_en: e.target.value })} style={input} /></Field>
-            {submitted && !form.name_en && <ErrorText>Vui lòng nhập tên hiện vật (en)</ErrorText>}
+            <Field label={tr('Tên hiện vật (vi) *', 'Exhibit name (vi) *')}><input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} style={input} /></Field>
+            {submitted && !form.name && <ErrorText>{tr('Vui lòng nhập tên hiện vật (vi)', 'Please enter exhibit name (vi)')}</ErrorText>}
+            <Field label={tr('Tên hiện vật (en) *', 'Exhibit name (en) *')}><input value={form.name_en} onChange={(e) => setForm({ ...form, name_en: e.target.value })} style={input} /></Field>
+            {submitted && !form.name_en && <ErrorText>{tr('Vui lòng nhập tên hiện vật (en)', 'Please enter exhibit name (en)')}</ErrorText>}
             <Field label={tr('Danh mục *', 'Category *')}>
               <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} style={input}>
                 {['statue', 'painting', 'document', 'weapon', 'ceramic', 'other'].map((x) => <option key={x}>{x}</option>)}
               </select>
             </Field>
             <Field label={tr('Thời kỳ *', 'Period *')}><input value={form.period} onChange={(e) => setForm({ ...form, period: e.target.value })} style={input} /></Field>
-            {submitted && !form.period && <ErrorText>Vui lòng nhập thời kỳ</ErrorText>}
+            {submitted && !form.period && <ErrorText>{tr('Vui lòng nhập thời kỳ', 'Please enter period')}</ErrorText>}
             <Field label={tr('Xuất xứ', 'Origin')}><input value={form.origin} onChange={(e) => setForm({ ...form, origin: e.target.value })} style={input} /></Field>
             <Field label={tr('Vị trí - Hall *', 'Location - Hall *')}><input value={form.location.hall} onChange={(e) => setForm({ ...form, location: { ...form.location, hall: e.target.value } })} style={input} /></Field>
-            {submitted && !form.location.hall && <ErrorText>Vui lòng nhập khu trưng bày</ErrorText>}
+            {submitted && !form.location.hall && <ErrorText>{tr('Vui lòng nhập khu trưng bày', 'Please enter hall location')}</ErrorText>}
             <Field label={tr('Vị trí - Floor', 'Location - Floor')}><input type="number" value={form.location.floor} onChange={(e) => setForm({ ...form, location: { ...form.location, floor: Number(e.target.value) } })} style={input} /></Field>
             <Field label={tr('Vị trí - Position', 'Location - Position')}><input value={form.location.position} onChange={(e) => setForm({ ...form, location: { ...form.location, position: e.target.value } })} style={input} /></Field>
             <Field label={tr('Mô tả VI *', 'Description VI *')}><textarea value={form.description.vi} onChange={(e) => setForm({ ...form, description: { ...form.description, vi: e.target.value } })} style={{ ...input, minHeight: 90 }} /></Field>
-            {submitted && !form.description.vi && <ErrorText>Thiếu mô tả tiếng Việt</ErrorText>}
+            {submitted && !form.description.vi && <ErrorText>{tr('Thiếu mô tả tiếng Việt', 'Missing Vietnamese description')}</ErrorText>}
             <Field label={tr('Mô tả EN *', 'Description EN *')}><textarea value={form.description.en} onChange={(e) => setForm({ ...form, description: { ...form.description, en: e.target.value } })} style={{ ...input, minHeight: 90 }} /></Field>
-            {submitted && !form.description.en && <ErrorText>Thiếu mô tả tiếng Anh</ErrorText>}
+            {submitted && !form.description.en && <ErrorText>{tr('Thiếu mô tả tiếng Anh', 'Missing English description')}</ErrorText>}
             <div style={{ gridColumn: '1 / -1' }}>
               <ImageUpload value={form.primary_image_url} onChange={(url) => setForm({ ...form, primary_image_url: url })} label={tr('Ảnh chính *', 'Primary image *')} />
-              {submitted && !form.primary_image_url && <ErrorText>Thiếu ảnh chính</ErrorText>}
+              {submitted && !form.primary_image_url && <ErrorText>{tr('Thiếu ảnh chính', 'Missing primary image')}</ErrorText>}
               <MultiImageUpload values={form.gallery_images} onChange={(gallery_images) => setForm({ ...form, gallery_images })} />
             </div>
           </div>
@@ -136,7 +145,7 @@ export default function NewArtifactPage() {
                 style={{ ...input, minHeight: 100 }}
               />
             </Field>
-            {submitted && !form.visual_features.description && <ErrorText>Thiếu mô tả nhận dạng camera</ErrorText>}
+            {submitted && !form.visual_features.description && <ErrorText>{tr('Thiếu mô tả nhận dạng camera', 'Missing camera recognition description')}</ErrorText>}
             <Field label={tr('Dấu hiệu đặc trưng (tags)', 'Distinctive marks (tags)')}>
               <TagInput tags={form.visual_features.distinctive_marks} onChange={(tags) => setForm({ ...form, visual_features: { ...form.visual_features, distinctive_marks: tags } })} />
             </Field>
@@ -250,5 +259,5 @@ function ErrorText({ children }: any) {
 const card: any = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14 }
 const grid2: any = { display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 10 }
 const input: any = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', boxSizing: 'border-box' }
-const btn: any = { padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', cursor: 'pointer' }
+const btn: any = { padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', fontSize: 14, fontWeight: 500, cursor: 'pointer' }
 const btnPrimary: any = { ...btn, background: '#C9A84C', color: '#0A0A0A', border: 'none', fontWeight: 600 }

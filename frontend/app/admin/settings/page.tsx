@@ -93,7 +93,8 @@ export default function AdminSettingsPage() {
   if (loading) return <div style={{ flex: 1, padding: 24 }}>{tr('Đang tải...', 'Loading...')}</div>
 
   return (
-    <div style={{ flex: 1, padding: 24, maxWidth: 860 }}>
+    <div style={{ flex: 1, padding: 24, display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 860 }}>
       <h1 style={{ marginTop: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>
         {tr('System Settings', 'System Settings')}
       </h1>
@@ -160,6 +161,7 @@ export default function AdminSettingsPage() {
           {message && <span style={{ fontSize: 13, color: '#86efac' }}>{message}</span>}
         </div>
       </div>
+    </div>
     </div>
   )
 }

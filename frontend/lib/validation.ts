@@ -47,10 +47,15 @@ export function validateArtifactPublishable(artifact: any) {
   const base = calculateCompletion(artifact, ARTIFACT_REQUIRED_FIELDS)
   const kbCount = Array.isArray(artifact?.knowledge_base) ? artifact.knowledge_base.length : 0
   const publishable = base.missing.length === 0 && kbCount >= 2
+  const reasonCode = publishable
+    ? ''
+    : kbCount < 2
+    ? 'knowledge_base_min_chunks'
+    : 'missing_required_fields'
   return {
     ...base,
     kbCount,
     publishable,
-    reason: publishable ? '' : kbCount < 2 ? 'knowledge_base phải có tối thiểu 2 chunks' : 'Thiếu trường bắt buộc',
+    reasonCode,
   }
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, createElement, useContext, useMemo, useState } from 'react'
+import { createContext, createElement, useContext, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 
 export type AdminLocale = 'vi' | 'en'
@@ -44,15 +44,15 @@ const AdminI18nContext = createContext<AdminI18nState | null>(null)
 
 const STORAGE_KEY = 'admin_language'
 
-function getInitialLocale(): AdminLocale {
-  if (typeof window === 'undefined') return 'en'
-  const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('admin_locale')
-  if (saved === 'vi' || saved === 'en') return saved
-  return 'en'
-}
-
 export function AdminI18nProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<AdminLocale>(getInitialLocale)
+  const [locale, setLocaleState] = useState<AdminLocale>('en')
+
+  useEffect(() => {
+    const saved = localStorage.getItem(STORAGE_KEY) || localStorage.getItem('admin_locale')
+    if (saved === 'vi' || saved === 'en') {
+      setLocaleState(saved)
+    }
+  }, [])
 
   const value = useMemo<AdminI18nState>(
     () => ({

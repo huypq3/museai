@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation'
 import { adminFetch } from '@/lib/adminAuth'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
-type Artifact = {
+type Exhibit = {
   id: string
   name: string
   period?: string
@@ -22,7 +22,7 @@ export default function MuseumDetailPage() {
   const params = useParams()
   const museumId = params.id as string
   
-  const [artifacts, setArtifacts] = useState<Artifact[]>([])
+  const [artifacts, setArtifacts] = useState<Exhibit[]>([])
   const [loading, setLoading] = useState(true)
   const [museumName, setMuseumName] = useState('')
 
@@ -47,7 +47,7 @@ export default function MuseumDetailPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm(tr('Xóa hiện vật này?', 'Delete this artifact?'))) return
+    if (!confirm(tr('Xóa hiện vật này?', 'Delete this exhibit?'))) return
     await adminFetch(`/admin/exhibits/${id}`, { method: 'DELETE' })
     loadArtifacts()
   }
@@ -56,19 +56,6 @@ export default function MuseumDetailPage() {
     <div style={{ flex: 1, padding: 32 }}>
       {/* Header */}
       <div style={{ marginBottom: 32 }}>
-        <button
-          onClick={() => router.push('/admin/museums')}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'rgba(245,240,232,0.5)',
-            fontSize: 14,
-            cursor: 'pointer',
-            marginBottom: 12,
-          }}
-        >
-          ← {tr('Bảo tàng', 'Museums')}
-        </button>
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -88,7 +75,7 @@ export default function MuseumDetailPage() {
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
             }}>
-              {artifacts.length} {tr('hiện vật', 'artifacts')}
+              {artifacts.length} {tr('hiện vật', 'exhibits')}
             </div>
           </div>
           <button
@@ -104,12 +91,12 @@ export default function MuseumDetailPage() {
               cursor: 'pointer',
             }}
           >
-            + {tr('Thêm hiện vật', 'Add artifact')}
+            + {tr('Thêm hiện vật', 'Add exhibit')}
           </button>
         </div>
       </div>
 
-      {/* Artifacts grid */}
+      {/* Exhibits grid */}
       {loading ? (
         <div style={{
           color: 'rgba(245,240,232,0.4)',
@@ -124,7 +111,7 @@ export default function MuseumDetailPage() {
           textAlign: 'center',
           paddingTop: 80,
         }}>
-          {tr('Chưa có hiện vật nào', 'No artifacts yet')}
+          {tr('Chưa có hiện vật nào', 'No exhibits yet')}
         </div>
       ) : (
         <div style={{

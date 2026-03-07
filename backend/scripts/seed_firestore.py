@@ -1,6 +1,6 @@
 """
 Seed Firestore with demo data.
-Creates museum "demo_museum" with 3 exhibits and 3 personas.
+Creates/updates museum "demo_museum" with 3 exhibits and 3 personas.
 """
 
 import os
@@ -13,12 +13,71 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from google.cloud import firestore
 
 
-async def seed_firestore(project_id="museai-2026"):
+async def seed_firestore(project_id: str | None = None):
     """Seed demo data into Firestore."""
-    
-    print("🌱 Starting Firestore seed...")
-    
-    db = firestore.AsyncClient(project=project_id)
+
+    resolved_project = project_id or os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not resolved_project:
+        raise RuntimeError("Missing GOOGLE_CLOUD_PROJECT. Set env var or pass project_id explicitly.")
+
+    print(f"🌱 Starting Firestore seed... (project={resolved_project})")
+
+    db = firestore.AsyncClient(project=resolved_project)
+
+    # Museum document (so Admin CMS can list/edit it like a normal museum)
+    museum_data = {
+        "id": "demo_museum",
+        "name": "Demo Museum",
+        "name_en": "Demo Museum",
+        "slug": "demo-museum",
+        "address": "1 Demo Street, District 1",
+        "city": "Ho Chi Minh City",
+        "country": "Vietnam",
+        "coordinates": {"lat": 10.7758439, "lng": 106.7017555},
+        "phone": "+84-28-0000-0000",
+        "email": "demo@guideqr.ai",
+        "website": "https://guideqr.ai",
+        "logo_url": "",
+        "cover_image_url": "",
+        "opening_hours": {
+            "monday": "08:00-17:00",
+            "tuesday": "08:00-17:00",
+            "wednesday": "08:00-17:00",
+            "thursday": "08:00-17:00",
+            "friday": "08:00-17:00",
+            "saturday": "08:00-17:00",
+            "sunday": "08:00-17:00",
+        },
+        "ticket_price": {
+            "adult_vnd": 30000,
+            "child_vnd": 15000,
+            "foreign_adult_usd": 2,
+            "free_for": "Children under 6",
+        },
+        "supported_languages": ["vi", "en", "es", "fr", "ja", "ko", "zh"],
+        "default_language": "vi",
+        "ai_persona": "Friendly museum guide with concise, factual storytelling.",
+        "welcome_message": {
+            "vi": "Xin chào! Tôi là hướng dẫn viên AI của bảo tàng.",
+            "en": "Welcome! I am your AI museum guide.",
+            "es": "Bienvenido. Soy tu guía de museo con IA.",
+            "fr": "Bienvenue. Je suis votre guide IA du musée.",
+            "ja": "ようこそ。私はAIミュージアムガイドです。",
+            "ko": "환영합니다. 저는 AI 박물관 가이드입니다.",
+            "zh": "欢迎。我是您的AI博物馆导览。",
+        },
+        "status": "active",
+        "artifact_count": 3,
+        "total_visits": 0,
+        "museum_admin_uid": "",
+        "created_by": "seed_script",
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "updated_at": firestore.SERVER_TIMESTAMP,
+    }
+
+    museum_ref = db.collection("museums").document("demo_museum")
+    await museum_ref.set(museum_data, merge=True)
+    print("  ✅ Upserted museum: demo_museum")
     
     # Exhibits data
     artifacts_data = [

@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { adminFetch, getAdminSession, clearAdminToken } from '@/lib/adminAuth'
+import { adminDownload, adminFetch, getAdminSession } from '@/lib/adminAuth'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
-type Tab = 'artifacts' | 'analytics' | 'qr' | 'settings'
+type Tab = 'exhibits' | 'analytics' | 'qr' | 'settings'
 
 export default function MuseumAdminHome() {
   const params = useParams()
@@ -14,7 +14,7 @@ export default function MuseumAdminHome() {
   const session = useMemo(() => getAdminSession(), [])
   const { locale } = useAdminI18n()
   const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
-  const [tab, setTab] = useState<Tab>('artifacts')
+  const [tab, setTab] = useState<Tab>('exhibits')
   const [museum, setMuseum] = useState<any>(null)
   const [artifacts, setArtifacts] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
@@ -51,32 +51,34 @@ export default function MuseumAdminHome() {
     <div style={{ flex: 1, padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <h1 style={{ margin: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>{museum?.name || museumId}</h1>
-          <div style={{ color: 'rgba(245,240,232,0.65)', fontSize: 13 }}>{museum?.address || ''}</div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+            {museum?.name || museumId}
+          </div>
+          <div style={{ color: 'rgba(245,240,232,0.65)', fontSize: 13, marginTop: 6 }}>{museum?.address || ''}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button onClick={() => router.push('/admin/museums')} style={btn}>{tr('Bảo tàng', 'Museums')}</button>
-          <button onClick={() => { clearAdminToken(); router.push('/admin/login') }} style={btn}>{tr('Đăng xuất', 'Logout')}</button>
         </div>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(140px,1fr))', gap: 10, marginBottom: 14 }}>
-        <Stat title={tr('Hiện vật', 'Artifacts')} value={artifacts.length} />
+        <Stat title={tr('Hiện vật', 'Exhibits')} value={artifacts.length} />
         <Stat title={tr('Lượt QR', 'QR visits')} value={museum?.total_visits || 0} />
         <Stat title={tr('Ngôn ngữ', 'Languages')} value={(museum?.supported_languages || []).length} />
       </div>
 
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-        <TabBtn active={tab === 'artifacts'} onClick={() => setTab('artifacts')}>{tr('Hiện vật', 'Artifacts')}</TabBtn>
+        <TabBtn active={tab === 'exhibits'} onClick={() => setTab('exhibits')}>{tr('Hiện vật', 'Exhibits')}</TabBtn>
         <TabBtn active={tab === 'analytics'} onClick={() => setTab('analytics')}>Analytics</TabBtn>
         <TabBtn active={tab === 'qr'} onClick={() => setTab('qr')}>QR Codes</TabBtn>
         <TabBtn active={tab === 'settings'} onClick={() => setTab('settings')}>{tr('Cài đặt', 'Settings')}</TabBtn>
       </div>
 
-      {tab === 'artifacts' && (
+      {tab === 'exhibits' && (
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-            <div style={{ fontWeight: 600 }}>{tr('Danh sách hiện vật', 'Artifact list')}</div>
+            <div style={{ fontWeight: 600 }}>{tr('Danh sách hiện vật', 'Exhibit list')}</div>
             <button onClick={() => router.push(`/admin/exhibits/new?museum=${museumId}`)} style={btnPrimary}>+ {tr('Thêm hiện vật', 'Add exhibit')}</button>
           </div>
           {artifacts.map((a) => (
@@ -107,7 +109,7 @@ export default function MuseumAdminHome() {
                   <span style={{ fontSize: 12 }}>{d.count}</span>
                 </div>
               ))}
-              <SectionTitle>{tr('Heatmap hiện vật', 'Artifact heatmap')}</SectionTitle>
+              <SectionTitle>{tr('Heatmap hiện vật', 'Exhibit heatmap')}</SectionTitle>
               {(analytics.heatmap || []).map((h: any, idx: number) => (
                 <div key={h.artifact_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
                   <span>{idx + 1}. {h.artifact_id}</span>
@@ -131,11 +133,11 @@ export default function MuseumAdminHome() {
                   <div style={{ display: 'flex', gap: 8 }}>
                     <a href={qrData.museum_qr.qr_data_url} download={`museum-${museumId}.png`} style={btnLink}>{tr('Tải PNG', 'Download PNG')}</a>
                     <button onClick={() => navigator.clipboard.writeText(qrData.museum_qr.qr_url)} style={btn}>{tr('Sao chép link', 'Copy link')}</button>
-                    <button onClick={() => window.open(`${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/qr/museum/${museumId}/zip`, '_blank')} style={btnPrimary}>Download ZIP</button>
+                    <button onClick={() => adminDownload(`/admin/qr/museum/${museumId}/zip`, `qr-${museumId}.zip`).catch((e) => alert(e?.message || 'Download failed'))} style={btnPrimary}>Download ZIP</button>
                   </div>
                 </div>
               </div>
-              <SectionTitle>{tr('QR từng hiện vật', 'Artifact QR codes')}</SectionTitle>
+              <SectionTitle>{tr('QR từng hiện vật', 'Exhibit QR codes')}</SectionTitle>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
                 {qrData.artifacts.map((a: any) => (
                   <div key={a.artifact_id} style={{ border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
@@ -194,7 +196,7 @@ function SectionTitle({ children }: any) {
 }
 
 const card: any = { background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 14 }
-const btn: any = { padding: '8px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', cursor: 'pointer' }
+const btn: any = { padding: '10px 14px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', fontSize: 14, fontWeight: 500, cursor: 'pointer' }
 const btnPrimary: any = { ...btn, background: '#C9A84C', color: '#0A0A0A', border: 'none', fontWeight: 600 }
 const btnLink: any = { ...btn, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }
 const input: any = { width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid rgba(255,255,255,0.15)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', boxSizing: 'border-box', marginBottom: 8 }

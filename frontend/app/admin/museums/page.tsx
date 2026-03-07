@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { adminFetch, clearAdminToken, getAdminSession } from '@/lib/adminAuth'
+import { adminFetch, getAdminSession } from '@/lib/adminAuth'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Museum = {
   id: string
   name: string
-  description: string
-  address: string
-  artifact_count: number
-  logo_url: string
+  description?: string
+  address?: string
+  artifact_count?: number
+  logo_url?: string
+  status?: string
 }
 
 export default function MuseumsPage() {
@@ -44,8 +45,8 @@ export default function MuseumsPage() {
 
   const loadMuseums = async () => {
     try {
-      const data = await adminFetch('/admin/museums/')
-      setMuseums(data)
+      const data = await adminFetch('/admin/museums/?include_inactive=true')
+      setMuseums(data || [])
     } catch {
       router.push('/admin/login')
     } finally {
@@ -77,9 +78,17 @@ export default function MuseumsPage() {
     }
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm(tr('Xóa bảo tàng này?', 'Delete this museum?'))) return
-    await adminFetch(`/admin/museums/${id}`, { method: 'DELETE' })
+  const handleToggleStatus = async (museum: Museum) => {
+    const current = String(museum.status || 'active').toLowerCase()
+    const next = current === 'inactive' ? 'active' : 'inactive'
+    const ask = next === 'inactive'
+      ? tr('Chuyển bảo tàng sang Inactive?', 'Set museum to Inactive?')
+      : tr('Kích hoạt lại bảo tàng (Active)?', 'Set museum back to Active?')
+    if (!confirm(ask)) return
+    await adminFetch(`/admin/museums/${museum.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ status: next }),
+    })
     loadMuseums()
   }
 
@@ -126,34 +135,17 @@ export default function MuseumsPage() {
           <button
             onClick={() => router.push('/admin/museums/new')}
             style={{
-              padding: '10px 20px',
+              padding: '10px 16px',
               background: '#C9A84C',
               color: '#0A0A0A',
-              border: 'none',
+              border: '1px solid rgba(201,168,76,0.35)',
               borderRadius: 10,
               fontSize: 14,
-              fontWeight: 500,
+              fontWeight: 600,
               cursor: 'pointer',
             }}
           >
             + {tr('Thêm bảo tàng', 'Add museum')}
-          </button>
-          <button
-            onClick={() => {
-              clearAdminToken()
-              router.push('/admin/login')
-            }}
-            style={{
-              padding: '10px 16px',
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 10,
-              color: 'rgba(245,240,232,0.6)',
-              fontSize: 14,
-              cursor: 'pointer',
-            }}
-          >
-            {tr('Đăng xuất', 'Logout')}
           </button>
         </div>
       </div>
@@ -186,8 +178,16 @@ export default function MuseumsPage() {
               }}
               onClick={() => router.push(`/admin/museums/${m.id}`)}
             >
-              <div style={{ fontSize: 18, fontWeight: 500, marginBottom: 4 }}>
-                {m.name}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <img
+                  src={m.logo_url || ''}
+                  alt={m.name}
+                  style={{ width: 34, height: 34, borderRadius: 8, objectFit: 'cover', background: 'rgba(255,255,255,0.08)' }}
+                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                />
+                <div style={{ fontSize: 18, fontWeight: 500 }}>
+                  {m.name}
+                </div>
               </div>
               <div style={{
                 fontSize: 12,
@@ -208,23 +208,39 @@ export default function MuseumsPage() {
                   padding: '3px 10px',
                   borderRadius: 20,
                 }}>
-                  {m.artifact_count || 0} {tr('hiện vật', 'artifacts')}
+                  {m.artifact_count || 0} {tr('hiện vật', 'exhibits')}
                 </span>
-                <button
-                  onClick={e => {
-                    e.stopPropagation()
-                    handleDelete(m.id)
-                  }}
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    color: 'rgba(248,113,113,0.6)',
-                    cursor: 'pointer',
-                    fontSize: 18,
-                  }}
-                >
-                  ✕
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    fontSize: 11,
+                    padding: '3px 8px',
+                    borderRadius: 999,
+                    border: '1px solid rgba(255,255,255,0.12)',
+                    color: String(m.status || 'active').toLowerCase() === 'inactive' ? '#fca5a5' : '#86efac',
+                    background: String(m.status || 'active').toLowerCase() === 'inactive' ? 'rgba(127,29,29,0.3)' : 'rgba(22,101,52,0.25)',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.06em',
+                  }}>
+                    {String(m.status || 'active').toLowerCase() === 'inactive' ? 'Inactive' : 'Active'}
+                  </span>
+                  <button
+                    onClick={e => {
+                      e.stopPropagation()
+                      handleToggleStatus(m)
+                    }}
+                    style={{
+                      background: 'rgba(255,255,255,0.06)',
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      color: '#F5F0E8',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      padding: '6px 10px',
+                      borderRadius: 8,
+                    }}
+                  >
+                    {String(m.status || 'active').toLowerCase() === 'inactive' ? tr('Kích hoạt', 'Activate') : tr('Tạm ngưng', 'Deactivate')}
+                  </button>
+                </div>
               </div>
             </div>
           ))}

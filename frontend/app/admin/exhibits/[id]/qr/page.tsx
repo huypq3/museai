@@ -6,30 +6,30 @@ import QRCode from 'qrcode'
 import { adminFetch } from '@/lib/adminAuth'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
-export default function ArtifactQRPage() {
+export default function ExhibitQRPage() {
   const router = useRouter()
   const { locale } = useAdminI18n()
   const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
   const params = useParams()
-  const artifactId = params.id as string
+  const exhibitId = params.id as string
   
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  const [artifactName, setArtifactName] = useState('')
+  const [exhibitName, setExhibitName] = useState('')
   const [museumId, setMuseumId] = useState('')
   const [url, setUrl] = useState('')
 
   useEffect(() => {
-    loadArtifact()
+    loadExhibit()
   }, [])
 
-  const loadArtifact = async () => {
+  const loadExhibit = async () => {
     try {
-      const data = await adminFetch(`/admin/exhibits/${artifactId}`)
-      setArtifactName(data.name)
+      const data = await adminFetch(`/admin/exhibits/${exhibitId}`)
+      setExhibitName(data.name)
       setMuseumId(data.museum_id)
       
       // Generate URL
-      const qrUrl = `${window.location.origin}/welcome?museum=${data.museum_id}&exhibit=${artifactId}`
+      const qrUrl = `${window.location.origin}/welcome?museum=${data.museum_id}&exhibit=${exhibitId}`
       setUrl(qrUrl)
       
       // Generate QR code
@@ -52,7 +52,7 @@ export default function ArtifactQRPage() {
     if (!canvasRef.current) return
     const link = document.createElement('a')
     link.href = canvasRef.current.toDataURL('image/png')
-    link.download = `qr-${artifactId}.png`
+    link.download = `qr-${exhibitId}.png`
     link.click()
   }
 
@@ -69,27 +69,22 @@ export default function ArtifactQRPage() {
         width: '100%',
         textAlign: 'center',
       }}>
-        <button
-          onClick={() => router.back()}
-          style={{
-            background: 'none',
-            border: 'none',
-            color: 'rgba(245,240,232,0.5)',
-            fontSize: 14,
-            cursor: 'pointer',
-            marginBottom: 24,
-          }}
-        >
-          ← {tr('Quay lại', 'Back')}
-        </button>
-
         <div style={{
           fontFamily: 'Cormorant Garamond, serif',
-          fontSize: 24,
+          fontSize: 28,
           color: '#C9A84C',
-          marginBottom: 8,
+          marginBottom: 6,
         }}>
-          {tr('Mã QR', 'QR Code')}
+          MuseAI Admin
+        </div>
+        <div style={{
+          fontSize: 12,
+          color: 'rgba(245,240,232,0.4)',
+          letterSpacing: '0.15em',
+          textTransform: 'uppercase',
+          marginBottom: 18,
+        }}>
+          {tr('Mã QR hiện vật', 'Exhibit QR code')}
         </div>
 
         <div style={{
@@ -97,7 +92,7 @@ export default function ArtifactQRPage() {
           color: 'rgba(245,240,232,0.9)',
           marginBottom: 32,
         }}>
-          {artifactName}
+          {exhibitName}
         </div>
 
         {/* QR Code on white background */}
@@ -140,21 +135,10 @@ export default function ArtifactQRPage() {
           >
             📥 {tr('Tải PNG', 'Download PNG')}
           </button>
-          <button
-            onClick={() => router.back()}
-            style={{
-              flex: 1,
-              padding: '12px',
-              background: 'rgba(255,255,255,0.06)',
-              border: '1px solid rgba(255,255,255,0.1)',
-              borderRadius: 10,
-              color: '#F5F0E8',
-              fontSize: 14,
-              cursor: 'pointer',
-            }}
-          >
-            {tr('Đóng', 'Close')}
-          </button>
+          <button onClick={() => router.push(`/admin/exhibits/${exhibitId}`)} style={{
+            flex: 1, padding: '12px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)',
+            borderRadius: 10, color: '#F5F0E8', fontSize: 14, cursor: 'pointer',
+          }}>{tr('Mở chi tiết', 'Open details')}</button>
         </div>
       </div>
     </div>

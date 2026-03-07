@@ -9,7 +9,7 @@ import secrets
 import string
 from typing import Any, Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from google.cloud import firestore
 from pydantic import BaseModel, Field, field_validator
 
@@ -151,13 +151,18 @@ async def _museum_stats(museum_id: str) -> dict[str, int]:
 
 
 @router.get("/")
-async def list_museums(admin=Depends(get_current_admin)):
+async def list_museums(
+    include_inactive: bool = Query(default=False),
+    admin=Depends(get_current_admin),
+):
     db = get_db()
     museums: list[dict[str, Any]] = []
     async for doc in db.collection("museums").stream():
         data = doc.to_dict() or {}
         data["id"] = doc.id
         if admin["role"] == "museum_admin" and admin.get("museum_id") != doc.id:
+            continue
+        if not include_inactive and str(data.get("status", "active")).lower() == "inactive":
             continue
         stats = await _museum_stats(doc.id)
         data.update(stats)
