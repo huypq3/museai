@@ -54,6 +54,7 @@ export default function WelcomePage() {
   return (
     <div className="min-h-screen relative flex flex-col items-center justify-center px-6"
          style={{
+           paddingBottom: 'max(24px, env(safe-area-inset-bottom))',
            background: 'radial-gradient(ellipse at center, rgba(201,168,76,0.08) 0%, #0A0A0A 60%)',
          }}>
       
@@ -166,14 +167,18 @@ export default function WelcomePage() {
             color: 'var(--museum-dark)',
             fontFamily: 'DM Sans',
             fontWeight: 500,
+            marginBottom: 'max(12px, env(safe-area-inset-bottom))',
           }}>
           {t(language, 'welcome.cta')}
         </button>
       </div>
       
       {/* Footer */}
-      <div className="absolute bottom-6 text-xs opacity-30"
-           style={{ fontFamily: 'DM Sans' }}>
+      <div className="absolute text-xs opacity-30"
+           style={{
+             fontFamily: 'DM Sans',
+             bottom: 'max(24px, env(safe-area-inset-bottom))',
+           }}>
         {t(language, 'welcome.powered')}
       </div>
     </div>

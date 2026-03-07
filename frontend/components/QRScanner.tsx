@@ -31,7 +31,7 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: "environment" },
       });
-      
+
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         videoRef.current.play();
@@ -49,12 +49,12 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
     if (animationRef.current) {
       cancelAnimationFrame(animationRef.current);
     }
-    
+
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
     }
-    
+
     setIsScanning(false);
   };
 
@@ -87,21 +87,17 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
 
   const handleQRDetected = (data: string) => {
     stopCamera();
-    
+
     try {
-      // Parse URL format:
-      // - https://guideqr.ai?...&exhibit=yyy (new)
-      // - https://guideqr.ai?...&artifact=yyy (legacy)
       const url = new URL(data);
       const museum_id = url.searchParams.get("museum") || undefined;
       const exhibit_id =
         url.searchParams.get("exhibit") ||
         url.searchParams.get("artifact") ||
         undefined;
-      
+
       onScan({ museum_id, exhibit_id, artifact_id: exhibit_id });
-    } catch (e) {
-      // Fallback: plain text format like "museum_id:exhibit_id"
+    } catch {
       const parts = data.split(":");
       if (parts.length === 2) {
         onScan({ museum_id: parts[0], exhibit_id: parts[1], artifact_id: parts[1] });
@@ -114,44 +110,67 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black z-50 flex flex-col">
+    <div className="fixed inset-0 z-50 flex flex-col" style={{ backgroundColor: "#0A0A0A" }}>
       {/* Header */}
-      <div className="bg-slate-900 p-4 flex items-center justify-between">
-        <h2 className="text-white text-lg font-semibold">{t(language, "camera.scan_qr_title")}</h2>
+      <div
+        className="p-4 flex items-center justify-between"
+        style={{
+          background: "rgba(10,10,10,0.96)",
+          borderBottom: "1px solid rgba(201,168,76,0.15)",
+        }}
+      >
+        <h2
+          className="text-lg font-semibold"
+          style={{ color: "#F5F0E8", fontFamily: "DM Sans" }}
+        >
+          {t(language, "camera.scan_qr_title")}
+        </h2>
         <button
           onClick={() => {
             stopCamera();
             onClose();
           }}
-          className="text-white text-2xl"
+          className="w-9 h-9 rounded-lg text-xl flex items-center justify-center"
+          style={{
+            color: "#C9A84C",
+            background: "#111111",
+            border: "1px solid rgba(201,168,76,0.15)",
+          }}
+          aria-label="Close"
         >
           ✕
         </button>
       </div>
 
       {/* Camera View */}
-      <div className="flex-1 relative">
-        <video
-          ref={videoRef}
-          className="w-full h-full object-cover"
-          playsInline
-        />
-        
+      <div className="flex-1 relative" style={{ backgroundColor: "#0A0A0A" }}>
+        <video ref={videoRef} className="w-full h-full object-cover" playsInline />
+
         <canvas ref={canvasRef} className="hidden" />
+
+        {/* Subtle dark overlay for contrast */}
+        <div
+          className="absolute inset-0 pointer-events-none"
+          style={{ background: "radial-gradient(ellipse at center, transparent 38%, rgba(0,0,0,0.72) 100%)" }}
+        />
 
         {/* Scan Frame Overlay */}
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="w-64 h-64 border-4 border-blue-500 rounded-lg relative">
-            {/* Corner Indicators */}
-            <div className="absolute -top-1 -left-1 w-8 h-8 border-t-4 border-l-4 border-blue-500"></div>
-            <div className="absolute -top-1 -right-1 w-8 h-8 border-t-4 border-r-4 border-blue-500"></div>
-            <div className="absolute -bottom-1 -left-1 w-8 h-8 border-b-4 border-l-4 border-blue-500"></div>
-            <div className="absolute -bottom-1 -right-1 w-8 h-8 border-b-4 border-r-4 border-blue-500"></div>
-            
-            {/* Scanning Line */}
+          <div
+            className="w-64 h-64 rounded-lg relative"
+            style={{ border: "2px solid rgba(201,168,76,0.75)", boxShadow: "0 0 0 1px rgba(0,0,0,0.35) inset" }}
+          >
+            <div className="absolute -top-1 -left-1 w-8 h-8" style={{ borderTop: "3px solid #C9A84C", borderLeft: "3px solid #C9A84C" }} />
+            <div className="absolute -top-1 -right-1 w-8 h-8" style={{ borderTop: "3px solid #C9A84C", borderRight: "3px solid #C9A84C" }} />
+            <div className="absolute -bottom-1 -left-1 w-8 h-8" style={{ borderBottom: "3px solid #C9A84C", borderLeft: "3px solid #C9A84C" }} />
+            <div className="absolute -bottom-1 -right-1 w-8 h-8" style={{ borderBottom: "3px solid #C9A84C", borderRight: "3px solid #C9A84C" }} />
+
             {isScanning && (
               <div className="absolute inset-0 overflow-hidden">
-                <div className="w-full h-1 bg-blue-500 animate-scan-line"></div>
+                <div
+                  className="w-full h-1 animate-scan-line"
+                  style={{ background: "linear-gradient(to right, transparent, #C9A84C, transparent)" }}
+                />
               </div>
             )}
           </div>
@@ -159,17 +178,25 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
       </div>
 
       {/* Instructions */}
-      <div className="bg-slate-900 p-6 text-center">
+      <div
+        className="p-6 text-center"
+        style={{
+          background: "#111111",
+          borderTop: "1px solid rgba(201,168,76,0.15)",
+          paddingBottom: "max(24px, env(safe-area-inset-bottom))",
+        }}
+      >
         {error ? (
-          <p className="text-red-400 text-sm">{error}</p>
+          <p className="text-sm" style={{ color: "#f87171", fontFamily: "DM Sans" }}>
+            {error}
+          </p>
         ) : (
-          <p className="text-gray-300 text-sm">
+          <p className="text-sm" style={{ color: "#F5F0E8", fontFamily: "DM Sans" }}>
             {t(language, "camera.scan_qr_hint")}
           </p>
         )}
       </div>
 
-      {/* CSS for scan line animation */}
       <style jsx>{`
         @keyframes scan-line {
           0% { transform: translateY(0); }

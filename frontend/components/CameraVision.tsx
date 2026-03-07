@@ -202,7 +202,7 @@ export default function CameraVision({ museumId, onArtifactDetected, onClose }: 
 
       {/* Capture Button */}
       {!isAnalyzing && !result && !error && (
-        <div className="bg-slate-900 p-6 flex flex-col items-center">
+        <div className="bg-slate-900 p-6 flex flex-col items-center" style={{ paddingBottom: "max(24px, env(safe-area-inset-bottom))" }}>
           <button
             onClick={captureAndAnalyze}
             className="w-20 h-20 bg-blue-600 hover:bg-blue-700 rounded-full flex items-center justify-center shadow-lg transition transform active:scale-95"
@@ -217,7 +217,7 @@ export default function CameraVision({ museumId, onArtifactDetected, onClose }: 
 
       {/* Loading State */}
       {isAnalyzing && (
-        <div className="bg-slate-900 p-6 flex flex-col items-center">
+        <div className="bg-slate-900 p-6 flex flex-col items-center" style={{ paddingBottom: "max(24px, env(safe-area-inset-bottom))" }}>
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
           <p className="text-white">Đang phân tích...</p>
         </div>

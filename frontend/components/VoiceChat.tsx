@@ -634,7 +634,7 @@ export default function VoiceChat({ artifactId, language, onLanguageChange, muse
           flexShrink: 0,
           background: "linear-gradient(180deg, rgba(10,10,10,0.9) 0%, rgba(10,10,10,1) 30%)",
           borderTop: "1px solid rgba(201,168,76,0.15)",
-          padding: "12px 16px 28px",
+          padding: "12px 16px calc(16px + env(safe-area-inset-bottom))",
           display: "flex",
           flexDirection: "column",
           alignItems: "center",

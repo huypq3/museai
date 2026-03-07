@@ -181,7 +181,7 @@ export default function CameraTourPage() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col" style={{ minHeight: "100dvh", backgroundColor: "#0A0A0A" }}>
       {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-20 p-4"
            style={{
@@ -201,8 +201,8 @@ export default function CameraTourPage() {
               onClick={() => setShowLangMenu(!showLangMenu)}
               className="w-10 h-10 rounded-xl flex items-center justify-center text-2xl transition-all hover:brightness-110"
               style={{
-                background: 'rgba(255,255,255,0.08)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: 'rgba(17,17,17,0.88)',
+                border: '1px solid rgba(201,168,76,0.15)',
               }}>
               {LANGUAGE_FLAGS[language] || "🌐"}
             </button>
@@ -211,8 +211,8 @@ export default function CameraTourPage() {
             {showLangMenu && (
               <div className="absolute right-0 top-12 rounded-xl overflow-hidden shadow-xl"
                    style={{
-                     background: 'rgba(20,20,20,0.98)',
-                     border: '1px solid rgba(255,255,255,0.1)',
+                     background: 'rgba(17,17,17,0.98)',
+                     border: '1px solid rgba(201,168,76,0.15)',
                    }}>
                 {Object.entries(LANGUAGE_FLAGS).map(([lang, flag]) => (
                   <button
@@ -381,12 +381,15 @@ export default function CameraTourPage() {
               </div>
             ) : (
               <>
-                <div style={{ fontSize: 28, opacity: 0.35 }}>🏛️</div>
+                <div style={{ fontSize: 28, color: '#C9A84C', opacity: 1, textShadow: '0 1px 4px rgba(0,0,0,0.6)' }}>🏛️</div>
                 <div style={{
                   fontFamily: 'Cormorant Garamond, serif',
                   fontStyle: 'italic',
                   fontSize: 13,
-                  color: 'rgba(245,240,232,0.4)',
+                  color: '#C9A84C',
+                  opacity: 1,
+                  textShadow: '0 1px 4px rgba(0,0,0,0.6)',
+                  fontWeight: 600,
                   textAlign: 'center',
                   padding: '0 16px',
                   lineHeight: 1.4,
@@ -415,7 +418,8 @@ export default function CameraTourPage() {
       {/* Footer controls */}
       <div className="p-4 flex gap-3"
            style={{
-             background: 'linear-gradient(to top, rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.8) 100%)'
+             background: 'linear-gradient(to top, rgba(10,10,10,0.95) 0%, rgba(10,10,10,0.8) 100%)',
+             paddingBottom: 'max(16px, env(safe-area-inset-bottom))',
            }}>
         <button
           onClick={handleCapture}
@@ -433,8 +437,8 @@ export default function CameraTourPage() {
           onClick={() => setShowQRScanner(true)}
           className="w-14 h-14 rounded-[14px] flex items-center justify-center text-xl transition-all"
           style={{
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.1)',
+            background: '#111111',
+            border: '1px solid rgba(201,168,76,0.15)',
           }}>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M4 4h5v2H6v3H4V4Zm11 0h5v5h-2V6h-3V4ZM4 15h2v3h3v2H4v-5Zm14 0h2v5h-5v-2h3v-3ZM8 8h8v8H8V8Zm2 2v4h4v-4h-4Z" fill="currentColor"/>
@@ -448,7 +452,7 @@ export default function CameraTourPage() {
              style={{ background: 'rgba(0,0,0,0.7)' }}
              onClick={() => setState("scanning")}>
           <div className="w-full p-6 rounded-t-3xl"
-               style={{ background: 'rgba(10,10,10,0.98)', borderTop: '1px solid var(--gold-dim)' }}
+               style={{ background: 'rgba(10,10,10,0.98)', borderTop: '1px solid var(--gold-dim)', paddingBottom: 'calc(24px + env(safe-area-inset-bottom))' }}
                onClick={(e) => e.stopPropagation()}>
             
             <div className="text-[10px] tracking-[0.2em] uppercase mb-3"
