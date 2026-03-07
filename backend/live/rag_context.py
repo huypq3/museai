@@ -35,7 +35,8 @@ def _get_embedding_model():
     if _embedding_model is None:
         from vertexai.language_models import TextEmbeddingModel
 
-        _embedding_model = TextEmbeddingModel.from_pretrained("gemini-embedding-001")
+        embedding_model_name = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+        _embedding_model = TextEmbeddingModel.from_pretrained(embedding_model_name)
     return _embedding_model
 
 
@@ -154,7 +155,7 @@ async def semantic_search(artifact_id: str, query: str, top_k: int = 3) -> str:
 
 def add_embeddings_to_chunks(chunks: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """
-    Mutates and returns chunks with `embedding` field using gemini-embedding-001.
+    Mutates and returns chunks with `embedding` field using GEMINI_EMBEDDING_MODEL.
     """
     if not chunks:
         return chunks

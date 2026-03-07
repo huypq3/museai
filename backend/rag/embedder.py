@@ -1,6 +1,6 @@
 """
 RAG embedder utilities for embedding text and storing vectors in Firestore.
-Uses Gemini Embedding API: model="gemini-embedding-001".
+Uses Gemini Embedding API: model from GEMINI_EMBEDDING_MODEL (default: "gemini-embedding-001").
 """
 
 import os
@@ -13,6 +13,7 @@ import asyncio
 
 
 logger = logging.getLogger(__name__)
+EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
 
 
 def embed_text(text: str) -> List[float]:
@@ -32,9 +33,9 @@ def embed_text(text: str) -> List[float]:
         
         client = genai.Client(api_key=api_key)
         
-        # Call Gemini Embedding API using gemini-embedding-001.
+        # Call Gemini Embedding API using configured embedding model.
         result = client.models.embed_content(
-            model="gemini-embedding-001",
+            model=EMBEDDING_MODEL,
             contents=text
         )
         
