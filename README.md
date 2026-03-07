@@ -154,8 +154,10 @@ Critical vars:
 
 ### Frontend
 See [`frontend/.env.example`](frontend/.env.example).
-Critical var:
+Critical vars:
 - `NEXT_PUBLIC_BACKEND_URL`
+
+Note: frontend auto-derives WebSocket URL from `NEXT_PUBLIC_BACKEND_URL` automatically.
 
 ## Deploy to Google Cloud
 

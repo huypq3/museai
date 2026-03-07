@@ -43,8 +43,14 @@ jobs:
 
       - name: Create env vars file
         run: |
+          ORIGINS_RAW="${{ vars.ALLOWED_ORIGINS }}"
+          # Normalize accidental '.env style' values like:
+          # 'ALLOWED_ORIGINS=https://a.com,https://b.com'
+          # 'ALLOWED_ORIGINS = https://a.com,https://b.com'
+          ORIGINS_CLEAN=$(echo "$ORIGINS_RAW" | sed -E 's/^[[:space:]]*ALLOWED_ORIGINS[[:space:]]*=[[:space:]]*//; s/^[[:space:]]+//; s/[[:space:]]+$//')
+
           printf 'GOOGLE_CLOUD_PROJECT: "%s"\n' "${{ env.PROJECT_ID }}" > /tmp/env-vars.yaml
-          printf 'ALLOWED_ORIGINS: "%s"\n' "${{ vars.ALLOWED_ORIGINS }}" >> /tmp/env-vars.yaml
+          printf 'ALLOWED_ORIGINS: "%s"\n' "$ORIGINS_CLEAN" >> /tmp/env-vars.yaml
           printf 'GCS_BUCKET: "%s"\n' "${{ vars.GCS_BUCKET_NAME }}" >> /tmp/env-vars.yaml
           printf 'GCS_BUCKET_NAME: "%s"\n' "${{ vars.GCS_BUCKET_NAME }}" >> /tmp/env-vars.yaml
           printf 'JWT_SECRET: "%s"\n' "${{ secrets.JWT_SECRET }}" >> /tmp/env-vars.yaml
