@@ -14,7 +14,15 @@ except Exception:  # pragma: no cover
 
 
 REDIS_URL = os.getenv("REDIS_URL", "")
-_redis_client = redis.from_url(REDIS_URL, decode_responses=True) if (redis and REDIS_URL) else None
+
+_VALID_REDIS = (
+    redis is not None 
+    and bool(REDIS_URL) 
+    and "localhost" not in REDIS_URL
+    and "127.0.0.1" not in REDIS_URL
+)
+_redis_client = redis.from_url(REDIS_URL, decode_responses=True) if _VALID_REDIS else None
+
 _memory_windows: dict[str, Deque[float]] = defaultdict(deque)
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
