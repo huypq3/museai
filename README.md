@@ -16,16 +16,23 @@ Gemini Live Agent Challenge 2026 — Category: Live Agents.
 - Devpost: https://geminiliveagentchallenge.devpost.com/
 
 ## The Problem
-Museums need multilingual, interactive guidance, but human-guide capacity is limited and expensive.
-Traditional audio tours are static and cannot answer follow-up questions.
-Visitors want instant, mobile-first experiences without app installation.
+197+ museums in Vietnam alone — yet most international visitors leave without truly understanding what they're seeing.
+- Human guides are expensive (~$15,000/month for multilingual coverage) and unavailable outside opening hours
+- Traditional audio guides are static: no follow-up questions, no personalization, no interactivity
+- Language barriers cut off millions of tourists from exhibit stories told only in the local language
+- Existing museum apps require downloads and signups — visitors simply don't bother
 
 ## The Solution
-MuseAI provides a real-time AI voice guide for museums:
-- Visitor scans QR or opens camera tour.
-- System identifies museum/exhibit context.
-- Gemini Live answers with grounded, museum-provided knowledge.
-- Conversation is interruptible and multilingual.
+MuseAI transforms any museum exhibit into a real-time, interruptible AI conversation — no app required.
+
+1. **Scan** — Visitor scans a QR code at the museum entrance or beside any exhibit
+2. **Identify** — Camera vision recognizes the exhibit instantly
+3. **Converse** — Gemini Live API answers questions in real-time, grounded in verified museum knowledge (no hallucinations)
+4. **Switch** — Visitor changes language mid-conversation across 7 most common languages
+5. **Read** — Live transcript displays alongside voice output for noisy environments and accessibility (deaf/hard-of-hearing)
+
+Zero installation. Zero language barrier. 
+Every exhibit, every visitor, every language.
 
 ## Architecture
 [Architecture diagram image here]
@@ -59,10 +66,19 @@ Camera Tour -> Vision Matching (Vertex/Gemini Vision)
 - Real-time voice conversation (interruptible)
 - Camera-based exhibit recognition
 - RAG-grounded answers from museum data
-- Multilingual voice guide
+- Multilingual guide for tourists: VI, EN, ES, FR, JA, KO, ZH
+- Voice + transcript mode for noisy environments
+- Accessibility support for deaf/hard-of-hearing visitors
 - QR-first, no app install
 - Admin CMS (super admin + museum admin)
 - Analytics events pipeline
+
+## Multilingual & Accessibility
+MuseAI is designed for mixed visitor groups in real museums:
+- Tourists can switch to their preferred language and keep context per exhibit.
+- Transcript stays visible while AI speaks, useful in crowded/noisy galleries.
+- Transcript-first usage supports visitors with hearing impairments.
+- Staff can still provide the same guided experience without extra devices.
 
 ## Prerequisites
 - Python 3.11+
@@ -130,6 +146,7 @@ See [`backend/.env.example`](backend/.env.example).
 Critical vars:
 - `JWT_SECRET` (required, >= 32 chars)
 - `GEMINI_API_KEY` (required)
+- `GEMINI_EMBEDDING_MODEL` (optional, default: `gemini-embedding-001`)
 - `GOOGLE_CLOUD_PROJECT` (required)
 - `GOOGLE_APPLICATION_CREDENTIALS` (required for local GCP auth)
 - `ALLOWED_ORIGINS` (must include frontend origin)
