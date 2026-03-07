@@ -1,0 +1,41 @@
+# MuseAI by GuideQR.ai
+
+MuseAI is an AI voice guide platform for museums.
+Visitors scan a QR code and get real-time, multilingual voice guidance in browser (no app install).
+
+## Canonical Site
+- https://guideqr.ai
+
+## Core Product
+- Real-time AI voice guide for museum exhibits
+- QR-first access (no app installation)
+- Multilingual support: Vietnamese, English, Spanish, French, Japanese, Korean, Chinese
+- Camera-based exhibit recognition
+- Grounded responses from museum-approved knowledge base
+- Admin CMS for museums (museum management, exhibit content, analytics, QR generation)
+
+## Primary Pages
+- Landing: https://guideqr.ai/
+- Welcome (museum entry): https://guideqr.ai/welcome
+- Camera tour: https://guideqr.ai/camera-tour
+- Exhibit detail: https://guideqr.ai/exhibit/{exhibit_id}
+- Admin login: https://guideqr.ai/admin/login
+
+## Audience
+- B2C: museum visitors
+- B2B: museum directors, operations managers, curators
+
+## Positioning
+- Premium digital museum experience
+- Fast deployment for museums
+- Lower operating costs compared to full human-guide coverage
+
+## Brand Keywords
+- MuseAI
+- GuideQR.ai
+- AI museum guide
+- museum voice assistant
+- QR museum experience
+
+## Contact
+- hello@guideqr.ai

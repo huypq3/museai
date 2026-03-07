@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+
+# Keep admin and backend-like endpoints out of search results
+Disallow: /admin/
+Disallow: /api/
+Disallow: /_next/
+
+# Host
+Host: https://guideqr.ai
+
+# Sitemap
+Sitemap: https://guideqr.ai/sitemap.xml
