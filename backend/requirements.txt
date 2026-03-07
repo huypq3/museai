@@ -22,3 +22,4 @@ qrcode[pil]==7.4.2
 bcrypt==4.2.0
 redis==5.0.8
 slowapi==0.1.9
+python-jose[cryptography]
