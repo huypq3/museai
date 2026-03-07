@@ -684,7 +684,7 @@ export default function HomePage() {
       </section>
 
       <footer style={{ borderTop: `1px solid ${BRAND.goldBorder}`, position: "relative", zIndex: 2 }}>
-        <div className="mx-auto w-full max-w-[1200px] px-5 lg:px-12 py-10 grid md:grid-cols-3 gap-8">
+        <div className="footer-grid mx-auto w-full max-w-[1200px] px-5 lg:px-12 py-10">
           <div>
             <div style={{ color: BRAND.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 28 }}>MuseAI</div>
             <div style={{ color: BRAND.textMuted, marginTop: 8, fontSize: 12, letterSpacing: "0.12em", textTransform: "uppercase" }}>Point. Scan. Discover.</div>
@@ -692,7 +692,7 @@ export default function HomePage() {
           </div>
           <div>
             <div className="landing-footer-heading">{tr.footerProduct}</div>
-            <div className="space-y-2 mt-3">
+            <div className="footer-links">
               <button className="landing-link text-left" onClick={() => scrollTo("features")}>{tr.navFeatures}</button>
               <button className="landing-link text-left" onClick={() => scrollTo("how-it-works")}>{tr.navHow}</button>
               <button className="landing-link text-left" onClick={() => scrollTo("for-museums")}>{tr.navMuseums}</button>
@@ -701,7 +701,7 @@ export default function HomePage() {
           </div>
           <div>
             <div className="landing-footer-heading">{tr.footerResources}</div>
-            <div className="space-y-2 mt-3">
+            <div className="footer-links">
               <Link className="landing-link" href="/admin/login">{tr.navAdmin}</Link>
               <a className="landing-link" href="https://github.com/huypq3/museai/" target="_blank" rel="noreferrer">GitHub Repo</a>
               <a className="landing-link" href="mailto:hello@guideqr.ai">hello@guideqr.ai</a>
@@ -822,11 +822,14 @@ export default function HomePage() {
           border-color: ${BRAND.gold};
         }
         .landing-link {
-          color: ${BRAND.textSecondary};
-          transition: color 0.6s ease;
+          color: rgba(245, 240, 232, 0.5);
+          transition: color 0.2s ease;
+          font-size: 14px;
+          text-decoration: none;
+          display: block;
         }
         .landing-link:hover {
-          color: ${BRAND.gold};
+          color: ${BRAND.text};
         }
         .landing-input {
           border: 1px solid ${BRAND.goldBorder};
@@ -842,10 +845,29 @@ export default function HomePage() {
         }
         .landing-footer-heading {
           color: ${BRAND.gold};
+          font-family: DM Sans, sans-serif;
           font-size: 11px;
-          letter-spacing: 0.15em;
+          letter-spacing: 0.2em;
           text-transform: uppercase;
           font-weight: 500;
+          margin-bottom: 20px;
+        }
+        .footer-links {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .footer-grid {
+          display: grid;
+          grid-template-columns: 1fr;
+          row-gap: 32px;
+        }
+        @media (min-width: 768px) {
+          .footer-grid {
+            grid-template-columns: 2fr 1.5fr 1.5fr;
+            column-gap: 64px;
+            row-gap: 48px;
+          }
         }
         .waveform {
           display: flex;
