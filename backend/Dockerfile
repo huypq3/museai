@@ -5,6 +5,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
+# Build deps for packages that compile native extensions (e.g. pycairo/reportlab stack).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    pkg-config \
+    libcairo2-dev \
+  && rm -rf /var/lib/apt/lists/*
+
 # Install backend dependencies.
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

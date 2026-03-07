@@ -169,21 +169,25 @@ Minimum local backend env that must be valid:
 PROJECT_ID="your-project-id"
 REGION="asia-southeast1"
 SERVICE="museai-backend"
-REPOSITORY="museai-repo"
-IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/backend"
 
 gcloud auth login
 gcloud config set project "${PROJECT_ID}"
+gcloud auth configure-docker
 
-gcloud auth configure-docker "${REGION}-docker.pkg.dev"
-gcloud builds submit --tag "${IMAGE}" ./backend
-
+docker build -t "gcr.io/${PROJECT_ID}/${SERVICE}:latest" ./backend
+docker push "gcr.io/${PROJECT_ID}/${SERVICE}:latest"
 gcloud run deploy "${SERVICE}" \
-  --image "${IMAGE}" \
+  --image "gcr.io/${PROJECT_ID}/${SERVICE}:latest" \
   --platform managed \
   --region "${REGION}" \
   --allow-unauthenticated \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},APP_ENV=production,ENFORCE_HTTPS=true,ALLOWED_ORIGINS=https://guideqr.ai,GCS_BUCKET=museai-assets,JWT_SECRET=<your_jwt_secret>,GEMINI_API_KEY=<your_gemini_api_key>,REDIS_URL=<your_redis_url>"
+```
+
+If you still prefer Cloud Build, avoid stream-log permission errors:
+
+```bash
+gcloud builds submit --tag "gcr.io/${PROJECT_ID}/${SERVICE}:latest" --suppress-logs ./backend
 ```
 
 ### Frontend → Vercel (recommended)
@@ -277,10 +281,9 @@ MIT
 
 ## 14) CI/CD Auto Deploy Setup
 
-This repo now includes 2 GitHub Actions workflows:
+This repo includes one GitHub Actions workflow:
 
-- Backend Cloud Run: `.github/workflows/deploy.yml`
-- Frontend Vercel: `.github/workflows/deploy-frontend-vercel.yml`
+- Full deploy pipeline (Backend Cloud Run + Frontend Vercel): `.github/workflows/deploy.yml`
 
 ### Required GitHub Secrets
 
