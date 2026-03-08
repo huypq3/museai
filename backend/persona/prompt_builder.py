@@ -13,7 +13,7 @@ def build_prompt(exhibit: Dict[str, Any], language: str = "vi") -> str:
     
     Args:
         exhibit: Exhibit dict with optional nested persona fields.
-        language: Language code (vi, en, fr, zh, ja, ko)
+        language: Language code (vi, en, es, fr, zh, ja, ko)
     
     Returns:
         str: Fallback prompt text
@@ -161,6 +161,7 @@ def _get_language_instructions(language: str) -> str:
     language_map = {
         "vi": "Reply in Vietnamese with a friendly and natural tone.",
         "en": "Reply in English with a friendly and natural tone.",
+        "es": "Reply in Spanish with a friendly and natural tone.",
         "fr": "Reply in French with a friendly and natural tone.",
         "zh": "Reply in Chinese with a friendly and natural tone.",
         "ja": "Reply in Japanese with a friendly and natural tone.",

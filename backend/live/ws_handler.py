@@ -752,6 +752,7 @@ class GeminiLiveHandler:
         return {
             "vi": "Vietnamese",
             "en": "English",
+            "es": "Spanish",
             "fr": "French",
             "ja": "Japanese",
             "ko": "Korean",
