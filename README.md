@@ -29,7 +29,7 @@ MuseAI transforms any museum exhibit into a real-time, interruptible AI conversa
 2. **Identify** — Camera vision recognizes the exhibit instantly
 3. **Converse** — Gemini Live API answers questions in real-time, grounded in verified museum knowledge (no hallucinations)
 4. **Switch** — Visitor changes language mid-conversation across 7 most common languages
-5. **Read** — Live transcript displays alongside voice output for noisy environments and accessibility (deaf/hard-of-hearing)
+5. **Read + See** — Live transcript displays alongside voice output, and contextual illustration images from museum data are shown to make explanations more vivid (useful in noisy spaces and for accessibility)
 
 Zero installation. Zero language barrier. 
 Every exhibit, every visitor, every language.
@@ -68,6 +68,7 @@ Camera Tour -> Vision Matching (Vertex/Gemini Vision)
 - RAG-grounded answers from museum data
 - Multilingual guide for tourists: VI, EN, ES, FR, JA, KO, ZH
 - Voice + transcript mode for noisy environments
+- Transcript-linked visual illustrations from museum-curated image data
 - Accessibility support for deaf/hard-of-hearing visitors
 - QR-first, no app install
 - Admin CMS (super admin + museum admin)
@@ -77,6 +78,7 @@ Camera Tour -> Vision Matching (Vertex/Gemini Vision)
 MuseAI is designed for mixed visitor groups in real museums:
 - Tourists can switch to their preferred language and keep context per exhibit.
 - Transcript stays visible while AI speaks, useful in crowded/noisy galleries.
+- During transcript playback, the interface can show relevant exhibit/scenes images curated by the museum to improve understanding.
 - Transcript-first usage supports visitors with hearing impairments.
 - Staff can still provide the same guided experience without extra devices.
 
@@ -207,7 +209,7 @@ gcloud run deploy "${SERVICE}" \
   --platform managed \
   --region "${REGION}" \
   --allow-unauthenticated \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},APP_ENV=production,ENFORCE_HTTPS=true,ALLOWED_ORIGINS=https://guideqr.ai,https://www.guideqr.ai,PUBLIC_APP_URL=https://guideqr.ai,MAX_REQUEST_BYTES=10485760,WS_MAX_PER_IP=3,WS_MAX_PER_HOUR=20"
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},APP_ENV=production,ENFORCE_HTTPS=true,ALLOWED_ORIGINS=https://guideqr.ai,https://www.guideqr.ai,PUBLIC_APP_URL=https://guideqr.ai,MAX_REQUEST_BYTES=10485760,WS_MAX_PER_IP=5,WS_MAX_PER_HOUR=100"
 ```
 
 ### Frontend

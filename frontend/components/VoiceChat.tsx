@@ -24,6 +24,89 @@ type Message = {
   timestamp: Date;
 };
 
+const WS_NOTICE_I18N: Record<
+  LanguageCode,
+  Record<string, string>
+> = {
+  vi: {
+    normal: "Phiên đã kết thúc.",
+    going_away: "Kết nối đã đóng do rời trang/ứng dụng.",
+    rate_limit: "Bạn đang thao tác quá nhanh. Vui lòng chờ rồi thử lại.",
+    inactivity: "Phiên đã đóng do không hoạt động.",
+    max_duration: "Phiên đã đạt thời lượng tối đa.",
+    hard_limit: "Phiên đã chạm giới hạn hệ thống. Vui lòng kết nối lại.",
+    heartbeat_timeout: "Mất kết nối mạng tạm thời.",
+    server_error: "Lỗi máy chủ. Vui lòng thử kết nối lại.",
+    unexpected_close: "Kết nối bị gián đoạn. Vui lòng thử lại.",
+  },
+  en: {
+    normal: "Session ended.",
+    going_away: "Connection closed because page/app was left.",
+    rate_limit: "Rate limit reached. Please wait and retry.",
+    inactivity: "Session closed due to inactivity.",
+    max_duration: "Session reached maximum duration.",
+    hard_limit: "Session hit server limit. Please reconnect.",
+    heartbeat_timeout: "Network heartbeat timeout.",
+    server_error: "Server error. Please reconnect.",
+    unexpected_close: "Connection interrupted. Please retry.",
+  },
+  es: {
+    normal: "La sesión ha finalizado.",
+    going_away: "La conexión se cerró al salir de la página/aplicación.",
+    rate_limit: "Has alcanzado el límite. Espera e inténtalo de nuevo.",
+    inactivity: "La sesión se cerró por inactividad.",
+    max_duration: "La sesión alcanzó la duración máxima.",
+    hard_limit: "La sesión alcanzó el límite del servidor. Reconecta.",
+    heartbeat_timeout: "Tiempo de espera de red agotado.",
+    server_error: "Error del servidor. Vuelve a conectar.",
+    unexpected_close: "Conexión interrumpida. Inténtalo de nuevo.",
+  },
+  fr: {
+    normal: "La session est terminée.",
+    going_away: "Connexion fermée après avoir quitté la page/l'app.",
+    rate_limit: "Limite atteinte. Veuillez patienter puis réessayer.",
+    inactivity: "Session fermée pour inactivité.",
+    max_duration: "La session a atteint sa durée maximale.",
+    hard_limit: "La session a atteint la limite serveur. Reconnectez-vous.",
+    heartbeat_timeout: "Délai réseau dépassé.",
+    server_error: "Erreur serveur. Veuillez vous reconnecter.",
+    unexpected_close: "Connexion interrompue. Veuillez réessayer.",
+  },
+  ja: {
+    normal: "セッションが終了しました。",
+    going_away: "ページ/アプリを離れたため接続が閉じられました。",
+    rate_limit: "操作が多すぎます。しばらく待って再試行してください。",
+    inactivity: "無操作のためセッションが終了しました。",
+    max_duration: "セッション時間の上限に達しました。",
+    hard_limit: "サーバー上限に達しました。再接続してください。",
+    heartbeat_timeout: "ネットワーク接続がタイムアウトしました。",
+    server_error: "サーバーエラーです。再接続してください。",
+    unexpected_close: "接続が中断されました。再試行してください。",
+  },
+  ko: {
+    normal: "세션이 종료되었습니다.",
+    going_away: "페이지/앱을 벗어나 연결이 종료되었습니다.",
+    rate_limit: "요청이 너무 많습니다. 잠시 후 다시 시도하세요.",
+    inactivity: "비활성으로 세션이 종료되었습니다.",
+    max_duration: "세션 최대 시간이 초과되었습니다.",
+    hard_limit: "서버 제한에 도달했습니다. 다시 연결해 주세요.",
+    heartbeat_timeout: "네트워크 연결 시간이 초과되었습니다.",
+    server_error: "서버 오류가 발생했습니다. 다시 연결해 주세요.",
+    unexpected_close: "연결이 끊어졌습니다. 다시 시도해 주세요.",
+  },
+  zh: {
+    normal: "会话已结束。",
+    going_away: "离开页面/应用后连接已关闭。",
+    rate_limit: "请求过于频繁，请稍后重试。",
+    inactivity: "因长时间无操作，会话已关闭。",
+    max_duration: "会话已达到最大时长。",
+    hard_limit: "会话达到服务器限制，请重新连接。",
+    heartbeat_timeout: "网络心跳超时。",
+    server_error: "服务器错误，请重新连接。",
+    unexpected_close: "连接中断，请重试。",
+  },
+};
+
 function mergeTranscript(prev: string, incomingRaw: string): string {
   const incoming = incomingRaw.trim();
   if (!incoming) return prev;
@@ -424,6 +507,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const goldLight = "#FFE08A";
   const goldRing = "rgba(246,196,83,0.72)";
   const goldRingSoft = "rgba(255,224,138,0.45)";
+  const wsNoticeText =
+    wsNotice
+      ? WS_NOTICE_I18N[language]?.[wsNotice.reason] ||
+        WS_NOTICE_I18N.en[wsNotice.reason] ||
+        (language === "vi" ? wsNotice.messageVi : wsNotice.messageEn)
+      : "";
 
   // ─── Render ───────────────────────────────────────────────────────────
   return (
@@ -446,41 +535,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           gap: "12px",
         }}
       >
-        {wsNotice && (
-          <div
-            style={{
-              marginBottom: 8,
-              background: "rgba(255,255,255,0.06)",
-              border: "1px solid rgba(255,255,255,0.14)",
-              color: "#F5F0E8",
-              borderRadius: 10,
-              padding: "6px 10px",
-              fontSize: 12,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 10,
-            }}
-          >
-            <span>{language === "vi" ? wsNotice.messageVi : wsNotice.messageEn}</span>
-            {wsNotice.reconnectAllowed && (
-              <button
-                onClick={reconnectNow}
-                style={{
-                  background: "transparent",
-                  border: "1px solid rgba(201,168,76,0.5)",
-                  color: "#C9A84C",
-                  borderRadius: 8,
-                  padding: "2px 8px",
-                  fontSize: 11,
-                  cursor: "pointer",
-                }}
-              >
-                {"Reconnect"}
-              </button>
-            )}
-          </div>
-        )}
         <button
           onClick={handleBack}
           style={{
@@ -607,18 +661,64 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         }}
       >
         {sentences.length === 0 && !currentAIText ? (
-          <p
-            style={{
-              color: "rgba(245,240,232,0.3)",
-              fontFamily: "Cormorant Garamond, serif",
-              fontSize: "18px",
-              fontStyle: "italic",
-              textAlign: "center",
-              margin: 0,
-            }}
-          >
-            {state === "connecting" ? t(language, "voice.connecting") : t(language, "voice.listening")}
-          </p>
+          <div style={{ textAlign: "center", width: "100%", maxWidth: 420, margin: "0 auto" }}>
+            {wsNotice ? (
+              <div
+                style={{
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(255,255,255,0.14)",
+                  color: "#F5F0E8",
+                  borderRadius: 12,
+                  padding: "12px 14px",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <p
+                  style={{
+                    margin: 0,
+                    fontFamily: "DM Sans, sans-serif",
+                    fontSize: 14,
+                    lineHeight: 1.45,
+                  }}
+                >
+                  {wsNoticeText}
+                </p>
+                {wsNotice.reconnectAllowed && (
+                  <button
+                    onClick={reconnectNow}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid rgba(201,168,76,0.65)",
+                      color: "#C9A84C",
+                      borderRadius: 10,
+                      padding: "6px 14px",
+                      fontSize: 13,
+                      fontFamily: "DM Sans, sans-serif",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {language === "vi" ? "Kết nối lại" : "Reconnect"}
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p
+                style={{
+                  color: "rgba(245,240,232,0.3)",
+                  fontFamily: "Cormorant Garamond, serif",
+                  fontSize: "18px",
+                  fontStyle: "italic",
+                  textAlign: "center",
+                  margin: 0,
+                }}
+              >
+                {state === "connecting" ? t(language, "voice.connecting") : t(language, "voice.listening")}
+              </p>
+            )}
+          </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             {sentences.map((s, i) => (

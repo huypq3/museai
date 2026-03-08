@@ -32,8 +32,8 @@ _memory_sets: dict[str, dict[str, float]] = defaultdict(dict)
 
 LOGIN_LOCKOUT_THRESHOLD = int(os.getenv("LOGIN_MAX_ATTEMPTS", "5"))
 LOGIN_LOCKOUT_MINUTES = int(os.getenv("LOGIN_LOCKOUT_MINUTES", "15"))
-WS_MAX_PER_IP = int(os.getenv("WS_MAX_PER_IP", "3"))
-WS_MAX_PER_HOUR = int(os.getenv("WS_MAX_PER_HOUR", "20"))
+WS_MAX_PER_IP = int(os.getenv("WS_MAX_PER_IP", "5"))
+WS_MAX_PER_HOUR = int(os.getenv("WS_MAX_PER_HOUR", "100"))
 
 # Endpoint-level middleware limits.
 # Key: (method, regex_path)
@@ -237,9 +237,17 @@ async def check_ws_limits(ip: str) -> None:
     active = await _get_count(active_key, 600)
     hourly = await _get_count(hourly_key, 3600)
     if active >= WS_MAX_PER_IP:
-        raise HTTPException(status_code=429, detail="Too many active WebSocket sessions")
+        retry_after = await _ttl_seconds(active_key, 600)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Too many active WebSocket sessions. Retry in {max(1, retry_after)}s",
+        )
     if hourly >= WS_MAX_PER_HOUR:
-        raise HTTPException(status_code=429, detail="Hourly WebSocket session limit exceeded")
+        retry_after = await _ttl_seconds(hourly_key, 3600)
+        raise HTTPException(
+            status_code=429,
+            detail=f"Hourly WebSocket session limit exceeded. Retry in {max(1, retry_after)}s",
+        )
 
 
 async def register_ws_session(ip: str) -> None:

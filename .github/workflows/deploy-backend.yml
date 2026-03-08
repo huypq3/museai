@@ -72,8 +72,8 @@ jobs:
 
           WS_REQUIRE_EPHEMERAL_TOKEN_VAL=$(pick "${{ vars.WS_REQUIRE_EPHEMERAL_TOKEN }}" "true")
           EPHEMERAL_TOKEN_EXPIRE_SECONDS_VAL=$(pick "${{ vars.EPHEMERAL_TOKEN_EXPIRE_SECONDS }}" "3600")
-          WS_MAX_PER_IP_VAL=$(pick "${{ vars.WS_MAX_PER_IP }}" "3")
-          WS_MAX_PER_HOUR_VAL=$(pick "${{ vars.WS_MAX_PER_HOUR }}" "20")
+          WS_MAX_PER_IP_VAL=$(pick "${{ vars.WS_MAX_PER_IP }}" "5")
+          WS_MAX_PER_HOUR_VAL=$(pick "${{ vars.WS_MAX_PER_HOUR }}" "100")
           WS_GLOBAL_MAX_SESSIONS_VAL=$(pick "${{ vars.WS_GLOBAL_MAX_SESSIONS }}" "500")
           WS_HEARTBEAT_INTERVAL_SEC_VAL=$(pick "${{ vars.WS_HEARTBEAT_INTERVAL_SEC }}" "30")
           WS_PONG_TIMEOUT_SEC_VAL=$(pick "${{ vars.WS_PONG_TIMEOUT_SEC }}" "10")
