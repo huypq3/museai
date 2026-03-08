@@ -359,6 +359,9 @@ async def websocket_persona(
         try:
             await check_ws_limits(ip)
         except HTTPException as rl_e:
+            logger.warning("WS rate limit exceeded: ip=%s exhibit=%s detail=%s", ip, exhibit_id, rl_e.detail)
+            await websocket.accept()
+            await websocket.send_json({"type": "error", "code": "WS_RATE_LIMIT", "message": str(rl_e.detail)})
             await websocket.close(code=4029, reason=str(rl_e.detail))
             await audit_log("ws_limit_exceeded", "anonymous", {"ip": ip, "exhibit_id": exhibit_id})
             return
@@ -367,12 +370,30 @@ async def websocket_persona(
         require_ws_token = os.getenv("WS_REQUIRE_EPHEMERAL_TOKEN", "true").lower() == "true"
         if require_ws_token:
             if not token:
-                await websocket.close(code=4001)
+                logger.warning("WS missing ephemeral token: ip=%s exhibit=%s", ip, exhibit_id)
+                await websocket.accept()
+                await websocket.send_json({"type": "error", "code": "WS_TOKEN_MISSING", "message": "Missing ephemeral token"})
+                await websocket.close(code=4001, reason="Missing token")
                 return
-            payload = verify_ephemeral_token(token)
+            try:
+                payload = verify_ephemeral_token(token)
+            except HTTPException as token_e:
+                logger.warning("WS invalid ephemeral token: ip=%s exhibit=%s detail=%s", ip, exhibit_id, token_e.detail)
+                await websocket.accept()
+                await websocket.send_json({"type": "error", "code": "WS_TOKEN_INVALID", "message": str(token_e.detail)})
+                await websocket.close(code=4001, reason=str(token_e.detail))
+                return
             requested_id = payload.get("exhibit_id")
             if requested_id != exhibit_id:
-                await websocket.close(code=4003)
+                logger.warning(
+                    "WS token exhibit mismatch: ip=%s ws_exhibit=%s token_exhibit=%s",
+                    ip,
+                    exhibit_id,
+                    requested_id,
+                )
+                await websocket.accept()
+                await websocket.send_json({"type": "error", "code": "WS_TOKEN_EXHIBIT_MISMATCH", "message": "Token exhibit mismatch"})
+                await websocket.close(code=4003, reason="Token exhibit mismatch")
                 return
 
         # Load exhibit data from Firestore
