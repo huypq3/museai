@@ -6,7 +6,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { t } from "@/lib/i18n";
-import { LanguageCode } from "@/lib/constants";
+import { BACKEND_URL, LanguageCode } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
 
 type Props = {
@@ -167,7 +167,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   // ─── Load exhibit name ────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/exhibits/${exhibitId}`)
+    fetch(`${BACKEND_URL}/exhibits/${exhibitId}`)
       .then((r) => r.json())
       .then((data) => setExhibitName(data.data?.name || ""))
       .catch((e) => console.error("Failed to load exhibit:", e));

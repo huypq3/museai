@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { adminFetch, getAdminSession } from '@/lib/adminAuth'
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
 import { useAdminI18n } from '@/lib/i18n/admin'
+import { FaQrcode, FaRegCopy, FaDownload } from 'react-icons/fa'
 
 type MuseumRow = { id: string; name: string; address?: string; exhibit_count?: number; total_visits?: number; status?: string; logo_url?: string }
 
@@ -77,14 +78,14 @@ export default function AdminDashboardPage() {
 
       <div style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)', borderRadius: 12, padding: 16 }}>
         <div style={{ marginBottom: 12, color: '#F5F0E8', fontWeight: 600 }}>{tr('Top bảo tàng', 'Top Museums')}</div>
-        <div style={{ width: '100%', height: 220, marginBottom: 10 }}>
-          <ResponsiveContainer>
-            <BarChart data={overview?.top_museums || []}>
-              <CartesianGrid stroke="rgba(255,255,255,0.08)" />
-              <XAxis dataKey="name" stroke="rgba(245,240,232,0.65)" />
-              <YAxis stroke="rgba(245,240,232,0.65)" />
+        <div style={{ width: '100%', minHeight: 260, height: 260, marginBottom: 10 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={overview?.top_museums || []} margin={{ top: 8, right: 8, left: -10, bottom: 16 }}>
+              <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+              <XAxis dataKey="name" stroke="rgba(245,240,232,0.65)" tick={{ fontSize: 11 }} interval={0} angle={-12} textAnchor="end" height={48} />
+              <YAxis allowDecimals={false} width={34} stroke="rgba(245,240,232,0.65)" tick={{ fontSize: 11 }} />
               <Tooltip />
-              <Bar dataKey="count" fill="#C9A84C" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="count" fill="#C9A84C" radius={[6, 6, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -128,7 +129,7 @@ export default function AdminDashboardPage() {
                     setQrOpenMuseumId(m.id)
                   }}
                 >
-                  🔳
+                  <FaQrcode size={14} />
                 </button>
               </div>
             </div>
@@ -136,8 +137,8 @@ export default function AdminDashboardPage() {
               <div style={{ marginTop: 10, marginLeft: 6, padding: 10, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, background: 'rgba(255,255,255,0.03)', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
                 <img src={museumQrMap[m.id].qr_data_url} alt={`Museum QR ${m.name}`} style={{ width: 96, height: 96 }} />
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <a href={museumQrMap[m.id].qr_data_url} download={`museum-${m.id}.png`} style={{ ...btnGhost, textDecoration: 'none', textAlign: 'center' }}>↓ PNG</a>
-                  <button style={btnGhost} onClick={() => navigator.clipboard.writeText(museumQrMap[m.id].qr_url)}>📋 {tr('Sao chép', 'Copy')}</button>
+                  <a href={museumQrMap[m.id].qr_data_url} download={`museum-${m.id}.png`} style={{ ...btnGhost, textDecoration: 'none', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}><FaDownload size={12} /> PNG</a>
+                  <button style={{ ...btnGhost, display: 'inline-flex', alignItems: 'center', gap: 6 }} onClick={() => navigator.clipboard.writeText(museumQrMap[m.id].qr_url)}><FaRegCopy size={12} /> {tr('Sao chép', 'Copy')}</button>
                 </div>
               </div>
             )}

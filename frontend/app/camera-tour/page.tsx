@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useLanguage } from "@/hooks/useLanguage";
 import { t } from "@/lib/i18n";
-import { LanguageCode } from "@/lib/constants";
+import { BACKEND_URL, LanguageCode } from "@/lib/constants";
 import QRScanner, { QRScanPayload } from "@/components/QRScanner";
 import { trackEvent } from "@/lib/analytics";
 import { validateMuseum } from "@/lib/api";
@@ -156,7 +156,7 @@ export default function CameraTourPage() {
         formData.append('file', blob, 'frame.jpg');
         
         try {
-          const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/vision/recognize/${museumId}`, {
+          const response = await fetch(`${BACKEND_URL}/vision/recognize/${museumId}`, {
             method: 'POST',
             body: formData,
           });

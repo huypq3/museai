@@ -116,7 +116,9 @@ async def _register_signal_handlers() -> None:
 
 # CORS middleware
 def _normalize_origin(origin: str) -> str:
-    return origin.strip().rstrip("/")
+    cleaned = origin.strip()
+    cleaned = cleaned.replace("ALLOWED_ORIGINS=", "").replace("ALLOWED_ORIGINS =", "").strip()
+    return cleaned.rstrip("/")
 
 
 default_dev_origins = [
@@ -124,6 +126,13 @@ default_dev_origins = [
 ]
 raw_origins = os.getenv("ALLOWED_ORIGINS", ",".join(default_dev_origins))
 ALLOWED_ORIGINS = [_normalize_origin(o) for o in raw_origins.split(",") if o.strip()]
+
+# Keep www/non-www variants aligned to avoid accidental CORS lockout.
+if "https://guideqr.ai" in ALLOWED_ORIGINS and "https://www.guideqr.ai" not in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS.append("https://www.guideqr.ai")
+if "https://www.guideqr.ai" in ALLOWED_ORIGINS and "https://guideqr.ai" not in ALLOWED_ORIGINS:
+    ALLOWED_ORIGINS.append("https://guideqr.ai")
+
 logger.info("CORS allowed origins: %s", ALLOWED_ORIGINS)
 app.add_middleware(
     CORSMiddleware,

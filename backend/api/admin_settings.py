@@ -74,14 +74,23 @@ async def update_system_settings(body: SystemSettingsUpdate, admin=Depends(get_c
     require_super_admin(admin)
     db = get_db()
     payload = body.model_dump()
-    payload["updated_at"] = firestore.SERVER_TIMESTAMP
-    payload["updated_by"] = admin.get("uid")
+    db_payload = {
+        **payload,
+        "updated_at": firestore.SERVER_TIMESTAMP,
+        "updated_by": admin.get("uid"),
+    }
 
     ref = db.collection("system_settings").document(SETTINGS_DOC_ID)
-    await ref.set(payload, merge=True)
+    await ref.set(db_payload, merge=True)
     await audit_log(
         event="system_settings_updated",
         actor=str(admin.get("username", admin.get("uid", "super_admin"))),
-        details={"keys": list(payload.keys())},
+        details={"keys": list(db_payload.keys())},
     )
-    return {"success": True, "settings": payload}
+    return {
+        "success": True,
+        "settings": {
+            **payload,
+            "updated_by": admin.get("uid"),
+        },
+    }

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { setAdminSession } from '@/lib/adminAuth'
 import { useAdminI18n } from '@/lib/i18n/admin'
+import { BACKEND_URL } from '@/lib/constants'
 
 export default function AdminLogin() {
   const router = useRouter()
@@ -20,7 +21,7 @@ export default function AdminLogin() {
     setError('')
     try {
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_BACKEND_URL}/admin/auth/login`,
+        `${BACKEND_URL}/admin/auth/login`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

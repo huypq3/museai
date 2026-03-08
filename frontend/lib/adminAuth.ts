@@ -1,8 +1,8 @@
-const BACKEND = process.env.NEXT_PUBLIC_BACKEND_URL
+import { BACKEND_URL } from './constants'
 
 function getBackendBase(): string {
-  if (!BACKEND) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured')
-  return BACKEND
+  if (!BACKEND_URL) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured')
+  return BACKEND_URL
 }
 
 export type AdminRole = 'super_admin' | 'museum_admin'

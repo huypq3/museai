@@ -8,6 +8,7 @@ import MultiImageUpload from '@/components/admin/MultiImageUpload'
 import TagInput from '@/components/admin/TagInput'
 import { validateExhibitPublishable } from '@/lib/validation'
 import { useAdminI18n } from '@/lib/i18n/admin'
+import { FaQrcode } from 'react-icons/fa'
 
 type Tab = 'basic' | 'vision' | 'knowledge' | 'scenes'
 
@@ -112,7 +113,7 @@ export default function EditExhibitPage() {
         <TabBtn active={tab === 'vision'} onClick={() => setTab('vision')}>Camera Recognition</TabBtn>
         <TabBtn active={tab === 'knowledge'} onClick={() => setTab('knowledge')}>Knowledge Base</TabBtn>
         <TabBtn active={tab === 'scenes'} onClick={() => setTab('scenes')}>Scenes</TabBtn>
-        <button onClick={() => router.push(`/admin/exhibits/${exhibitId}/qr`)} style={btn}>🔳 QR</button>
+        <button onClick={() => router.push(`/admin/exhibits/${exhibitId}/qr`)} style={{ ...btn, display: 'inline-flex', alignItems: 'center', gap: 6 }}><FaQrcode size={14} /> QR</button>
       </div>
 
       <div style={card}>

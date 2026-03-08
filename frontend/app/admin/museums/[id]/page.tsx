@@ -1,9 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { CSSProperties } from 'react'
 import { useRouter, useParams } from 'next/navigation'
 import { adminFetch } from '@/lib/adminAuth'
 import { useAdminI18n } from '@/lib/i18n/admin'
+import { FaQrcode, FaDownload, FaLink } from 'react-icons/fa'
 
 type Exhibit = {
   id: string
@@ -26,6 +28,7 @@ export default function MuseumDetailPage() {
   const [loading, setLoading] = useState(true)
   const [museumName, setMuseumName] = useState('')
   const [museumQr, setMuseumQr] = useState<{ qr_data_url: string; qr_url: string } | null>(null)
+  const [showQrModal, setShowQrModal] = useState(false)
 
   useEffect(() => {
     loadExhibits()
@@ -66,12 +69,32 @@ export default function MuseumDetailPage() {
           alignItems: 'center',
         }}>
           <div>
-            <div style={{
-              fontFamily: 'Cormorant Garamond, serif',
-              fontSize: 28,
-              color: '#C9A84C',
-            }}>
-              {museumName || museumId}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{
+                fontFamily: 'Cormorant Garamond, serif',
+                fontSize: 28,
+                color: '#C9A84C',
+              }}>
+                {museumName || museumId}
+              </div>
+              <button
+                onClick={() => setShowQrModal(true)}
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  border: '1px solid rgba(255,255,255,0.14)',
+                  background: 'rgba(255,255,255,0.04)',
+                  color: '#C9A84C',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+                title={tr('QR bảo tàng', 'Museum QR')}
+              >
+                <FaQrcode size={16} />
+              </button>
             </div>
             <div style={{
               fontSize: 12,
@@ -99,39 +122,6 @@ export default function MuseumDetailPage() {
           </button>
         </div>
       </div>
-
-      {museumQr && (
-        <div style={{
-          background: 'rgba(255,255,255,0.04)',
-          border: '1px solid rgba(255,255,255,0.08)',
-          borderRadius: 12,
-          padding: 12,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          marginBottom: 18,
-        }}>
-          <img src={museumQr.qr_data_url} alt={`Museum QR ${museumName || museumId}`} style={{ width: 92, height: 92 }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ fontSize: 12, opacity: 0.75 }}>{tr('QR bảo tàng', 'Museum QR')}</div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <a
-                href={museumQr.qr_data_url}
-                download={`museum-${museumId}.png`}
-                style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', textDecoration: 'none', fontSize: 13 }}
-              >
-                ↓ PNG
-              </a>
-              <button
-                onClick={() => navigator.clipboard.writeText(museumQr.qr_url)}
-                style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', fontSize: 13, cursor: 'pointer' }}
-              >
-                📋 {tr('Sao chép', 'Copy')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Exhibits grid */}
       {loading ? (
@@ -225,6 +215,73 @@ export default function MuseumDetailPage() {
           ))}
         </div>
       )}
+
+      {showQrModal && museumQr && (
+        <div
+          onClick={() => setShowQrModal(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,0.55)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1200,
+            padding: 20,
+          }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              width: '100%',
+              maxWidth: 520,
+              background: '#111111',
+              border: '1px solid rgba(255,255,255,0.12)',
+              borderRadius: 14,
+              padding: 20,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#C9A84C', fontWeight: 600 }}>
+                <FaQrcode size={16} />
+                <span>{tr('QR bảo tàng', 'Museum QR')}</span>
+              </div>
+              <button onClick={() => setShowQrModal(false)} style={{ ...modalBtn, width: 32, padding: 0 }}>✕</button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <img src={museumQr.qr_data_url} alt={`Museum QR ${museumName || museumId}`} style={{ width: 180, height: 180, background: '#fff', borderRadius: 8 }} />
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6 }}>{tr('Đường dẫn', 'URL')}</div>
+                <div style={{ fontSize: 12, lineHeight: 1.5, wordBreak: 'break-all', marginBottom: 12, color: 'rgba(245,240,232,0.86)' }}>
+                  {museumQr.qr_url}
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <a href={museumQr.qr_data_url} download={`museum-${museumId}.png`} style={{ ...modalBtn, textDecoration: 'none' }}>
+                    <FaDownload size={12} /> PNG
+                  </a>
+                  <button onClick={() => navigator.clipboard.writeText(museumQr.qr_url)} style={modalBtn}>
+                    <FaLink size={12} /> {tr('Sao chép link', 'Copy link')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
+}
+
+const modalBtn: CSSProperties = {
+  padding: '8px 12px',
+  borderRadius: 10,
+  border: '1px solid rgba(255,255,255,0.14)',
+  background: 'rgba(255,255,255,0.04)',
+  color: '#F5F0E8',
+  fontSize: 13,
+  cursor: 'pointer',
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: 6,
 }
