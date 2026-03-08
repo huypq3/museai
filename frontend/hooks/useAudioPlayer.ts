@@ -43,7 +43,6 @@ export function useAudioPlayer() {
       console.warn("AudioContext unlock failed:", e);
     }
   }, []);
-
   // ─── Internal: schedule và phát 1 chunk ───────────────────────────────
   const _playChunkInternal = async (ctx: AudioContext, base64: string) => {
     try {
@@ -67,7 +66,10 @@ export function useAudioPlayer() {
 
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
-      source.connect(ctx.destination);
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = 1.25;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
 
       // Schedule seamless — tiếp nối ngay sau chunk trước
       const currentTime = ctx.currentTime;

@@ -57,6 +57,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Guard against stale SSL_CERT_FILE values pointing to missing files.
+_ssl_cert_file = os.getenv("SSL_CERT_FILE")
+if _ssl_cert_file and not Path(_ssl_cert_file).exists():
+    logger.warning("Invalid SSL_CERT_FILE path detected (%s). Falling back to system trust store.", _ssl_cert_file)
+    os.environ.pop("SSL_CERT_FILE", None)
+
 # Initialize FastAPI app
 app = FastAPI(
     title="MuseAI API",
