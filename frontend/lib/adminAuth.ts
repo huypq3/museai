@@ -1,8 +1,9 @@
-import { BACKEND_URL } from './constants'
+import { getBackendUrl } from './constants'
 
 function getBackendBase(): string {
-  if (!BACKEND_URL) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured')
-  return BACKEND_URL
+  const backend = getBackendUrl()
+  if (!backend) throw new Error('NEXT_PUBLIC_BACKEND_URL is not configured')
+  return backend
 }
 
 export type AdminRole = 'super_admin' | 'museum_admin'

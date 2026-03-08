@@ -8,8 +8,17 @@ function normalizeBackendUrl(rawUrl: string): string {
   return rawUrl;
 }
 
-export const BACKEND_URL = normalizeBackendUrl(RAW_BACKEND_URL);
-export const WS_BACKEND_URL = BACKEND_URL.replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+export function getBackendUrl(): string {
+  return normalizeBackendUrl(RAW_BACKEND_URL);
+}
+
+export function getWsBackendUrl(): string {
+  return getBackendUrl().replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+}
+
+// Backward-compatible exports.
+export const BACKEND_URL = getBackendUrl();
+export const WS_BACKEND_URL = getWsBackendUrl();
 
 export const SUPPORTED_LANGUAGES = [
   { code: "vi", name: "Tiếng Việt", flag: "🇻🇳" },
