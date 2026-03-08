@@ -1,11 +1,25 @@
 const RAW_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
 
 function normalizeBackendUrl(rawUrl: string): string {
-  // On HTTPS pages, force HTTPS backend to avoid mixed-content blocking.
-  if (typeof window !== "undefined" && window.location.protocol === "https:" && rawUrl.startsWith("http://")) {
-    return rawUrl.replace(/^http:\/\//, "https://");
+  const normalizedInput = (rawUrl || "").trim();
+  if (!normalizedInput) return "http://localhost:8080";
+
+  // Handle protocol-relative URLs.
+  if (normalizedInput.startsWith("//")) {
+    if (typeof window !== "undefined" && window.location.protocol === "https:") {
+      return `https:${normalizedInput}`;
+    }
+    return `http:${normalizedInput}`;
   }
-  return rawUrl;
+
+  let out = normalizedInput;
+
+  // On HTTPS pages, force HTTPS backend to avoid mixed-content blocking.
+  if (typeof window !== "undefined" && window.location.protocol === "https:" && /^http:\/\//i.test(out)) {
+    out = out.replace(/^http:\/\//i, "https://");
+  }
+
+  return out;
 }
 
 export function getBackendUrl(): string {
