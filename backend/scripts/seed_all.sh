@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Local reseed helper for exhibit-first schema with backward compatibility.
+# Local reseed helper for exhibit-first schema.
 #
 # Usage:
 #   cd backend
@@ -9,7 +9,7 @@ set -euo pipefail
 #   ./scripts/reseed_local.sh
 #
 # Optional:
-#   GOOGLE_CLOUD_PROJECT=museai-2026 ./scripts/reseed_local.sh
+#   GOOGLE_CLOUD_PROJECT=your-project-id ./scripts/reseed_local.sh
 
 echo "🌱 MuseAI local seed started"
 
@@ -24,18 +24,15 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
 fi
 
 echo "Using Python: $PYTHON_BIN"
-echo "Project: ${GOOGLE_CLOUD_PROJECT:-museai-2026}"
+echo "Project: ${GOOGLE_CLOUD_PROJECT:-<not-set>}"
 
-echo "1) Seed base Firestore data (museums, exhibits/artifacts, personas)"
+echo "1) Seed base Firestore data (museums, exhibits, personas)"
 "$PYTHON_BIN" scripts/seed_firestore.py
 
-echo "2) Seed knowledge base + embeddings (exhibits + legacy artifacts)"
+echo "2) Seed knowledge base + embeddings (exhibits)"
 "$PYTHON_BIN" scripts/seed_knowledge_base.py
 
-echo "3) Seed scenes (exhibits + legacy artifacts)"
+echo "3) Seed scenes (exhibits)"
 "$PYTHON_BIN" scripts/seed_scenes.py
-
-echo "4) Run migration/backfill (artifacts->exhibits, chunks, analytics/doc refs)"
-"$PYTHON_BIN" scripts/migrate_artifacts_to_exhibits.py
 
 echo "✅ Seed completed"

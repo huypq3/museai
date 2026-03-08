@@ -48,13 +48,13 @@ export function LanguagePie({ data }: { data: { language: string; count: number 
   )
 }
 
-export function HeatmapBars({ data }: { data: { artifact_id: string; scan_count: number }[] }) {
+export function HeatmapBars({ data }: { data: { exhibit_id: string; scan_count: number }[] }) {
   return (
     <div style={{ width: '100%', height: 260 }}>
       <ResponsiveContainer>
         <BarChart data={data.slice(0, 10)}>
           <CartesianGrid stroke="rgba(255,255,255,0.08)" />
-          <XAxis dataKey="artifact_id" stroke="rgba(245,240,232,0.65)" />
+          <XAxis dataKey="exhibit_id" stroke="rgba(245,240,232,0.65)" />
           <YAxis stroke="rgba(245,240,232,0.65)" />
           <Tooltip />
           <Bar dataKey="scan_count" fill="#C9A84C" radius={[6, 6, 0, 0]} />

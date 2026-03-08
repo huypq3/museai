@@ -1,6 +1,6 @@
 """
-Vision recognizer for matching artifacts with Gemini Vision.
-Uses Gemini 2.5 Flash multimodal model for museum artifact matching.
+Vision recognizer for matching exhibits with Gemini Vision.
+Uses Gemini 2.5 Flash multimodal model for museum exhibit matching.
 """
 
 import os
@@ -15,13 +15,13 @@ from google.cloud import firestore
 logger = logging.getLogger(__name__)
 
 
-async def recognize_artifact(
+async def recognize_exhibit(
     image_bytes: bytes,
     museum_id: str,
-    project_id: str = "museai-2026"
+    project_id: str | None = None
 ) -> Dict:
     """
-    Recognize an artifact from an image with Gemini Vision.
+    Recognize an exhibit from an image with Gemini Vision.
     
     Args:
         image_bytes: Image data (JPEG/PNG)
@@ -30,43 +30,43 @@ async def recognize_artifact(
     
     Returns:
         Dict: {
-            "artifact_id": str,
+            "exhibit_id": str,
             "confidence": float (0.0-1.0),
             "reasoning": str,
             "found": bool
         }
     """
     try:
-        logger.info(f"Recognizing artifact for museum: {museum_id}")
+        logger.info(f"Recognizing exhibit for museum: {museum_id}")
+        resolved_project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT")
+        if not resolved_project_id:
+            raise ValueError("GOOGLE_CLOUD_PROJECT environment variable not set")
         
-        # Step 1: Load artifact candidates from Firestore.
-        db = firestore.AsyncClient(project=project_id)
-        artifacts_ref = db.collection("exhibits").where("museum_id", "==", museum_id)
-        artifacts_docs = await artifacts_ref.get()
-        if not artifacts_docs:
-            artifacts_ref = db.collection("artifacts").where("museum_id", "==", museum_id)
-            artifacts_docs = await artifacts_ref.get()
+        # Step 1: Load exhibit candidates from Firestore.
+        db = firestore.AsyncClient(project=resolved_project_id)
+        exhibits_ref = db.collection("exhibits").where("museum_id", "==", museum_id)
+        exhibits_docs = await exhibits_ref.get()
         
-        if not artifacts_docs:
-            logger.warning(f"No artifacts found for museum: {museum_id}")
+        if not exhibits_docs:
+            logger.warning(f"No exhibits found for museum: {museum_id}")
             return {
-                "artifact_id": "unknown",
+                "exhibit_id": "unknown",
                 "confidence": 0.0,
-                "reasoning": f"No artifacts registered for museum {museum_id}",
+                "reasoning": f"No exhibits registered for museum {museum_id}",
                 "found": False
             }
         
-        # Build candidate artifact list.
-        artifact_list = []
-        for doc in artifacts_docs:
+        # Build candidate exhibit list.
+        exhibit_list = []
+        for doc in exhibits_docs:
             data = doc.to_dict()
-            artifact_id = doc.id
+            exhibit_id = doc.id
             name = data.get("name", "Unknown")
             short_desc = data.get("short_description", data.get("description", "No description"))
-            artifact_list.append(f"{artifact_id}: {name} — {short_desc}")
+            exhibit_list.append(f"{exhibit_id}: {name} — {short_desc}")
         
-        artifact_list_str = "\n".join(artifact_list)
-        logger.info(f"Found {len(artifact_list)} artifacts for matching")
+        exhibit_list_str = "\n".join(exhibit_list)
+        logger.info(f"Found {len(exhibit_list)} exhibits for matching")
         
         # Step 2: Call Gemini Vision.
         api_key = os.getenv("GEMINI_API_KEY")
@@ -82,19 +82,19 @@ async def recognize_artifact(
         )
         
         # Build vision prompt.
-        prompt = f"""Inspect this image and identify which artifact matches the museum list.
+        prompt = f"""Inspect this image and identify which exhibit matches the museum list.
 
 Carefully compare visible shape, color, scale, and distinguishing features
-against each listed artifact description.
+against each listed exhibit description.
 
 Return ONLY valid JSON (no markdown, no extra text):
-{{"artifact_id": "...", "confidence": 0.0-1.0, "reasoning": "..."}}
+{{"exhibit_id": "...", "confidence": 0.0-1.0, "reasoning": "..."}}
 
 If no confident match is possible, return:
-{{"artifact_id": "unknown", "confidence": 0.0, "reasoning": "..."}}
+{{"exhibit_id": "unknown", "confidence": 0.0, "reasoning": "..."}}
 
-ARTIFACT CANDIDATES:
-{artifact_list_str}
+EXHIBIT CANDIDATES:
+{exhibit_list_str}
 """
         
         # Invoke Gemini Vision.
@@ -126,36 +126,36 @@ ARTIFACT CANDIDATES:
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse JSON response: {response_text}")
             return {
-                "artifact_id": "unknown",
+                "exhibit_id": "unknown",
                 "confidence": 0.0,
                 "reasoning": f"Failed to parse Gemini response: {str(e)}",
                 "found": False
             }
         
         # Validate output.
-        artifact_id = result.get("artifact_id", "unknown")
+        exhibit_id = result.get("exhibit_id", "unknown")
         confidence = float(result.get("confidence", 0.0))
         reasoning = result.get("reasoning", "")
         
         # If confidence is too low, downgrade to unknown.
         if confidence < 0.5:
-            artifact_id = "unknown"
+            exhibit_id = "unknown"
         
-        found = artifact_id != "unknown"
+        found = exhibit_id != "unknown"
         
-        logger.info(f"Recognition result: {artifact_id} (confidence={confidence:.2f})")
+        logger.info(f"Recognition result: {exhibit_id} (confidence={confidence:.2f})")
         
         return {
-            "artifact_id": artifact_id,
+            "exhibit_id": exhibit_id,
             "confidence": confidence,
             "reasoning": reasoning,
             "found": found
         }
         
     except Exception as e:
-        logger.error(f"Error recognizing artifact: {e}", exc_info=True)
+        logger.error(f"Error recognizing exhibit: {e}", exc_info=True)
         return {
-            "artifact_id": "unknown",
+            "exhibit_id": "unknown",
             "confidence": 0.0,
             "reasoning": f"Error: {str(e)}",
             "found": False

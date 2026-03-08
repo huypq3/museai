@@ -1,6 +1,6 @@
 """
 Camera tour module for live camera mode with automatic AI commentary.
-Detects artifact changes and generates short commentary text.
+Detects exhibit changes and generates short commentary text.
 """
 
 import os
@@ -9,7 +9,7 @@ from typing import Dict, Optional
 from google import genai
 from google.cloud import firestore
 
-from vision.recognizer import recognize_artifact
+from vision.recognizer import recognize_exhibit
 
 
 logger = logging.getLogger(__name__)
@@ -18,48 +18,48 @@ logger = logging.getLogger(__name__)
 async def analyze_frame(
     image_bytes: bytes,
     museum_id: str,
-    last_artifact_id: Optional[str] = None,
-    project_id: str = "museai-2026"
+    last_exhibit_id: Optional[str] = None,
+    project_id: str | None = None
 ) -> Dict:
     """
-    Analyze camera frame and detect whether a new artifact appears.
+    Analyze camera frame and detect whether a new exhibit appears.
     
     Args:
         image_bytes: Image data
         museum_id: Museum ID
-        last_artifact_id: Previous artifact ID (to avoid repeats)
+        last_exhibit_id: Previous exhibit ID (to avoid repeats)
         project_id: GCP project ID
     
     Returns:
         Dict: {
-            "same": bool,  # True if same artifact as previous frame
-            "artifact_id": str,
+            "same": bool,  # True if same exhibit as previous frame
+            "exhibit_id": str,
             "confidence": float
         }
     """
     try:
         logger.info(f"Analyzing camera frame for museum: {museum_id}")
         
-        # Run artifact recognition.
-        result = await recognize_artifact(image_bytes, museum_id, project_id)
+        # Run exhibit recognition.
+        result = await recognize_exhibit(image_bytes, museum_id, project_id)
         
-        artifact_id = result["artifact_id"]
+        exhibit_id = result["exhibit_id"]
         confidence = result["confidence"]
         
-        # Check whether the artifact is unchanged.
-        if artifact_id == last_artifact_id:
-            logger.info(f"Same artifact as last frame: {artifact_id}")
+        # Check whether the exhibit is unchanged.
+        if exhibit_id == last_exhibit_id:
+            logger.info(f"Same exhibit as last frame: {exhibit_id}")
             return {
                 "same": True,
-                "artifact_id": artifact_id,
+                "exhibit_id": exhibit_id,
                 "confidence": confidence
             }
         
-        # New artifact detected.
-        logger.info(f"New artifact detected: {artifact_id}")
+        # New exhibit detected.
+        logger.info(f"New exhibit detected: {exhibit_id}")
         return {
             "same": False,
-            "artifact_id": artifact_id,
+            "exhibit_id": exhibit_id,
             "confidence": confidence
         }
         
@@ -67,21 +67,21 @@ async def analyze_frame(
         logger.error(f"Error analyzing frame: {e}", exc_info=True)
         return {
             "same": False,
-            "artifact_id": "unknown",
+            "exhibit_id": "unknown",
             "confidence": 0.0
         }
 
 
 async def generate_commentary(
-    artifact_id: str,
+    exhibit_id: str,
     language: str = "vi",
-    project_id: str = "museai-2026"
+    project_id: str | None = None
 ) -> str:
     """
     Generate short commentary text for live camera tour.
     
     Args:
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
         language: Output language (vi, en, fr, zh, ja, ko)
         project_id: GCP project ID
     
@@ -89,27 +89,27 @@ async def generate_commentary(
         str: Commentary text (1-2 short sentences)
     """
     try:
-        logger.info(f"Generating commentary for artifact: {artifact_id}")
+        logger.info(f"Generating commentary for exhibit: {exhibit_id}")
+        resolved_project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT")
+        if not resolved_project_id:
+            raise ValueError("GOOGLE_CLOUD_PROJECT environment variable not set")
         
-        # Load artifact and persona data from Firestore.
-        db = firestore.AsyncClient(project=project_id)
+        # Load exhibit and persona data from Firestore.
+        db = firestore.AsyncClient(project=resolved_project_id)
         
-        artifact_ref = db.collection("exhibits").document(artifact_id)
-        artifact_doc = await artifact_ref.get()
-        if not artifact_doc.exists:
-            artifact_ref = db.collection("artifacts").document(artifact_id)
-            artifact_doc = await artifact_ref.get()
+        exhibit_ref = db.collection("exhibits").document(exhibit_id)
+        exhibit_doc = await exhibit_ref.get()
         
-        if not artifact_doc.exists:
-            return "Sorry, I could not find information for this artifact."
+        if not exhibit_doc.exists:
+            return "Sorry, I could not find information for this exhibit."
         
-        artifact_data = artifact_doc.to_dict()
-        name = artifact_data.get("name", "this artifact")
-        description = artifact_data.get("short_description", artifact_data.get("description", ""))
+        exhibit_data = exhibit_doc.to_dict()
+        name = exhibit_data.get("name", "this exhibit")
+        description = exhibit_data.get("short_description", exhibit_data.get("description", ""))
         
         # Load persona data if available.
         persona_text = ""
-        persona_id = artifact_data.get("persona_id")
+        persona_id = exhibit_data.get("persona_id")
         if persona_id:
             persona_ref = db.collection("personas").document(persona_id)
             persona_doc = await persona_ref.get()
@@ -138,7 +138,7 @@ async def generate_commentary(
         }
         lang_name = language_map.get(language, "Vietnamese")
 
-        prompt = f"""You are a museum guide. The camera has detected a new artifact.
+        prompt = f"""You are a museum guide. The camera has detected a new exhibit.
 
 Create a SHORT introduction (1-2 sentences, max 30 words) using:
 - Name: {name}

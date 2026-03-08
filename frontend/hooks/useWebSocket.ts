@@ -8,7 +8,7 @@ type WSMessage = {
   [key: string]: any;
 };
 
-export function useWebSocket(artifactId: string | null, language: string) {
+export function useWebSocket(exhibitId: string | null, language: string) {
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<WSMessage[]>([]);
   const wsRef = useRef<WebSocket | null>(null);
@@ -19,7 +19,7 @@ export function useWebSocket(artifactId: string | null, language: string) {
   const MAX_RETRY = 3;
 
   const connect = useCallback(async () => {
-    if (!artifactId) return;
+    if (!exhibitId) return;
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
     if (wsRef.current?.readyState === WebSocket.CONNECTING) return;
     if (isConnectingRef.current) return;
@@ -27,12 +27,12 @@ export function useWebSocket(artifactId: string | null, language: string) {
     isConnectingRef.current = true;
     let wsToken = "";
     try {
-      let tokenResp = await fetch(`${BACKEND_URL}/api/session/token/exhibits/${artifactId}`, {
+      let tokenResp = await fetch(`${BACKEND_URL}/api/session/token/${exhibitId}`, {
         method: "POST",
       });
       if (!tokenResp.ok) {
         // Legacy fallback
-        tokenResp = await fetch(`${BACKEND_URL}/api/session/token/${artifactId}`, {
+        tokenResp = await fetch(`${BACKEND_URL}/api/session/token/${exhibitId}`, {
           method: "POST",
         });
       }
@@ -48,7 +48,7 @@ export function useWebSocket(artifactId: string | null, language: string) {
       return;
     }
 
-    const wsUrl = `${WS_BACKEND_URL}/ws/persona/exhibits/${artifactId}?language=${language}&token=${encodeURIComponent(wsToken)}`;
+    const wsUrl = `${WS_BACKEND_URL}/ws/persona/${exhibitId}?language=${language}&token=${encodeURIComponent(wsToken)}`;
     console.log("🔌 Connecting to:", wsUrl);
 
     const ws = new WebSocket(wsUrl);
@@ -93,10 +93,10 @@ export function useWebSocket(artifactId: string | null, language: string) {
     ws.onerror = () => {
       isConnectingRef.current = false;
     };
-  }, [artifactId, language]);
+  }, [exhibitId, language]);
 
   useEffect(() => {
-    if (!artifactId) return;
+    if (!exhibitId) return;
 
     const timer = setTimeout(() => {
       connect();
@@ -115,7 +115,7 @@ export function useWebSocket(artifactId: string | null, language: string) {
       wsRef.current = null;
       isConnectingRef.current = false;
     };
-  }, [artifactId, language, connect]);
+  }, [exhibitId, language, connect]);
 
   const sendMessage = useCallback((message: WSMessage): boolean => {
     const ws = wsRef.current;

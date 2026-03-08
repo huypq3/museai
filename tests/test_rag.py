@@ -110,7 +110,7 @@ def test_chunker():
     # Extract chunks
     chunks = extract_chunks_from_bytes(
         pdf_bytes=pdf_bytes,
-        artifact_id="test_artifact_001",
+        exhibit_id="test_exhibit_001",
         chunk_size=50,  # Nhỏ hơn để test
         overlap=10
     )
@@ -175,7 +175,7 @@ async def test_full_pipeline():
     c.save()
     pdf_bytes = buffer.getvalue()
     
-    artifact_id = "test_binh_gom_ly"
+    exhibit_id = "test_binh_gom_ly"
     
     print(f"   📄 Tạo PDF test: {len(pdf_bytes)} bytes")
     
@@ -184,7 +184,7 @@ async def test_full_pipeline():
     result = await upload_pdf(
         file_bytes=pdf_bytes,
         filename="test_binh_gom.pdf",
-        artifact_id=artifact_id
+        exhibit_id=exhibit_id
     )
     
     assert result["status"] == "success", f"Upload failed: {result}"
@@ -198,7 +198,7 @@ async def test_full_pipeline():
     # Câu hỏi về thông tin có trong PDF
     qa_result = await answer_with_rag(
         question="Bình gốm cao bao nhiêu centimeters?",
-        artifact_id=artifact_id,
+        exhibit_id=exhibit_id,
         language="vi"
     )
     
@@ -227,7 +227,7 @@ async def test_full_pipeline():
     
     qa_result2 = await answer_with_rag(
         question="Bình gốm có giá bao nhiêu tiền?",
-        artifact_id=artifact_id,
+        exhibit_id=exhibit_id,
         language="vi"
     )
     

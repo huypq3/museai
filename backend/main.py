@@ -29,7 +29,7 @@ from pydantic import BaseModel
 from live.ws_handler import handle_persona_websocket
 from cms.upload import upload_pdf, get_document_status
 from rag.query_engine import answer_with_rag
-from vision.recognizer import recognize_artifact
+from vision.recognizer import recognize_exhibit as recognize_exhibit
 from vision.camera_tour import analyze_frame, generate_commentary
 from middleware.security_headers import SecurityHeadersMiddleware
 from middleware.audit_log import audit_log
@@ -40,7 +40,6 @@ from auth.ephemeral import create_ephemeral_token, verify_ephemeral_token
 from api import (
     admin_auth,
     admin_museums,
-    admin_artifacts,
     admin_exhibits,
     admin_upload,
     admin_qr,
@@ -153,7 +152,6 @@ async def museum_api_rate_limit(request: Request, call_next):
     if (
         request.url.path.startswith("/vision/")
         or request.url.path.startswith("/qa/")
-        or request.url.path.startswith("/artifacts/")
         or request.url.path.startswith("/exhibits/")
     ):
         ip = request.client.host if request.client else "unknown"
@@ -163,7 +161,6 @@ async def museum_api_rate_limit(request: Request, call_next):
 # Register admin routers
 app.include_router(admin_auth.router)
 app.include_router(admin_museums.router)
-app.include_router(admin_artifacts.router)
 app.include_router(admin_exhibits.router)
 app.include_router(admin_upload.router)
 app.include_router(admin_qr.router)
@@ -188,14 +185,10 @@ def get_firestore() -> firestore.AsyncClient:
 
 async def _get_exhibit_doc(db: firestore.AsyncClient, exhibit_id: str):
     """
-    Prefer new collection `exhibits`, fallback legacy `artifacts`.
+    Load exhibit from `exhibits` collection.
     """
     exhibit_ref = db.collection("exhibits").document(exhibit_id)
-    exhibit_doc = await exhibit_ref.get()
-    if exhibit_doc.exists:
-        return exhibit_doc
-    legacy_ref = db.collection("artifacts").document(exhibit_id)
-    return await legacy_ref.get()
+    return await exhibit_ref.get()
 
 
 @app.get("/")
@@ -207,12 +200,10 @@ async def root():
         "endpoints": {
             "health": "/health",
             "exhibit": "/exhibits/{exhibit_id}",
-            "exhibit_legacy_alias": "/artifacts/{artifact_id}",
             "websocket": "/ws/persona/{exhibit_id}?language=vi",
             "upload_pdf": "/admin/upload-pdf/{exhibit_id}",
             "document_status": "/admin/document-status/{exhibit_id}",
             "rag_qa": "/rag/qa/{exhibit_id}",
-            "qa_legacy_alias": "/qa/{artifact_id}",
             "vision_recognize": "/vision/recognize/{museum_id}",
             "camera_tour": "/vision/camera-tour/{museum_id}"
         }
@@ -223,7 +214,7 @@ async def root():
 async def health():
     """Health check endpoint."""
     # Keep health lightweight: do not query Firestore here.
-    # Firestore connectivity is exercised on artifact and websocket routes.
+    # Firestore connectivity is exercised on exhibit and websocket routes.
     return {
         "status": "ok",
         "service": "museai-backend",
@@ -332,7 +323,6 @@ async def get_exhibit(exhibit_id: str):
         
         return {
             "exhibit_id": exhibit_id,
-            "artifact_id": exhibit_id,  # legacy compatibility
             "data": exhibit_data
         }
         
@@ -343,16 +333,10 @@ async def get_exhibit(exhibit_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/artifacts/{artifact_id}")
-async def get_artifact_legacy_alias(artifact_id: str):
-    """Legacy alias for old clients."""
-    return await get_exhibit(artifact_id)
-
-
-@app.websocket("/ws/persona/{artifact_id}")
+@app.websocket("/ws/persona/{exhibit_id}")
 async def websocket_persona(
     websocket: WebSocket,
-    artifact_id: str,
+    exhibit_id: str,
     language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
     token: str | None = Query(default=None),
 ):
@@ -361,7 +345,7 @@ async def websocket_persona(
     
     Args:
         websocket: WebSocket connection
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
         language: Language code
     """
     try:
@@ -370,7 +354,7 @@ async def websocket_persona(
             await check_ws_limits(ip)
         except HTTPException as rl_e:
             await websocket.close(code=4029, reason=str(rl_e.detail))
-            await audit_log("ws_limit_exceeded", "anonymous", {"ip": ip, "artifact_id": artifact_id})
+            await audit_log("ws_limit_exceeded", "anonymous", {"ip": ip, "exhibit_id": exhibit_id})
             return
         await register_ws_session(ip)
 
@@ -380,44 +364,44 @@ async def websocket_persona(
                 await websocket.close(code=4001)
                 return
             payload = verify_ephemeral_token(token)
-            requested_id = payload.get("exhibit_id") or payload.get("artifact_id")
-            if requested_id != artifact_id:
+            requested_id = payload.get("exhibit_id")
+            if requested_id != exhibit_id:
                 await websocket.close(code=4003)
                 return
 
         # Load exhibit data from Firestore
         db = get_firestore()
-        artifact_doc = await _get_exhibit_doc(db, artifact_id)
+        exhibit_doc = await _get_exhibit_doc(db, exhibit_id)
         
-        if not artifact_doc.exists:
+        if not exhibit_doc.exists:
             await websocket.accept()
             await websocket.send_json({
                 "type": "error",
-                "message": f"Artifact {artifact_id} not found"
+                "message": f"Exhibit {exhibit_id} not found"
             })
             await websocket.close()
             return
         
-        artifact_data = artifact_doc.to_dict()
+        exhibit_data = exhibit_doc.to_dict()
         
         # Load persona data
-        persona_id = artifact_data.get("persona_id")
+        persona_id = exhibit_data.get("persona_id")
         if persona_id:
             persona_ref = db.collection("personas").document(persona_id)
             persona_doc = await persona_ref.get()
             
             if persona_doc.exists:
-                artifact_data["persona"] = persona_doc.to_dict()
+                exhibit_data["persona"] = persona_doc.to_dict()
             else:
-                artifact_data["persona"] = {}
+                exhibit_data["persona"] = {}
         else:
-            artifact_data["persona"] = {}
+            exhibit_data["persona"] = {}
         
         # Start websocket session handler
-        await handle_persona_websocket(websocket, artifact_data, language)
+        await handle_persona_websocket(websocket, exhibit_data, language)
         
     except Exception as e:
-        logger.error(f"WebSocket error for artifact {artifact_id}: {e}", exc_info=True)
+        logger.error(f"WebSocket error for exhibit {exhibit_id}: {e}", exc_info=True)
         try:
             await websocket.accept()
             await websocket.send_json({
@@ -432,35 +416,14 @@ async def websocket_persona(
         await unregister_ws_session(ip)
 
 
-@app.websocket("/live/ws/{artifact_id}")
+@app.websocket("/live/ws/{exhibit_id}")
 async def websocket_live_alias(
     websocket: WebSocket,
-    artifact_id: str,
-    language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
-    token: str | None = Query(default=None),
-):
-    """Alias route for live websocket endpoint."""
-    await websocket_persona(websocket=websocket, artifact_id=artifact_id, language=language, token=token)
-
-
-@app.websocket("/ws/persona/exhibits/{exhibit_id}")
-async def websocket_persona_exhibit_alias(
-    websocket: WebSocket,
     exhibit_id: str,
     language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
     token: str | None = Query(default=None),
 ):
-    await websocket_persona(websocket=websocket, artifact_id=exhibit_id, language=language, token=token)
-
-
-@app.websocket("/live/ws/exhibits/{exhibit_id}")
-async def websocket_live_exhibit_alias(
-    websocket: WebSocket,
-    exhibit_id: str,
-    language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
-    token: str | None = Query(default=None),
-):
-    await websocket_persona(websocket=websocket, artifact_id=exhibit_id, language=language, token=token)
+    await websocket_persona(websocket=websocket, exhibit_id=exhibit_id, language=language, token=token)
 
 
 # Pydantic models for request bodies
@@ -473,24 +436,12 @@ class QARequest(BaseModel):
 class CameraTourRequest(BaseModel):
     """Request body for Camera Tour endpoint."""
     image_base64: str
-    last_artifact_id: Optional[str] = None
+    last_exhibit_id: Optional[str] = None
     language: str = "vi"
 
 
-@app.post("/api/session/token/{artifact_id}")
+@app.post("/api/session/token/{exhibit_id}")
 async def create_ws_ephemeral_session_token(
-    request: Request,
-    artifact_id: str,
-    museum_id: str | None = Query(default=None),
-):
-    ip = request.client.host if request.client else "unknown"
-    await check_rate_limit(scope="session_token", key=f"ip:{ip}", limit=30, window_seconds=60)
-    token = create_ephemeral_token(exhibit_id=artifact_id, museum_id=museum_id)
-    return {"token": token, "expires_in": int(os.getenv("EPHEMERAL_TOKEN_EXPIRE_SECONDS", "3600"))}
-
-
-@app.post("/api/session/token/exhibits/{exhibit_id}")
-async def create_ws_ephemeral_session_token_exhibit(
     request: Request,
     exhibit_id: str,
     museum_id: str | None = Query(default=None),
@@ -501,23 +452,23 @@ async def create_ws_ephemeral_session_token_exhibit(
     return {"token": token, "expires_in": int(os.getenv("EPHEMERAL_TOKEN_EXPIRE_SECONDS", "3600"))}
 
 
-@app.post("/admin/upload-pdf/{artifact_id}")
+@app.post("/admin/upload-pdf/{exhibit_id}")
 async def upload_pdf_endpoint(
-    artifact_id: str,
+    exhibit_id: str,
     file: UploadFile = File(...)
 ):
     """
-    Upload PDF documentation for an artifact and generate RAG chunks.
+    Upload PDF documentation for an exhibit and generate RAG chunks.
     
     Args:
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
         file: PDF file upload
     
     Returns:
         Dict with upload result metadata
     """
     try:
-        logger.info(f"Receiving PDF upload for artifact: {artifact_id}")
+        logger.info(f"Receiving PDF upload for exhibit: {exhibit_id}")
         
         # Validate file type
         if not file.filename.endswith('.pdf'):
@@ -535,7 +486,7 @@ async def upload_pdf_endpoint(
         result = await upload_pdf(
             file_bytes=file_bytes,
             filename=file.filename,
-            artifact_id=artifact_id
+            exhibit_id=exhibit_id
         )
         
         return result
@@ -547,27 +498,19 @@ async def upload_pdf_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/admin/upload-pdf/exhibits/{exhibit_id}")
-async def upload_pdf_endpoint_exhibit(
-    exhibit_id: str,
-    file: UploadFile = File(...),
-):
-    return await upload_pdf_endpoint(exhibit_id, file)
-
-
-@app.get("/admin/document-status/{artifact_id}")
-async def document_status_endpoint(artifact_id: str):
+@app.get("/admin/document-status/{exhibit_id}")
+async def document_status_endpoint(exhibit_id: str):
     """
-    Check document status for an artifact.
+    Check document status for an exhibit.
     
     Args:
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
     
     Returns:
         Dict with document status metadata
     """
     try:
-        status = await get_document_status(artifact_id)
+        status = await get_document_status(exhibit_id)
         return status
         
     except Exception as e:
@@ -575,32 +518,27 @@ async def document_status_endpoint(artifact_id: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.get("/admin/document-status/exhibits/{exhibit_id}")
-async def document_status_endpoint_exhibit(exhibit_id: str):
-    return await document_status_endpoint(exhibit_id)
-
-
-@app.post("/rag/qa/{artifact_id}")
+@app.post("/rag/qa/{exhibit_id}")
 async def rag_qa_endpoint(
-    artifact_id: str,
+    exhibit_id: str,
     request: QARequest
 ):
     """
     Answer question with HTTP RAG pipeline (semantic retrieval + grounded generation).
     
     Args:
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
         request: QARequest with question and language
     
     Returns:
         Dict with answer, sources, and grounded status
     """
     try:
-        logger.info(f"RAG Q&A request for artifact {artifact_id}: {request.question}")
+        logger.info(f"RAG Q&A request for exhibit {exhibit_id}: {request.question}")
         
         result = await answer_with_rag(
             question=request.question,
-            artifact_id=artifact_id,
+            exhibit_id=exhibit_id,
             language=request.language
         )
         result["pipeline"] = "rag_http"
@@ -611,29 +549,6 @@ async def rag_qa_endpoint(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
-@app.post("/rag/qa/exhibits/{exhibit_id}")
-async def rag_qa_endpoint_exhibit(
-    exhibit_id: str,
-    request: QARequest,
-):
-    return await rag_qa_endpoint(exhibit_id, request)
-
-
-@app.post("/qa/{artifact_id}")
-async def qa_legacy_alias(
-    artifact_id: str,
-    request: QARequest
-):
-    """
-    Legacy alias for backward compatibility.
-    Prefer /rag/qa/{artifact_id} for new clients.
-    """
-    result = await rag_qa_endpoint(artifact_id=artifact_id, request=request)
-    result["deprecated"] = True
-    result["message"] = "Use /rag/qa/{artifact_id} (legacy alias route)."
-    return result
-
-
 @app.post("/vision/recognize/{museum_id}")
 async def vision_recognize_endpoint(
     request: Request,
@@ -641,14 +556,14 @@ async def vision_recognize_endpoint(
     file: UploadFile = File(...)
 ):
     """
-    Recognize an artifact from an image.
+    Recognize an exhibit from an image.
     
     Args:
         museum_id: Museum ID
         file: Image file upload (JPEG/PNG)
     
     Returns:
-        Dict: {artifact_id, confidence, reasoning, found}
+        Dict: {exhibit_id, confidence, reasoning, found}
     """
     try:
         logger.info(f"Vision recognize request for museum: {museum_id}")
@@ -667,8 +582,8 @@ async def vision_recognize_endpoint(
         if (file.content_type or "").lower() not in allowed_types:
             raise HTTPException(status_code=415, detail="Only JPEG, PNG, and WebP are allowed")
         
-        # Run artifact recognition
-        result = await recognize_artifact(image_bytes, museum_id)
+        # Run exhibit recognition
+        result = await recognize_exhibit(image_bytes, museum_id)
         
         return result
         
@@ -685,14 +600,14 @@ async def camera_tour_endpoint(
     request: CameraTourRequest
 ):
     """
-    Camera tour mode: detect new artifacts and generate commentary.
+    Camera tour mode: detect new exhibits and generate commentary.
     
     Args:
         museum_id: Museum ID
-        request: CameraTourRequest with image_base64, last_artifact_id, and language
+        request: CameraTourRequest with image_base64, last_exhibit_id, and language
     
     Returns:
-        Dict: {same, artifact_id, confidence, commentary}
+        Dict: {same, exhibit_id, confidence, commentary}
     """
     try:
         logger.info(f"Camera tour request for museum: {museum_id}")
@@ -707,20 +622,20 @@ async def camera_tour_endpoint(
         result = await analyze_frame(
             image_bytes=image_bytes,
             museum_id=museum_id,
-            last_artifact_id=request.last_artifact_id
+            last_exhibit_id=request.last_exhibit_id
         )
         
-        # If a new artifact is detected, generate commentary
+        # If a new exhibit is detected, generate commentary
         commentary = None
-        if not result["same"] and result["artifact_id"] != "unknown":
+        if not result["same"] and result["exhibit_id"] != "unknown":
             commentary = await generate_commentary(
-                artifact_id=result["artifact_id"],
+                exhibit_id=result["exhibit_id"],
                 language=request.language
             )
         
         return {
             "same": result["same"],
-            "artifact_id": result["artifact_id"],
+            "exhibit_id": result["exhibit_id"],
             "confidence": result["confidence"],
             "commentary": commentary
         }

@@ -96,7 +96,7 @@ export default function ExhibitPage() {
   return (
     <div style={{ height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <VoiceChat
-        artifactId={exhibitId}
+        exhibitId={exhibitId}
         language={language}
         onLanguageChange={(next) => {
           trackEvent("language_changed", museumId, exhibitId, { from: language, to: next });

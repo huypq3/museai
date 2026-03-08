@@ -10,7 +10,7 @@ import { LanguageCode } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
 
 type Props = {
-  artifactId: string;
+  exhibitId: string;
   language: LanguageCode;
   onLanguageChange?: (lang: LanguageCode) => void;
   museumName?: string;
@@ -45,7 +45,7 @@ const LANGUAGES: Record<LanguageCode, { flag: string }> = {
   ko: { flag: "🇰🇷" },
 };
 
-export default function VoiceChat({ artifactId, language, onLanguageChange, museumName }: Props) {
+export default function VoiceChat({ exhibitId, language, onLanguageChange, museumName }: Props) {
   const router = useRouter();
   const [state, _setState] = useState<State>("connecting");
   const stateRef = useRef<State>("connecting");
@@ -53,7 +53,7 @@ export default function VoiceChat({ artifactId, language, onLanguageChange, muse
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentAIText, setCurrentAIText] = useState("");
   const [, setCurrentUserText] = useState("");
-  const [artifactName, setArtifactName] = useState("");
+  const [exhibitName, setExhibitName] = useState("");
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showIntroButton, setShowIntroButton] = useState<boolean>(true);
   const [autoStopHint, setAutoStopHint] = useState("");
@@ -70,7 +70,7 @@ export default function VoiceChat({ artifactId, language, onLanguageChange, muse
   // Khi user interrupt → bỏ qua mọi message cho đến turn_complete tiếp theo (của turn CŨ)
   const skipOldTurnRef = useRef(false);
 
-  const { isConnected, messages: wsMessages, sendMessage } = useWebSocket(artifactId, language);
+  const { isConnected, messages: wsMessages, sendMessage } = useWebSocket(exhibitId, language);
   const { start, stop: stopRecording } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
   const sentences = useMemo(
@@ -84,15 +84,15 @@ export default function VoiceChat({ artifactId, language, onLanguageChange, muse
 
   // ─── Load exhibit name ────────────────────────────────────────────────
   useEffect(() => {
-    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/exhibits/${artifactId}`)
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/exhibits/${exhibitId}`)
       .then((r) => r.json())
-      .then((data) => setArtifactName(data.data?.name || ""))
+      .then((data) => setExhibitName(data.data?.name || ""))
       .catch((e) => console.error("Failed to load exhibit:", e));
-  }, [artifactId]);
+  }, [exhibitId]);
 
   useEffect(() => {
     setShowIntroButton(true);
-  }, [artifactId]);
+  }, [exhibitId]);
 
   // ─── Connect → ready ──────────────────────────────────────────────────
   useEffect(() => {
@@ -301,7 +301,7 @@ export default function VoiceChat({ artifactId, language, onLanguageChange, muse
       console.warn("⚠️ end_of_turn not sent because websocket is not open");
     } else {
       const museumId = typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
-      trackEvent("question_asked", museumId, artifactId, { reason });
+      trackEvent("question_asked", museumId, exhibitId, { reason });
     }
     setState("processing");
     hasAiOutputThisTurnRef.current = false;
@@ -494,7 +494,7 @@ export default function VoiceChat({ artifactId, language, onLanguageChange, muse
               textOverflow: "ellipsis",
             }}
           >
-            {artifactName || "Loading..."}
+            {exhibitName || "Loading..."}
           </div>
         </div>
 

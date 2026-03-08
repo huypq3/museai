@@ -10,7 +10,7 @@ type Museum = {
   name: string
   description?: string
   address?: string
-  artifact_count?: number
+  exhibit_count?: number
   logo_url?: string
   status?: string
 }
@@ -115,12 +115,8 @@ export default function MuseumsPage() {
         marginBottom: 32,
       }}>
         <div>
-          <div style={{
-            fontFamily: 'Cormorant Garamond, serif',
-            fontSize: 28,
-            color: '#C9A84C',
-          }}>
-            MuseAI Admin
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>
+            {tr('Bảo tàng', 'Museums')}
           </div>
           <div style={{
             fontSize: 12,
@@ -208,7 +204,7 @@ export default function MuseumsPage() {
                   padding: '3px 10px',
                   borderRadius: 20,
                 }}>
-                  {m.artifact_count || 0} {tr('hiện vật', 'exhibits')}
+                  {m.exhibit_count || 0} {tr('hiện vật', 'exhibits')}
                 </span>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{

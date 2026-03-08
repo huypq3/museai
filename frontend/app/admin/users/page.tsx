@@ -178,7 +178,7 @@ export default function AdminUsersPage() {
     <div style={{ flex: 1, padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>{tr('Quản lý tài khoản', 'User management')}</div>
           <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
             {tr('Quản lý tài khoản', 'User management')}
           </div>

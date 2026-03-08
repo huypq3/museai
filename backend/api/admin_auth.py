@@ -40,9 +40,9 @@ class ChangePasswordRequest(BaseModel):
     @classmethod
     def validate_password_strength(cls, v: str):
         if not re.search(r"[A-Z]", v):
-            raise ValueError("Cần ít nhất 1 chữ hoa")
+            raise ValueError("Password must include at least 1 uppercase letter")
         if not re.search(r"[0-9]", v):
-            raise ValueError("Cần ít nhất 1 chữ số")
+            raise ValueError("Password must include at least 1 number")
         return v
 
 @router.post("/login")
@@ -61,7 +61,7 @@ async def login(request: Request, body: LoginRequest):
 
     if admin.get("status") == "suspended":
         await audit_log("login_failed", body.username, {"ip": ip, "reason": "suspended"})
-        raise HTTPException(status_code=403, detail="Tài khoản đã bị khóa")
+        raise HTTPException(status_code=403, detail="Account is suspended")
 
     await clear_failed_login(body.username, ip)
     db = get_db()

@@ -6,7 +6,7 @@ import { adminUpload } from '@/lib/adminAuth'
 export default function ImageUpload({
   value,
   onChange,
-  label = 'Ảnh',
+  label = 'Image',
 }: {
   value: string
   onChange: (url: string) => void
@@ -21,7 +21,7 @@ export default function ImageUpload({
       const url = await adminUpload(file)
       onChange(url)
     } catch (e) {
-      alert('Upload thất bại')
+      alert('Upload failed')
     } finally {
       setUploading(false)
     }
@@ -69,7 +69,7 @@ export default function ImageUpload({
         <div style={{ flex: 1 }}>
           {/* URL input */}
           <input
-            placeholder="URL ảnh hoặc upload..."
+            placeholder="Image URL or upload..."
             value={value}
             onChange={e => onChange(e.target.value)}
             style={{
@@ -100,7 +100,7 @@ export default function ImageUpload({
               opacity: uploading ? 0.6 : 1,
             }}
           >
-            {uploading ? 'Đang upload...' : '📁 Upload ảnh'}
+            {uploading ? 'Uploading...' : '📁 Upload image'}
           </button>
           <input
             ref={inputRef}

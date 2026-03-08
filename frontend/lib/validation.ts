@@ -13,7 +13,7 @@ export const MUSEUM_REQUIRED_FIELDS = [
   'ai_persona',
 ]
 
-export const ARTIFACT_REQUIRED_FIELDS = [
+export const EXHIBIT_REQUIRED_FIELDS = [
   'name',
   'name_en',
   'category',
@@ -43,9 +43,9 @@ export function calculateCompletion(entity: any, requiredFields: string[]) {
   }
 }
 
-export function validateArtifactPublishable(artifact: any) {
-  const base = calculateCompletion(artifact, ARTIFACT_REQUIRED_FIELDS)
-  const kbCount = Array.isArray(artifact?.knowledge_base) ? artifact.knowledge_base.length : 0
+export function validateExhibitPublishable(exhibit: any) {
+  const base = calculateCompletion(exhibit, EXHIBIT_REQUIRED_FIELDS)
+  const kbCount = Array.isArray(exhibit?.knowledge_base) ? exhibit.knowledge_base.length : 0
   const publishable = base.missing.length === 0 && kbCount >= 2
   const reasonCode = publishable
     ? ''

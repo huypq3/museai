@@ -6,12 +6,12 @@ import { adminFetch, getAdminSession } from '@/lib/adminAuth'
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip } from 'recharts'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
-type MuseumRow = { id: string; name: string; address?: string; artifact_count?: number; total_visits?: number; status?: string; logo_url?: string }
+type MuseumRow = { id: string; name: string; address?: string; exhibit_count?: number; total_visits?: number; status?: string; logo_url?: string }
 
 type Overview = {
   total_museums: number
   total_exhibits: number
-  total_artifacts?: number
+  total_exhibits?: number
   total_events: number
   top_museums: { museum_id: string; name: string; count: number }[]
 }
@@ -24,6 +24,8 @@ export default function AdminDashboardPage() {
   const [museums, setMuseums] = useState<MuseumRow[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [museumTab, setMuseumTab] = useState<'active' | 'inactive'>('active')
+  const [qrOpenMuseumId, setQrOpenMuseumId] = useState<string | null>(null)
+  const [museumQrMap, setMuseumQrMap] = useState<Record<string, { qr_data_url: string; qr_url: string }>>({})
 
   useEffect(() => {
     const s = getAdminSession()
@@ -60,20 +62,17 @@ export default function AdminDashboardPage() {
     <div style={{ flex: 1, padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <div>
-          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>{tr('Bảng điều khiển', 'Dashboard')}</div>
           <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
             {tr('Bảng điều khiển Super Admin', 'Super admin dashboard')}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 10 }}>
-          <button onClick={() => router.push('/admin/museums/new')} style={btnGhost}>+ {tr('Bảo tàng', 'Museum')}</button>
-          <button onClick={() => router.push('/admin/users')} style={btnGhost}>+ {tr('Tài khoản', 'User')}</button>
-        </div>
+        <div />
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px,1fr))', gap: 12, marginBottom: 24 }}>
         <Card title={tr('Bảo tàng', 'Museums')} value={overview?.total_museums ?? 0} />
-        <Card title={tr('Hiện vật', 'Exhibits')} value={overview?.total_exhibits ?? overview?.total_artifacts ?? 0} />
+        <Card title={tr('Hiện vật', 'Exhibits')} value={overview?.total_exhibits ?? overview?.total_exhibits ?? 0} />
         <Card title={tr('Sự kiện', 'Events')} value={overview?.total_events ?? 0} />
       </div>
 
@@ -104,18 +103,45 @@ export default function AdminDashboardPage() {
           <span>{tr('Tên', 'Name')}</span><span>{tr('Địa chỉ', 'Address')}</span><span>{tr('Hiện vật', 'Exhibits')}</span><span>{tr('Lượt xem', 'Visits')}</span><span>Admin</span><span>Status</span><span>{tr('Hành động', 'Actions')}</span>
         </div>
         {filteredMuseums.map((m) => (
-          <div key={m.id} style={{ display: 'grid', gridTemplateColumns: '2.2fr 2fr 1fr 1fr 2fr 1fr 2fr', gap: 8, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 0' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><img src={m.logo_url || ''} alt={m.name} style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover', background: 'rgba(255,255,255,0.08)' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /><strong style={{ fontWeight: 500 }}>{m.name}</strong></span>
-            <span style={{ fontSize: 12, opacity: 0.75 }}>{m.address || '-'}</span>
-            <span>{m.artifact_count || 0}</span>
-            <span>{m.total_visits || 0}</span>
-            <span>{museumAdminName(m.id) ? `${museumAdminName(m.id)} ●` : <button style={btnGhost} onClick={() => router.push(`/admin/users?museum_id=${m.id}`)}>+ {tr('Tạo admin', 'Create admin')}</button>}</span>
-            <span>{m.status || 'active'}</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button style={btnGhost} onClick={() => router.push(`/admin/museums/${m.id}`)}>Edit</button>
-              <button style={btnGhost} onClick={() => router.push(`/admin/analytics?museum_id=${m.id}`)}>Analytics</button>
-              <button style={btnGhost} onClick={() => router.push(`/admin/qr?museum_id=${m.id}`)}>QR</button>
+          <div key={m.id} style={{ borderTop: '1px solid rgba(255,255,255,0.06)', padding: '8px 0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '2.2fr 2fr 1fr 1fr 2fr 1fr 2fr', gap: 8, alignItems: 'center' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><img src={m.logo_url || ''} alt={m.name} style={{ width: 26, height: 26, borderRadius: 6, objectFit: 'cover', background: 'rgba(255,255,255,0.08)' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} /><strong style={{ fontWeight: 500 }}>{m.name}</strong></span>
+              <span style={{ fontSize: 12, opacity: 0.75 }}>{m.address || '-'}</span>
+              <span>{m.exhibit_count || 0}</span>
+              <span>{m.total_visits || 0}</span>
+              <span>{museumAdminName(m.id) ? `${museumAdminName(m.id)} ●` : <button style={btnGhost} onClick={() => router.push(`/admin/users?museum_id=${m.id}`)}>+ {tr('Tạo admin', 'Create admin')}</button>}</span>
+              <span>{m.status || 'active'}</span>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button style={btnGhost} title="Edit" onClick={() => router.push(`/admin/museums/${m.id}`)}>✏️</button>
+                <button style={btnGhost} title="Analytics" onClick={() => router.push(`/admin/analytics?museum_id=${m.id}`)}>📊</button>
+                <button
+                  style={btnGhost}
+                  title="QR"
+                  onClick={async () => {
+                    if (qrOpenMuseumId === m.id) {
+                      setQrOpenMuseumId(null)
+                      return
+                    }
+                    if (!museumQrMap[m.id]) {
+                      const qrRes = await adminFetch(`/admin/qr/museum/${m.id}`)
+                      setMuseumQrMap((prev) => ({ ...prev, [m.id]: qrRes?.museum_qr }))
+                    }
+                    setQrOpenMuseumId(m.id)
+                  }}
+                >
+                  🔳
+                </button>
+              </div>
             </div>
+            {qrOpenMuseumId === m.id && museumQrMap[m.id] && (
+              <div style={{ marginTop: 10, marginLeft: 6, padding: 10, border: '1px solid rgba(255,255,255,0.1)', borderRadius: 10, background: 'rgba(255,255,255,0.03)', display: 'inline-flex', alignItems: 'center', gap: 10 }}>
+                <img src={museumQrMap[m.id].qr_data_url} alt={`Museum QR ${m.name}`} style={{ width: 96, height: 96 }} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <a href={museumQrMap[m.id].qr_data_url} download={`museum-${m.id}.png`} style={{ ...btnGhost, textDecoration: 'none', textAlign: 'center' }}>↓ PNG</a>
+                  <button style={btnGhost} onClick={() => navigator.clipboard.writeText(museumQrMap[m.id].qr_url)}>📋 {tr('Sao chép', 'Copy')}</button>
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

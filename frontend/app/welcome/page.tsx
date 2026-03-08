@@ -49,7 +49,7 @@ export default function WelcomePage() {
     async function initMuseum() {
       const params = new URLSearchParams(window.location.search);
       const museumFromQr = params.get("museum");
-      const exhibitFromQr = params.get("exhibit") || params.get("artifact");
+      const exhibitFromQr = params.get("exhibit") || params.get("exhibit");
 
       if (!museumFromQr) {
         router.replace("/error?code=MUSEUM_REQUIRED");

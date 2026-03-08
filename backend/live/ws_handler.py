@@ -19,7 +19,7 @@ from google import genai
 from google.genai import types
 
 from persona.prompt_builder import build_prompt
-from live.rag_context import get_artifact_context, get_artifact_name, get_museum_prompt_config
+from live.rag_context import get_exhibit_context, get_exhibit_name, get_museum_prompt_config
 
 
 logger = logging.getLogger(__name__)
@@ -28,15 +28,15 @@ logger = logging.getLogger(__name__)
 class GeminiLiveHandler:
     """Handler for Gemini Live API websocket sessions."""
 
-    def __init__(self, artifact: dict, language: str = "vi", artifact_id: str | None = None):
-        self.artifact = artifact
+    def __init__(self, exhibit: dict, language: str = "vi", exhibit_id: str | None = None):
+        self.exhibit = exhibit
         self.language = language
-        self.system_instruction = build_prompt(artifact, language)
-        self.artifact_id = artifact_id
-        self._artifact_name = artifact.get("name", "artifact")
+        self.system_instruction = build_prompt(exhibit, language)
+        self.exhibit_id = exhibit_id
+        self._exhibit_name = exhibit.get("name", "exhibit")
         self._museum_ai_persona = ""
         self._museum_welcome_messages: dict[str, str] = {}
-        self._artifact_system_prompt = str(artifact.get("system_prompt", "") or "").strip()
+        self._exhibit_system_prompt = str(exhibit.get("system_prompt", "") or "").strip()
 
         api_key = os.getenv("GEMINI_API_KEY")
         if not api_key:
@@ -54,22 +54,22 @@ class GeminiLiveHandler:
     async def handle_websocket(self, websocket: WebSocket):
         """Handle websocket connection from client."""
         await websocket.accept()
-        artifact_name = self.artifact.get("name", "artifact")
-        logger.info("🔌 Client connected: %s | artifact=%s", websocket.client, artifact_name)
+        exhibit_name = self.exhibit.get("name", "exhibit")
+        logger.info("🔌 Client connected: %s | exhibit=%s", websocket.client, exhibit_name)
         logger.info("📦 google-genai version: %s", self._genai_version)
 
         try:
-            artifact_name = self._artifact_name
-            artifact_context = ""
-            if self.artifact_id:
+            exhibit_name = self._exhibit_name
+            exhibit_context = ""
+            if self.exhibit_id:
                 try:
-                    artifact_context = await get_artifact_context(self.artifact_id, top_k=12)
-                    if artifact_context:
-                        artifact_name = await get_artifact_name(self.artifact_id)
+                    exhibit_context = await get_exhibit_context(self.exhibit_id, top_k=12)
+                    if exhibit_context:
+                        exhibit_name = await get_exhibit_name(self.exhibit_id)
                 except Exception as rag_e:
-                    logger.warning("Failed to load artifact context: %s", rag_e)
+                    logger.warning("Failed to load exhibit context: %s", rag_e)
 
-            museum_id = str(self.artifact.get("museum_id", "") or "")
+            museum_id = str(self.exhibit.get("museum_id", "") or "")
             if museum_id:
                 try:
                     museum_cfg = await get_museum_prompt_config(museum_id)
@@ -79,15 +79,15 @@ class GeminiLiveHandler:
                     logger.warning("Failed to load museum prompt config: %s", museum_e)
 
             system_prompt, prompt_meta = self._compose_system_prompt(
-                artifact_name=artifact_name,
-                artifact_context=artifact_context,
+                exhibit_name=exhibit_name,
+                exhibit_context=exhibit_context,
             )
             prompt_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()[:12]
             logger.info(
-                "🧠 prompt meta: has_museum_persona=%s has_artifact_override=%s "
+                "🧠 prompt meta: has_museum_persona=%s has_exhibit_override=%s "
                 "has_fallback=%s context_chars=%d prompt_chars=%d hash=%s",
                 prompt_meta["has_museum_persona"],
-                prompt_meta["has_artifact_override"],
+                prompt_meta["has_exhibit_override"],
                 prompt_meta["has_fallback"],
                 prompt_meta["context_chars"],
                 len(system_prompt),
@@ -229,7 +229,7 @@ class GeminiLiveHandler:
                         else ""
                     )
                     greeting = (
-                        f"Introduce the artifact \"{self._artifact_name}\" in 2-3 concise sentences "
+                        f"Introduce the exhibit \"{self._exhibit_name}\" in 2-3 concise sentences "
                         f"in {lang_name}. {welcome_instruction}"
                     )
                     await session.send(input=greeting, end_of_turn=True)
@@ -465,16 +465,16 @@ class GeminiLiveHandler:
             "zh": "Chinese",
         }.get(language, "English")
 
-    def _compose_system_prompt(self, artifact_name: str, artifact_context: str) -> tuple[str, dict[str, object]]:
+    def _compose_system_prompt(self, exhibit_name: str, exhibit_context: str) -> tuple[str, dict[str, object]]:
         """
         Build one orchestrated system prompt with clear precedence:
-        artifact override > museum persona > fallback template.
+        exhibit override > museum persona > fallback template.
         """
         has_museum_persona = bool(self._museum_ai_persona.strip())
-        has_artifact_override = bool(self._artifact_system_prompt.strip())
+        has_exhibit_override = bool(self._exhibit_system_prompt.strip())
         fallback_template = self.system_instruction.strip()
         has_fallback = bool(fallback_template)
-        context_text = artifact_context.strip() or "No curated artifact facts are available."
+        context_text = exhibit_context.strip() or "No curated exhibit facts are available."
         language_label = self._language_label(self.language)
 
         museum_persona = (
@@ -482,34 +482,34 @@ class GeminiLiveHandler:
             if has_museum_persona
             else "Friendly, clear, and educational museum guide."
         )
-        artifact_override = (
-            self._artifact_system_prompt.strip()
-            if has_artifact_override
+        exhibit_override = (
+            self._exhibit_system_prompt.strip()
+            if has_exhibit_override
             else "(none)"
         )
 
-        prompt_with_fallback = f"""You are a professional museum guide currently presenting: {artifact_name}.
+        prompt_with_fallback = f"""You are a professional museum guide currently presenting: {exhibit_name}.
 
 LANGUAGE
 - Always respond in {language_label}.
 
 STYLE POLICY (tone and delivery)
 - Museum persona baseline: {museum_persona}
-- Artifact-level override (highest priority): {artifact_override}
+- Exhibit-level override (highest priority): {exhibit_override}
 - Fallback style template (use only when the two lines above are insufficient):
 {fallback_template if has_fallback else "(none)"}
 
 CONTENT POLICY (facts and grounding)
-- Primary source of truth is the curated artifact facts below.
+- Primary source of truth is the curated exhibit facts below.
 - Do not invent names, dates, numbers, or events.
 - If the requested detail is missing from the curated facts, say:
   "The museum currently has no verified information about that detail."
 
-CURATED ARTIFACT FACTS
+CURATED EXHIBIT FACTS
 {context_text}
 
 PRIORITY ORDER
-1) Artifact-level override
+1) Exhibit-level override
 2) Museum persona baseline
 3) Fallback style template
 4) General safe conversational behavior
@@ -520,31 +520,31 @@ PRIORITY ORDER
         if len(prompt_with_fallback) <= max_chars:
             return prompt_with_fallback, {
                 "has_museum_persona": has_museum_persona,
-                "has_artifact_override": has_artifact_override,
+                "has_exhibit_override": has_exhibit_override,
                 "has_fallback": has_fallback,
                 "context_chars": len(context_text),
             }
 
-        prompt_without_fallback = f"""You are a professional museum guide currently presenting: {artifact_name}.
+        prompt_without_fallback = f"""You are a professional museum guide currently presenting: {exhibit_name}.
 
 LANGUAGE
 - Always respond in {language_label}.
 
 STYLE POLICY (tone and delivery)
 - Museum persona baseline: {museum_persona}
-- Artifact-level override (highest priority): {artifact_override}
+- Exhibit-level override (highest priority): {exhibit_override}
 
 CONTENT POLICY (facts and grounding)
-- Primary source of truth is the curated artifact facts below.
+- Primary source of truth is the curated exhibit facts below.
 - Do not invent names, dates, numbers, or events.
 - If the requested detail is missing from the curated facts, say:
   "The museum currently has no verified information about that detail."
 
-CURATED ARTIFACT FACTS
+CURATED EXHIBIT FACTS
 {context_text}
 
 PRIORITY ORDER
-1) Artifact-level override
+1) Exhibit-level override
 2) Museum persona baseline
 3) General safe conversational behavior
 """
@@ -554,13 +554,13 @@ PRIORITY ORDER
         )
         return prompt_without_fallback, {
             "has_museum_persona": has_museum_persona,
-            "has_artifact_override": has_artifact_override,
+            "has_exhibit_override": has_exhibit_override,
             "has_fallback": False,
             "context_chars": len(context_text),
         }
 
 
-async def handle_persona_websocket(websocket: WebSocket, artifact: dict, language: str = "vi"):
+async def handle_persona_websocket(websocket: WebSocket, exhibit: dict, language: str = "vi"):
     """Entry point for websocket endpoint."""
-    handler = GeminiLiveHandler(artifact, language, artifact.get("id"))
+    handler = GeminiLiveHandler(exhibit, language, exhibit.get("id"))
     await handler.handle_websocket(websocket)

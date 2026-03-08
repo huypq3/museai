@@ -8,14 +8,12 @@ Run:
 import asyncio
 import os
 import sys
+import inspect
 from google.cloud import firestore
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from live.rag_context import add_embeddings_to_chunks
-
-
-db = firestore.AsyncClient(project=os.getenv("GOOGLE_CLOUD_PROJECT", "museai-2026"))
 
 
 KNOWLEDGE_BASE = {
@@ -69,14 +67,28 @@ KNOWLEDGE_BASE = {
 
 
 async def seed():
-    for artifact_id, chunks in KNOWLEDGE_BASE.items():
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not project_id:
+        raise RuntimeError("Missing GOOGLE_CLOUD_PROJECT. Set it in environment before running seed.")
+
+    exhibits_collection = os.getenv("EXHIBITS_COLLECTION", "exhibits")
+    include_ids_raw = os.getenv("SEED_EXHIBIT_IDS", "").strip()
+    include_ids = {x.strip() for x in include_ids_raw.split(",") if x.strip()}
+
+    db = firestore.AsyncClient(project=project_id)
+
+    for exhibit_id, chunks in KNOWLEDGE_BASE.items():
+        if include_ids and exhibit_id not in include_ids:
+            continue
         add_embeddings_to_chunks(chunks)
-        exhibit_ref = db.collection("exhibits").document(artifact_id)
-        legacy_ref = db.collection("artifacts").document(artifact_id)
-        payload = {"knowledge_base": chunks, "exhibit_id": artifact_id}
+        exhibit_ref = db.collection(exhibits_collection).document(exhibit_id)
+        payload = {"knowledge_base": chunks, "exhibit_id": exhibit_id}
         await exhibit_ref.set(payload, merge=True)
-        await legacy_ref.set(payload, merge=True)
-        print(f"✅ Seeded {len(chunks)} chunks for {artifact_id}")
+        print(f"✅ Seeded {len(chunks)} chunks for {exhibit_id}")
+
+    close_result = db.close()
+    if inspect.isawaitable(close_result):
+        await close_result
 
 
 if __name__ == "__main__":

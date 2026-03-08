@@ -1,6 +1,6 @@
 """
 RAG context utilities for voice live sessions.
-Loads artifact knowledge_base from Firestore and provides semantic search.
+Loads exhibit knowledge_base from Firestore and provides semantic search.
 """
 
 from __future__ import annotations
@@ -21,7 +21,9 @@ _embedding_model = None
 def _get_db() -> firestore.AsyncClient:
     global _db
     if _db is None:
-        project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "museai-2026")
+        project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+        if not project_id:
+            raise RuntimeError("GOOGLE_CLOUD_PROJECT environment variable is required")
         _db = firestore.AsyncClient(project=project_id)
     return _db
 
@@ -48,15 +50,13 @@ def cosine_similarity(a: list[float], b: list[float]) -> float:
     return float(np.dot(va, vb) / denom)
 
 
-async def get_artifact_name(artifact_id: str) -> str:
+async def get_exhibit_name(exhibit_id: str) -> str:
     db = _get_db()
-    doc = await db.collection("exhibits").document(artifact_id).get()
+    doc = await db.collection("exhibits").document(exhibit_id).get()
     if not doc.exists:
-        doc = await db.collection("artifacts").document(artifact_id).get()
-    if not doc.exists:
-        return artifact_id
+        return exhibit_id
     data = doc.to_dict() or {}
-    return data.get("name") or artifact_id
+    return data.get("name") or exhibit_id
 
 
 async def get_museum_prompt_config(museum_id: str) -> dict[str, Any]:
@@ -82,14 +82,12 @@ async def get_museum_prompt_config(museum_id: str) -> dict[str, Any]:
     }
 
 
-async def get_artifact_context(artifact_id: str, top_k: int = 8) -> str:
+async def get_exhibit_context(exhibit_id: str, top_k: int = 8) -> str:
     """
-    Load knowledge chunks for artifact and format as plain-text context.
+    Load knowledge chunks for exhibit and format as plain-text context.
     """
     db = _get_db()
-    doc = await db.collection("exhibits").document(artifact_id).get()
-    if not doc.exists:
-        doc = await db.collection("artifacts").document(artifact_id).get()
+    doc = await db.collection("exhibits").document(exhibit_id).get()
     if not doc.exists:
         return ""
 
@@ -114,17 +112,15 @@ def _embed_query(query: str) -> list[float]:
     return list(emb.values)
 
 
-async def semantic_search(artifact_id: str, query: str, top_k: int = 3) -> str:
+async def semantic_search(exhibit_id: str, query: str, top_k: int = 3) -> str:
     """
-    Semantic search from artifact.knowledge_base embeddings.
+    Semantic search from exhibit.knowledge_base embeddings.
     """
     if not query.strip():
         return ""
 
     db = _get_db()
-    doc = await db.collection("exhibits").document(artifact_id).get()
-    if not doc.exists:
-        doc = await db.collection("artifacts").document(artifact_id).get()
+    doc = await db.collection("exhibits").document(exhibit_id).get()
     if not doc.exists:
         return ""
 

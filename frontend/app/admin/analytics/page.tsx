@@ -31,7 +31,7 @@ export default function AnalyticsPage() {
   return (
     <div style={{ flex: 1, padding: 28 }}>
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+        <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>Analytics</div>
         <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>Analytics</div>
       </div>
       {!data ? <p>{tr('Đang tải...', 'Loading...')}</p> : (

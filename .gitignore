@@ -24,7 +24,7 @@ node_modules/
 out/
 .vercel/
 
-# Keep backup build artifacts out of git
+# Keep backup build outputs out of git
 frontend/.next_bak_*/
 
 # =========================

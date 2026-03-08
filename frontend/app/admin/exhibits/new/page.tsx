@@ -6,7 +6,7 @@ import { adminFetch } from '@/lib/adminAuth'
 import ImageUpload from '@/components/admin/ImageUpload'
 import MultiImageUpload from '@/components/admin/MultiImageUpload'
 import TagInput from '@/components/admin/TagInput'
-import { validateArtifactPublishable } from '@/lib/validation'
+import { validateExhibitPublishable } from '@/lib/validation'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'basic' | 'vision' | 'knowledge' | 'scenes'
@@ -40,7 +40,7 @@ export default function NewExhibitPage() {
     setMuseumId(params.get('museum') || '')
   }, [])
 
-  const completion = useMemo(() => validateArtifactPublishable(form), [form])
+  const completion = useMemo(() => validateExhibitPublishable(form), [form])
   const completionReason = completion.reasonCode
     ? completion.reasonCode === 'knowledge_base_min_chunks'
       ? tr('Knowledge Base phải có tối thiểu 2 chunks', 'Knowledge Base must have at least 2 chunks')
@@ -87,9 +87,9 @@ export default function NewExhibitPage() {
     <div style={{ flex: 1, padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>
-          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>{tr('Thêm hiện vật mới', 'Add new exhibit')}</div>
           <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
-            {tr('Thêm hiện vật mới', 'Add new exhibit')}
+            {tr('Tạo nội dung và metadata cho hiện vật', 'Create exhibit content and metadata')}
           </div>
         </div>
       </div>
@@ -167,7 +167,7 @@ export default function NewExhibitPage() {
                       next[idx] = { ...k, category: e.target.value }
                       setForm({ ...form, knowledge_base: next })
                     }} style={input}>
-                      {['biography', 'artifact_info', 'battle', 'legend', 'technique', 'faq', 'other'].map((x) => <option key={x}>{x}</option>)}
+                      {['biography', 'exhibit_info', 'battle', 'legend', 'technique', 'faq', 'other'].map((x) => <option key={x}>{x}</option>)}
                     </select>
                   </Field>
                   <Field label={tr('Tiêu đề', 'Title')}><input value={k.title || ''} onChange={(e) => {

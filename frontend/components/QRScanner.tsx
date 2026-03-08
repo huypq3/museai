@@ -7,9 +7,7 @@ import { LanguageCode } from "@/lib/constants";
 
 export type QRScanPayload = {
   museum_id?: string;
-  exhibit_id?: string;
-  artifact_id?: string;
-  error?: "non_system" | "invalid" | "unreadable";
+  exhibit_id?: string;  error?: "non_system" | "invalid" | "unreadable";
 };
 
 type Props = {
@@ -72,7 +70,7 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
       const museumId = url.searchParams.get("museum") || undefined;
       const exhibitId =
         url.searchParams.get("exhibit") ||
-        url.searchParams.get("artifact") ||
+        url.searchParams.get("exhibit") ||
         undefined;
 
       // Support direct path: /exhibit/{id}
@@ -88,7 +86,6 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
         return {
           museum_id: museumId,
           exhibit_id: resolvedExhibitId,
-          artifact_id: resolvedExhibitId,
         };
       }
 
@@ -101,10 +98,10 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
     // Fallback plain text: museum_id:exhibit_id OR exhibit_id
     const parts = raw.split(":").map((p) => p.trim()).filter(Boolean);
     if (parts.length === 2) {
-      return { museum_id: parts[0], exhibit_id: parts[1], artifact_id: parts[1] };
+      return { museum_id: parts[0], exhibit_id: parts[1] };
     }
     if (parts.length === 1) {
-      return { exhibit_id: parts[0], artifact_id: parts[0] };
+      return { exhibit_id: parts[0] };
     }
     return { error: "invalid" };
   };

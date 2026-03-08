@@ -61,15 +61,15 @@ class CreateUserRequest(BaseModel):
     @classmethod
     def _validate_password_strength(cls, password: str) -> str:
         if not re.search(r"[A-Z]", password):
-            raise ValueError("Cần ít nhất 1 chữ hoa")
+            raise ValueError("Password must include at least 1 uppercase letter")
         if not re.search(r"[0-9]", password):
-            raise ValueError("Cần ít nhất 1 chữ số")
+            raise ValueError("Password must include at least 1 number")
         return password
 
     @classmethod
     def _validate_email(cls, email: str | None) -> str | None:
         if email and "@" not in email:
-            raise ValueError("Email không hợp lệ")
+            raise ValueError("Invalid email format")
         return email
 
     def model_post_init(self, __context):
@@ -85,11 +85,11 @@ class UpdateUserRequest(BaseModel):
     def model_post_init(self, __context):
         if self.new_password:
             if not re.search(r"[A-Z]", self.new_password):
-                raise ValueError("Cần ít nhất 1 chữ hoa")
+                raise ValueError("Password must include at least 1 uppercase letter")
             if not re.search(r"[0-9]", self.new_password):
-                raise ValueError("Cần ít nhất 1 chữ số")
+                raise ValueError("Password must include at least 1 number")
         if self.email and "@" not in self.email:
-            raise ValueError("Email không hợp lệ")
+            raise ValueError("Invalid email format")
 
 
 @router.get("/")
@@ -114,15 +114,15 @@ async def create_museum_admin(body: CreateUserRequest, admin: dict = Depends(get
         )
 
     if await _find_one_by_field("username", body.username):
-        raise HTTPException(status_code=400, detail=f"Username '{body.username}' đã tồn tại")
+        raise HTTPException(status_code=400, detail=f"Username '{body.username}' already exists")
 
     if await _active_admin_for_museum(body.museum_id):
-        raise HTTPException(status_code=400, detail="Bảo tàng này đã có admin account")
+        raise HTTPException(status_code=400, detail="This museum already has an active admin account")
 
     db = get_db()
     museum_doc = await db.collection("museums").document(body.museum_id).get()
     if not museum_doc.exists:
-        raise HTTPException(status_code=404, detail="Bảo tàng không tồn tại")
+        raise HTTPException(status_code=404, detail="Museum not found")
     museum_data = museum_doc.to_dict() or {}
     museum_name = museum_data.get("name", body.museum_id)
 
@@ -158,7 +158,7 @@ async def create_museum_admin(body: CreateUserRequest, admin: dict = Depends(get
         "password": body.password,
         "museum_id": body.museum_id,
         "museum_name": museum_name,
-        "message": "Lưu mật khẩu ngay — sẽ không hiển thị lại",
+        "message": "Save this password now — it will not be shown again",
     }
 
 
@@ -172,7 +172,7 @@ async def update_user(uid: str, body: UpdateUserRequest, _: dict = Depends(get_s
 
     existing = doc.to_dict() or {}
     if existing.get("role") == "super_admin" and body.status == "suspended":
-        raise HTTPException(status_code=400, detail="Không thể suspend super admin")
+        raise HTTPException(status_code=400, detail="Can not suspend super admin")
 
     updates: dict[str, Any] = {}
     if body.new_password:
@@ -191,7 +191,7 @@ async def update_user(uid: str, body: UpdateUserRequest, _: dict = Depends(get_s
 @router.delete("/{uid}")
 async def suspend_user(uid: str, admin: dict = Depends(get_super_admin)):
     if uid == admin.get("uid"):
-        raise HTTPException(status_code=400, detail="Không thể suspend chính mình")
+        raise HTTPException(status_code=400, detail="Can not suspend yourself")
 
     db = get_db()
     ref = db.collection("admin_users").document(uid)
@@ -200,7 +200,7 @@ async def suspend_user(uid: str, admin: dict = Depends(get_super_admin)):
         raise HTTPException(status_code=404, detail="User not found")
     data = doc.to_dict() or {}
     if data.get("role") == "super_admin":
-        raise HTTPException(status_code=400, detail="Không thể suspend super admin")
+        raise HTTPException(status_code=400, detail="Can not suspend super admin")
 
     await ref.update({"status": "suspended"})
     await audit_log(
@@ -224,5 +224,5 @@ async def reset_password(uid: str, _: dict = Depends(get_super_admin)):
     await audit_log(event="password_reset", actor="super_admin", details={"target_uid": uid})
     return {
         "new_password": new_password,
-        "message": "Gửi mật khẩu này cho museum admin",
+        "message": "Send this password to the museum admin",
     }

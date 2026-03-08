@@ -71,7 +71,7 @@ async def check_login_lockout(username: str, ip: str) -> None:
     if user_fails >= LOGIN_LOCKOUT_THRESHOLD or ip_fails >= LOGIN_LOCKOUT_THRESHOLD * 3:
         raise HTTPException(
             status_code=429,
-            detail=f"Tài khoản tạm khóa. Thử lại sau {LOGIN_LOCKOUT_MINUTES} phút.",
+            detail=f"Account temporarily locked. Try again in {LOGIN_LOCKOUT_MINUTES} minutes.",
         )
 
 

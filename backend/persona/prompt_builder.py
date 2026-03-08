@@ -1,40 +1,40 @@
 """
 Persona prompt fallback builder for MuseAI live sessions.
-This is a lightweight fallback template used only when museum/artifact
+This is a lightweight fallback template used only when museum/exhibit
 level prompt data is missing.
 """
 
 from typing import Dict, Any
 
 
-def build_prompt(artifact: Dict[str, Any], language: str = "vi") -> str:
+def build_prompt(exhibit: Dict[str, Any], language: str = "vi") -> str:
     """
     Build a concise fallback instruction for Gemini Live API.
     
     Args:
-        artifact: Artifact dict with optional nested persona fields.
+        exhibit: Exhibit dict with optional nested persona fields.
         language: Language code (vi, en, fr, zh, ja, ko)
     
     Returns:
         str: Fallback prompt text
     """
-    artifact_type = artifact.get("type", "object")
+    exhibit_type = exhibit.get("type", "object")
     
-    if artifact_type == "person":
-        return _build_person_prompt(artifact, language)
-    elif artifact_type == "artwork":
-        return _build_artwork_prompt(artifact, language)
+    if exhibit_type == "person":
+        return _build_person_prompt(exhibit, language)
+    elif exhibit_type == "artwork":
+        return _build_artwork_prompt(exhibit, language)
     else:
-        return _build_object_prompt(artifact, language)
+        return _build_object_prompt(exhibit, language)
 
 
-def _build_person_prompt(artifact: Dict[str, Any], language: str) -> str:
-    """Fallback for historical person artifacts."""
-    name = artifact.get("name", "this historical figure")
-    era = artifact.get("era", "")
-    description = artifact.get("description", "")
+def _build_person_prompt(exhibit: Dict[str, Any], language: str) -> str:
+    """Fallback for historical person exhibits."""
+    name = exhibit.get("name", "this historical figure")
+    era = exhibit.get("era", "")
+    description = exhibit.get("description", "")
 
-    persona = artifact.get("persona", {})
+    persona = exhibit.get("persona", {})
     subject_role = persona.get("subject_role", "historical figure")
     storytelling_style = persona.get("storytelling_style", "clear, warm, and educational")
     opening_line = persona.get("opening_line", f"Welcome. Let me briefly introduce {name}.")
@@ -74,13 +74,13 @@ Rules:
     return prompt.strip()
 
 
-def _build_artwork_prompt(artifact: Dict[str, Any], language: str) -> str:
-    """Fallback for artwork artifacts."""
-    name = artifact.get("name", "this artwork")
-    era = artifact.get("era", "")
-    description = artifact.get("description", "")
+def _build_artwork_prompt(exhibit: Dict[str, Any], language: str) -> str:
+    """Fallback for artwork exhibits."""
+    name = exhibit.get("name", "this artwork")
+    era = exhibit.get("era", "")
+    description = exhibit.get("description", "")
 
-    persona = artifact.get("persona", {})
+    persona = exhibit.get("persona", {})
     storytelling_style = persona.get("storytelling_style", "clear, vivid, and emotionally balanced")
     opening_line = persona.get("opening_line", f"Welcome. This is {name}, a remarkable artwork.")
     key_events = persona.get("key_events", [])
@@ -115,15 +115,15 @@ Rules:
     return prompt.strip()
 
 
-def _build_object_prompt(artifact: Dict[str, Any], language: str) -> str:
-    """Fallback for object/cultural artifact entries."""
-    name = artifact.get("name", "this artifact")
-    era = artifact.get("era", "")
-    description = artifact.get("description", "")
+def _build_object_prompt(exhibit: Dict[str, Any], language: str) -> str:
+    """Fallback for object/cultural exhibit entries."""
+    name = exhibit.get("name", "this exhibit")
+    era = exhibit.get("era", "")
+    description = exhibit.get("description", "")
 
-    persona = artifact.get("persona", {})
+    persona = exhibit.get("persona", {})
     storytelling_style = persona.get("storytelling_style", "clear, practical, and engaging")
-    opening_line = persona.get("opening_line", f"Welcome. This is {name}, an important artifact.")
+    opening_line = persona.get("opening_line", f"Welcome. This is {name}, an important exhibit.")
     key_events = persona.get("key_events", [])
     topics_to_emphasize = persona.get("topics_to_emphasize", [])
     topics_to_avoid = persona.get("topics_to_avoid", [])
@@ -135,7 +135,7 @@ def _build_object_prompt(artifact: Dict[str, Any], language: str) -> str:
 Speaking style: {storytelling_style}
 Suggested opening line: "{opening_line}"
 
-Artifact context:
+Exhibit context:
 {description}
 
 Related history:

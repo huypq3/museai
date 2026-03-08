@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 async def search_similar_chunks(
     question: str,
-    artifact_id: str,
+    exhibit_id: str,
     top_k: int = 5,
     project_id: str = "museai-2026"
 ) -> List[Dict]:
@@ -25,7 +25,7 @@ async def search_similar_chunks(
     
     Args:
         question: User question
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
         top_k: Number of chunks to return
         project_id: GCP project ID
     
@@ -44,18 +44,18 @@ async def search_similar_chunks(
         # Initialize Firestore client.
         db = firestore.AsyncClient(project=project_id)
         
-        # Fetch all chunks for exhibit (fallback to legacy artifact_chunks).
-        chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", artifact_id)
+        # Fetch all chunks for exhibit (fallback to legacy exhibit_chunks).
+        chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", exhibit_id)
         chunks_docs = await chunks_ref.get()
         if not chunks_docs:
-            chunks_ref = db.collection("artifact_chunks").where("artifact_id", "==", artifact_id)
+            chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", exhibit_id)
             chunks_docs = await chunks_ref.get()
         
         if not chunks_docs:
-            logger.warning(f"No chunks found for artifact: {artifact_id}")
+            logger.warning(f"No chunks found for exhibit: {exhibit_id}")
             return []
         
-        logger.info(f"Found {len(chunks_docs)} chunks for artifact: {artifact_id}")
+        logger.info(f"Found {len(chunks_docs)} chunks for exhibit: {exhibit_id}")
         
         # Compute similarity for each chunk.
         chunks_with_similarity = []
@@ -93,7 +93,7 @@ async def search_similar_chunks(
 
 async def answer_with_rag(
     question: str,
-    artifact_id: str,
+    exhibit_id: str,
     language: str = "vi",
     project_id: str = "museai-2026"
 ) -> Dict:
@@ -102,7 +102,7 @@ async def answer_with_rag(
     
     Args:
         question: User question
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
         language: Output language (vi, en, fr, zh, ja, ko)
         project_id: GCP project ID
     
@@ -118,7 +118,7 @@ async def answer_with_rag(
         # Retrieve similar chunks.
         similar_chunks = await search_similar_chunks(
             question=question,
-            artifact_id=artifact_id,
+            exhibit_id=exhibit_id,
             top_k=5,
             project_id=project_id
         )
@@ -155,7 +155,7 @@ async def answer_with_rag(
             prompt = f"""You are a museum guide.
 Question: {question}
 
-The artifact documents do not contain relevant details for this question.
+The exhibit documents do not contain relevant details for this question.
 Answer using your general knowledge, and START your answer with:
 "Based on general knowledge, ..."
 

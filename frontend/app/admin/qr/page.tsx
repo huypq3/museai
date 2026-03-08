@@ -69,7 +69,7 @@ export default function QRManagementPage() {
   return (
     <div style={{ flex: 1, padding: 24 }}>
       <div style={{ marginBottom: 16 }}>
-        <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+        <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>QR Codes</div>
         <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>QR Codes</div>
       </div>
       <div style={card}>
@@ -87,12 +87,12 @@ export default function QRManagementPage() {
         </div>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12 }}>
-        {data.artifacts.map((a: any) => (
-          <div key={a.artifact_id} style={card}>
+        {data.exhibits.map((a: any) => (
+          <div key={a.exhibit_id} style={card}>
             <div style={{ marginBottom: 8 }}>{a.name}</div>
             <img src={a.qr_data_url} style={{ width: 160, height: 160 }} />
             <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
-              <a href={a.qr_data_url} download={`${a.artifact_id}.png`} style={btnLink}>↓ PNG</a>
+              <a href={a.qr_data_url} download={`${a.exhibit_id}.png`} style={btnLink}>↓ PNG</a>
               <button onClick={() => navigator.clipboard.writeText(a.qr_url)} style={btn}>📋 {tr('Sao chép', 'Copy')}</button>
             </div>
           </div>

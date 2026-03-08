@@ -25,14 +25,13 @@ ALLOWED_EVENT_TYPES = {
     "question_asked",
     "language_changed",
     "camera_opened",
-    "artifact_detected",
+    "exhibit_detected",
 }
 
 
 class PublicTrackEventBody(BaseModel):
     museum_id: str = Field(min_length=1, max_length=128)
     exhibit_id: str | None = Field(default=None, max_length=128)
-    artifact_id: str | None = Field(default=None, max_length=128)
     event_type: str = Field(min_length=1, max_length=64)
     language: str = Field(default="vi", min_length=2, max_length=8)
     duration_seconds: int | None = None
@@ -63,10 +62,8 @@ async def track_event(request: Request, body: PublicTrackEventBody):
 
     db = get_db()
     payload = body.model_dump()
-    entity_id = body.exhibit_id or body.artifact_id
-    if entity_id:
-        payload["exhibit_id"] = entity_id
-        payload["artifact_id"] = entity_id  # legacy compatibility
+    if body.exhibit_id:
+        payload["exhibit_id"] = body.exhibit_id
     payload["event_type"] = event_type
     payload["timestamp"] = _parse_ts(body.timestamp)
     payload["created_at"] = firestore.SERVER_TIMESTAMP

@@ -17,15 +17,11 @@ EPHEMERAL_EXPIRE_SECONDS = int(os.getenv("EPHEMERAL_TOKEN_EXPIRE_SECONDS", "3600
 def create_ephemeral_token(
     exhibit_id: str | None = None,
     museum_id: str | None = None,
-    artifact_id: str | None = None,
 ) -> str:
     """
     Create WS ephemeral token.
-    Backward compatible:
-    - Preferred key: exhibit_id
-    - Legacy key: artifact_id
     """
-    entity_id = (exhibit_id or artifact_id or "").strip()
+    entity_id = (exhibit_id or "").strip()
     if not entity_id:
         raise HTTPException(status_code=400, detail="Missing exhibit_id")
 
@@ -33,8 +29,6 @@ def create_ephemeral_token(
     payload: dict[str, Any] = {
         "type": "ephemeral_ws",
         "exhibit_id": entity_id,
-        # Keep legacy field for old clients/routes.
-        "artifact_id": entity_id,
         "museum_id": museum_id,
         "iat": int(now.timestamp()),
         "exp": int((now + timedelta(seconds=EPHEMERAL_EXPIRE_SECONDS)).timestamp()),
@@ -49,8 +43,6 @@ def verify_ephemeral_token(token: str) -> dict[str, Any]:
         raise HTTPException(status_code=401, detail="Invalid ephemeral token")
     if payload.get("type") != "ephemeral_ws":
         raise HTTPException(status_code=401, detail="Invalid token type")
-    # Normalize for callers: always provide both keys.
-    entity_id = payload.get("exhibit_id") or payload.get("artifact_id")
+    entity_id = payload.get("exhibit_id")
     payload["exhibit_id"] = entity_id
-    payload["artifact_id"] = entity_id
     return payload

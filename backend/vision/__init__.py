@@ -1,6 +1,6 @@
-"""Vision module - Gemini Vision cho artifact recognition."""
+"""Vision module - Gemini Vision cho exhibit recognition."""
 
-from .recognizer import recognize_artifact
+from .recognizer import recognize_exhibit
 from .camera_tour import analyze_frame, generate_commentary
 
-__all__ = ["recognize_artifact", "analyze_frame", "generate_commentary"]
+__all__ = ["recognize_exhibit", "analyze_frame", "generate_commentary"]

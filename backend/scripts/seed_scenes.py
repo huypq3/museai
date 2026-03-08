@@ -10,10 +10,13 @@ async def seed_scenes():
     """Add scenes data for exhibit statue_tran_hung_dao."""
     
     # Initialize Firestore
-    project_id = os.getenv("GOOGLE_CLOUD_PROJECT", "museai-2026")
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+    if not project_id:
+        raise RuntimeError("Missing GOOGLE_CLOUD_PROJECT. Set it in environment before running seed.")
     db = firestore.AsyncClient(project=project_id)
     
-    artifact_id = "statue_tran_hung_dao"
+    exhibit_id = os.getenv("SEED_EXHIBIT_ID", "statue_tran_hung_dao")
+    exhibits_collection = os.getenv("EXHIBITS_COLLECTION", "exhibits")
     
     scenes = [
         {
@@ -43,22 +46,19 @@ async def seed_scenes():
         },
     ]
     
-    print(f"📝 Updating exhibit: {artifact_id}")
+    print(f"📝 Updating exhibit: {exhibit_id}")
     print(f"   Adding {len(scenes)} scenes...")
     
     try:
-        # Update exhibit document and mirror legacy artifacts collection.
-        await db.collection("exhibits").document(artifact_id).set(
-            {"scenes": scenes, "exhibit_id": artifact_id}, merge=True
-        )
-        await db.collection("artifacts").document(artifact_id).set(
-            {"scenes": scenes, "exhibit_id": artifact_id}, merge=True
+        # Update exhibit document.
+        await db.collection(exhibits_collection).document(exhibit_id).set(
+            {"scenes": scenes, "exhibit_id": exhibit_id}, merge=True
         )
         
-        print(f"✅ Successfully added {len(scenes)} scenes to {artifact_id}")
+        print(f"✅ Successfully added {len(scenes)} scenes to {exhibit_id}")
         
         # Verify
-        doc = await db.collection("exhibits").document(artifact_id).get()
+        doc = await db.collection(exhibits_collection).document(exhibit_id).get()
         if doc.exists:
             data = doc.to_dict()
             print(f"✅ Verified: document now has {len(data.get('scenes', []))} scenes")

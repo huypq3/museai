@@ -69,13 +69,8 @@ export default function ExhibitQRPage() {
         width: '100%',
         textAlign: 'center',
       }}>
-        <div style={{
-          fontFamily: 'Cormorant Garamond, serif',
-          fontSize: 28,
-          color: '#C9A84C',
-          marginBottom: 6,
-        }}>
-          MuseAI Admin
+        <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C', marginBottom: 6 }}>
+          {tr('Mã QR hiện vật', 'Exhibit QR code')}
         </div>
         <div style={{
           fontSize: 12,
@@ -84,7 +79,7 @@ export default function ExhibitQRPage() {
           textTransform: 'uppercase',
           marginBottom: 18,
         }}>
-          {tr('Mã QR hiện vật', 'Exhibit QR code')}
+          {tr('Dùng cho in ấn và đặt cạnh hiện vật', 'For printing and placing next to exhibit')}
         </div>
 
         <div style={{

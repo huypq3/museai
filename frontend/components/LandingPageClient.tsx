@@ -163,7 +163,7 @@ export default function HomePage() {
     }
 
     const museumId = payload.museum_id;
-    const exhibitId = payload.exhibit_id || payload.artifact_id;
+    const exhibitId = payload.exhibit_id || payload.exhibit_id;
 
     setOpenScanner(false);
 
@@ -458,7 +458,7 @@ export default function HomePage() {
               >
                 <img
                   src="https://images.unsplash.com/photo-1605721911519-3dfeb3be25e7?w=700&q=80"
-                  alt="Museum artifact preview"
+                  alt="Museum exhibit preview"
                   loading="lazy"
                   style={{ width: "100%", height: "100%", objectFit: "cover", opacity: 0.72 }}
                 />

@@ -11,7 +11,7 @@ from PIL import Image
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
-from vision.recognizer import recognize_artifact
+from vision.recognizer import recognize_exhibit
 from vision.camera_tour import analyze_frame, generate_commentary
 
 
@@ -30,7 +30,7 @@ async def test_recognize_unknown():
     
     image_bytes = create_blank_image()
     
-    result = await recognize_artifact(
+    result = await recognize_exhibit(
         image_bytes=image_bytes,
         museum_id="demo_museum"
     )
@@ -38,7 +38,7 @@ async def test_recognize_unknown():
     print(f"   Result: {result}")
     
     # Verify format
-    assert "artifact_id" in result
+    assert "exhibit_id" in result
     assert "confidence" in result
     assert "reasoning" in result
     assert "found" in result
@@ -46,78 +46,78 @@ async def test_recognize_unknown():
     assert isinstance(result["found"], bool)
     
     print(f"   ✅ Response format correct")
-    print(f"   Artifact ID: {result['artifact_id']}")
+    print(f"   Exhibit ID: {result['exhibit_id']}")
     print(f"   Confidence: {result['confidence']}")
     print(f"   Found: {result['found']}")
 
 
 @pytest.mark.asyncio
 async def test_recognize_with_description():
-    """Test với museum có artifacts → verify JSON format."""
-    print("\n🧪 Test 2: Recognize with artifact list")
+    """Test với museum has exhibits → verify JSON format."""
+    print("\n🧪 Test 2: Recognize with exhibit list")
     
     image_bytes = create_blank_image()
     
-    result = await recognize_artifact(
+    result = await recognize_exhibit(
         image_bytes=image_bytes,
         museum_id="demo_museum"
     )
     
     # Verify có call được Gemini và parse JSON
     assert result is not None
-    assert "artifact_id" in result
+    assert "exhibit_id" in result
     assert "confidence" in result
     
     # Confidence phải trong range 0-1
     assert 0.0 <= result["confidence"] <= 1.0
     
     print(f"   ✅ Gemini Vision called successfully")
-    print(f"   Artifact detected: {result['artifact_id']}")
+    print(f"   Exhibit detected: {result['exhibit_id']}")
     print(f"   Confidence: {result['confidence']:.2f}")
     print(f"   Reasoning: {result['reasoning'][:100]}...")
 
 
 @pytest.mark.asyncio
-async def test_camera_tour_same_artifact():
-    """Test camera tour với cùng artifact → same=True."""
-    print("\n🧪 Test 3: Camera tour - same artifact detection")
+async def test_camera_tour_same_exhibit():
+    """Test camera tour với cùng exhibit → same=True."""
+    print("\n🧪 Test 3: Camera tour - same exhibit detection")
     
     image_bytes = create_blank_image()
     
-    # Lần 1: phát hiện artifact
+    # Lần 1: phát hiện exhibit
     result1 = await analyze_frame(
         image_bytes=image_bytes,
         museum_id="demo_museum",
-        last_artifact_id=None
+        last_exhibit_id=None
     )
     
-    artifact_id = result1["artifact_id"]
-    print(f"   First frame: {artifact_id}")
+    exhibit_id = result1["exhibit_id"]
+    print(f"   First frame: {exhibit_id}")
     
-    # Lần 2: cùng artifact
+    # Lần 2: cùng exhibit
     result2 = await analyze_frame(
         image_bytes=image_bytes,
         museum_id="demo_museum",
-        last_artifact_id=artifact_id
+        last_exhibit_id=exhibit_id
     )
     
     print(f"   Second frame: same={result2['same']}")
     
     # Verify same=True
     assert result2["same"] == True
-    assert result2["artifact_id"] == artifact_id
+    assert result2["exhibit_id"] == exhibit_id
     
-    print(f"   ✅ Same artifact detected correctly")
+    print(f"   ✅ Same exhibit detected correctly")
 
 
 @pytest.mark.asyncio
 async def test_generate_commentary():
-    """Test generate commentary cho artifact."""
+    """Test generate commentary for exhibit."""
     print("\n🧪 Test 4: Generate commentary")
     
-    # Test với pottery_ly artifact
+    # Test với pottery_ly exhibit
     commentary = await generate_commentary(
-        artifact_id="pottery_ly",
+        exhibit_id="pottery_ly",
         language="vi"
     )
     
@@ -142,7 +142,7 @@ def main():
     # Run tests
     asyncio.run(test_recognize_unknown())
     asyncio.run(test_recognize_with_description())
-    asyncio.run(test_camera_tour_same_artifact())
+    asyncio.run(test_camera_tour_same_exhibit())
     asyncio.run(test_generate_commentary())
     
     print("\n" + "="*60)

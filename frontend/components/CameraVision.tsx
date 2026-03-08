@@ -1,22 +1,22 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { recognizeArtifact } from "@/lib/api";
+import { recognizeExhibit } from "@/lib/api";
 
 type Props = {
   museumId: string;
-  onArtifactDetected: (artifactId: string, confidence: number) => void;
+  onExhibitDetected: (exhibitId: string, confidence: number) => void;
   onClose: () => void;
 };
 
 type DetectionResult = {
-  artifact_id: string;
+  exhibit_id: string;
   confidence: number;
   reasoning: string;
   found: boolean;
 };
 
-export default function CameraVision({ museumId, onArtifactDetected, onClose }: Props) {
+export default function CameraVision({ museumId, onExhibitDetected, onClose }: Props) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -80,14 +80,14 @@ export default function CameraVision({ museumId, onArtifactDetected, onClose }: 
       const file = new File([blob], "capture.jpg", { type: "image/jpeg" });
 
       // Send to backend
-      const response = await recognizeArtifact(museumId, file);
+      const response = await recognizeExhibit(museumId, file);
       
       setResult(response);
 
       if (response.found && response.confidence >= 0.5) {
         // Auto-navigate after 2s
         setTimeout(() => {
-          onArtifactDetected(response.artifact_id, response.confidence);
+          onExhibitDetected(response.exhibit_id, response.confidence);
         }, 2000);
       }
     } catch (err) {
@@ -151,7 +151,7 @@ export default function CameraVision({ museumId, onArtifactDetected, onClose }: 
                     </div>
                   </div>
                   <button
-                    onClick={() => onArtifactDetected(result.artifact_id, result.confidence)}
+                    onClick={() => onExhibitDetected(result.exhibit_id, result.confidence)}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition"
                   >
                     Bắt đầu trò chuyện

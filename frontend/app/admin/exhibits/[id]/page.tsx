@@ -6,7 +6,7 @@ import { adminFetch } from '@/lib/adminAuth'
 import ImageUpload from '@/components/admin/ImageUpload'
 import MultiImageUpload from '@/components/admin/MultiImageUpload'
 import TagInput from '@/components/admin/TagInput'
-import { validateArtifactPublishable } from '@/lib/validation'
+import { validateExhibitPublishable } from '@/lib/validation'
 import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'basic' | 'vision' | 'knowledge' | 'scenes'
@@ -16,7 +16,7 @@ export default function EditExhibitPage() {
   const { locale } = useAdminI18n()
   const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
   const params = useParams()
-  const artifactId = params.id as string
+  const exhibitId = params.id as string
 
   const [tab, setTab] = useState<Tab>('basic')
   const [saving, setSaving] = useState(false)
@@ -39,7 +39,7 @@ export default function EditExhibitPage() {
   })
 
   useEffect(() => {
-    adminFetch(`/admin/exhibits/${artifactId}`)
+    adminFetch(`/admin/exhibits/${exhibitId}`)
       .then((data) => {
         setForm({
           name: data.name || '',
@@ -58,9 +58,9 @@ export default function EditExhibitPage() {
         })
       })
       .finally(() => setLoading(false))
-  }, [artifactId])
+  }, [exhibitId])
 
-  const completion = useMemo(() => validateArtifactPublishable(form), [form])
+  const completion = useMemo(() => validateExhibitPublishable(form), [form])
   const completionReason = completion.reasonCode
     ? completion.reasonCode === 'knowledge_base_min_chunks'
       ? tr('Knowledge Base phải có tối thiểu 2 chunks', 'Knowledge Base must have at least 2 chunks')
@@ -75,7 +75,7 @@ export default function EditExhibitPage() {
     setSaving(true)
     try {
       const payload = status ? { ...form, status } : form
-      await adminFetch(`/admin/exhibits/${artifactId}`, {
+      await adminFetch(`/admin/exhibits/${exhibitId}`, {
         method: 'PUT',
         body: JSON.stringify(payload),
       })
@@ -94,13 +94,12 @@ export default function EditExhibitPage() {
     <div style={{ flex: 1, padding: 24, maxWidth: 1100, margin: '0 auto' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
         <div>
-          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>{form.name || tr('Chỉnh sửa hiện vật', 'Edit exhibit')}</div>
           <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
             {form.name || tr('Chỉnh sửa hiện vật', 'Edit exhibit')}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={() => router.push(`/admin/exhibits/${artifactId}/qr`)} style={btn}>📱 QR</button>
         </div>
       </div>
 
@@ -113,6 +112,7 @@ export default function EditExhibitPage() {
         <TabBtn active={tab === 'vision'} onClick={() => setTab('vision')}>Camera Recognition</TabBtn>
         <TabBtn active={tab === 'knowledge'} onClick={() => setTab('knowledge')}>Knowledge Base</TabBtn>
         <TabBtn active={tab === 'scenes'} onClick={() => setTab('scenes')}>Scenes</TabBtn>
+        <button onClick={() => router.push(`/admin/exhibits/${exhibitId}/qr`)} style={btn}>🔳 QR</button>
       </div>
 
       <div style={card}>
@@ -171,7 +171,7 @@ export default function EditExhibitPage() {
                       next[idx] = { ...k, category: e.target.value }
                       setForm({ ...form, knowledge_base: next })
                     }} style={input}>
-                      {['biography', 'artifact_info', 'battle', 'legend', 'technique', 'faq', 'other'].map((x) => <option key={x}>{x}</option>)}
+                      {['biography', 'exhibit_info', 'battle', 'legend', 'technique', 'faq', 'other'].map((x) => <option key={x}>{x}</option>)}
                     </select>
                   </Field>
                   <Field label={tr('Tiêu đề', 'Title')}><input value={k.title || ''} onChange={(e) => {

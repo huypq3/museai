@@ -11,8 +11,8 @@ import { validateMuseum } from "@/lib/api";
 
 type State = "scanning" | "processing" | "detected" | "error";
 
-type DetectedArtifact = {
-  artifact_id: string;
+type DetectedExhibit = {
+  exhibit_id: string;
   name: string;
   era?: string;
   location?: string;
@@ -24,7 +24,7 @@ export default function CameraTourPage() {
   const { language, changeLanguage } = useLanguage();
   
   const [state, setState] = useState<State>("scanning");
-  const [detected, setDetected] = useState<DetectedArtifact | null>(null);
+  const [detected, setDetected] = useState<DetectedExhibit | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [museumId, setMuseumId] = useState("demo_museum");
@@ -158,12 +158,12 @@ export default function CameraTourPage() {
           const result = await response.json();
           
           if (result.found && result.confidence >= 0.5) {
-            trackEvent("artifact_detected", museumId, result.artifact_id, {
+            trackEvent("exhibit_detected", museumId, result.exhibit_id, {
               confidence: result.confidence,
             });
             setDetected({
-              artifact_id: result.artifact_id,
-              name: result.artifact_name || t(language, "camera.artifact_fallback"),
+              exhibit_id: result.exhibit_id,
+              name: result.exhibit_name || t(language, "camera.exhibit_fallback"),
               era: result.era,
               location: result.location,
               confidence: result.confidence,
@@ -189,7 +189,7 @@ export default function CameraTourPage() {
 
   const handleExplore = () => {
     if (!detected) return;
-    router.push(`/exhibit/${detected.artifact_id}?museum=${encodeURIComponent(museumId)}`);
+    router.push(`/exhibit/${detected.exhibit_id}?museum=${encodeURIComponent(museumId)}`);
   };
 
   const handleQRScan = async (data: QRScanPayload) => {
@@ -211,7 +211,7 @@ export default function CameraTourPage() {
       return;
     }
 
-    const exhibitId = data.exhibit_id || data.artifact_id;
+    const exhibitId = data.exhibit_id || data.exhibit_id;
     if (exhibitId) {
       setShowQRScanner(false);
       const targetMuseumId = data.museum_id || museumId;

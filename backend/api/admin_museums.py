@@ -94,7 +94,7 @@ class MuseumCreate(BaseModel):
     ticket_price: dict[str, Any] = Field(default_factory=dict)
     supported_languages: list[str] = Field(default_factory=lambda: ["vi", "en"])
     default_language: str = "vi"
-    ai_persona: str = "Hướng dẫn viên thân thiện, am hiểu lịch sử"
+    ai_persona: str = "Friendly and knowledgeable museum guide"
     welcome_message: dict[str, str] = Field(default_factory=dict)
     status: Literal["active", "inactive", "demo"] = "active"
     admin_username: str | None = None
@@ -139,15 +139,15 @@ class MuseumUpdate(BaseModel):
 
 async def _museum_stats(museum_id: str) -> dict[str, int]:
     db = get_db()
-    artifacts = db.collection("exhibits").where("museum_id", "==", museum_id)
-    artifact_count = 0
-    async for _ in artifacts.stream():
-        artifact_count += 1
-    if artifact_count == 0:
-        artifacts = db.collection("artifacts").where("museum_id", "==", museum_id)
-        async for _ in artifacts.stream():
-            artifact_count += 1
-    return {"artifact_count": artifact_count}
+    exhibits = db.collection("exhibits").where("museum_id", "==", museum_id)
+    exhibit_count = 0
+    async for _ in exhibits.stream():
+        exhibit_count += 1
+    if exhibit_count == 0:
+        exhibits = db.collection("exhibits").where("museum_id", "==", museum_id)
+        async for _ in exhibits.stream():
+            exhibit_count += 1
+    return {"exhibit_count": exhibit_count}
 
 
 @router.get("/")
@@ -210,7 +210,7 @@ async def create_museum(body: MuseumCreate, admin=Depends(get_current_admin)):
         "ai_persona": body.ai_persona,
         "welcome_message": body.welcome_message or {},
         "status": body.status,
-        "artifact_count": 0,
+        "exhibit_count": 0,
         "total_visits": 0,
         "museum_admin_uid": admin_uid,
         "created_by": admin.get("uid"),

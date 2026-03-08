@@ -95,9 +95,14 @@ export default function AdminSettingsPage() {
   return (
     <div style={{ flex: 1, padding: 24, display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 860 }}>
-      <h1 style={{ marginTop: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif' }}>
-        {tr('System Settings', 'System Settings')}
-      </h1>
+      <div style={{ marginBottom: 14 }}>
+        <div style={{ marginTop: 0, color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif', fontSize: 28 }}>
+          {tr('System Settings', 'System Settings')}
+        </div>
+        <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
+          {tr('Cấu hình hệ thống', 'System configuration')}
+        </div>
+      </div>
 
       <div style={card}>
         <Label>{tr('Môi trường', 'Environment')}</Label>
@@ -224,8 +229,8 @@ const input: CSSProperties = {
   boxSizing: 'border-box',
 }
 const btnPrimary: CSSProperties = {
-  padding: '9px 14px',
-  borderRadius: 8,
+  padding: '10px 14px',
+  borderRadius: 10,
   border: 'none',
   background: '#C9A84C',
   color: '#0A0A0A',

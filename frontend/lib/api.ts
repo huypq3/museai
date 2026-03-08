@@ -18,10 +18,6 @@ export async function getExhibit(exhibitId: string) {
   return res.json();
 }
 
-// Legacy alias
-export async function getArtifact(artifactId: string) {
-  return getExhibit(artifactId);
-}
 
 export async function validateMuseum(museumId: string): Promise<MuseumValidation> {
   const res = await fetch(`${BACKEND_URL}/museums/${encodeURIComponent(museumId)}/validate`);
@@ -36,7 +32,7 @@ export async function validateExhibitMuseum(exhibitId: string, museumId: string)
   return res.json();
 }
 
-export async function recognizeArtifact(museumId: string, imageFile: File) {
+export async function recognizeExhibit(museumId: string, imageFile: File) {
   const formData = new FormData();
   formData.append("file", imageFile);
 
@@ -45,6 +41,6 @@ export async function recognizeArtifact(museumId: string, imageFile: File) {
     body: formData,
   });
 
-  if (!res.ok) throw new Error("Failed to recognize artifact");
+  if (!res.ok) throw new Error("Failed to recognize exhibit");
   return res.json();
 }

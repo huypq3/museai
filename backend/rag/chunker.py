@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def extract_chunks(
     pdf_path: str,
-    artifact_id: str,
+    exhibit_id: str,
     chunk_size: int = 512,
     overlap: int = 50
 ) -> List[Dict]:
@@ -23,14 +23,14 @@ def extract_chunks(
     
     Args:
         pdf_path: PDF file path
-        artifact_id: Artifact ID in Firestore
+        exhibit_id: Exhibit ID in Firestore
         chunk_size: Number of words per chunk (default 512)
         overlap: Number of overlapping words between chunks (default 50)
     
     Returns:
         List[Dict]: List of chunks, each containing:
             - id: unique ID
-            - artifact_id: Artifact ID
+            - exhibit_id: Exhibit ID
             - chunk_index: chunk order index (0, 1, 2...)
             - content: text content
             - word_count: number of words in chunk
@@ -72,8 +72,8 @@ def extract_chunks(
             
             # Build chunk dict.
             chunk = {
-                "id": f"{artifact_id}_chunk_{chunk_index}",
-                "artifact_id": artifact_id,
+                "id": f"{exhibit_id}_chunk_{chunk_index}",
+                "exhibit_id": exhibit_id,
                 "chunk_index": chunk_index,
                 "content": chunk_content,
                 "word_count": len(chunk_words)
@@ -101,7 +101,7 @@ def extract_chunks(
 
 def extract_chunks_from_bytes(
     pdf_bytes: bytes,
-    artifact_id: str,
+    exhibit_id: str,
     chunk_size: int = 512,
     overlap: int = 50
 ) -> List[Dict]:
@@ -111,7 +111,7 @@ def extract_chunks_from_bytes(
     
     Args:
         pdf_bytes: PDF bytes content
-        artifact_id: Artifact ID
+        exhibit_id: Exhibit ID
         chunk_size: Number of words per chunk
         overlap: Number of overlapping words
     
@@ -119,7 +119,7 @@ def extract_chunks_from_bytes(
         List[Dict]: List of chunks
     """
     try:
-        logger.info(f"Extracting chunks from PDF bytes for artifact: {artifact_id}")
+        logger.info(f"Extracting chunks from PDF bytes for exhibit: {exhibit_id}")
         
         # Open PDF from bytes.
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -139,7 +139,7 @@ def extract_chunks_from_bytes(
         logger.info(f"Extracted {total_words} words from {page_count} pages")
         
         if total_words == 0:
-            logger.warning(f"No text extracted from PDF bytes for artifact: {artifact_id}")
+            logger.warning(f"No text extracted from PDF bytes for exhibit: {exhibit_id}")
             return []
         
         # Build chunks with overlap.
@@ -153,8 +153,8 @@ def extract_chunks_from_bytes(
             chunk_content = " ".join(chunk_words)
             
             chunk = {
-                "id": f"{artifact_id}_chunk_{chunk_index}",
-                "artifact_id": artifact_id,
+                "id": f"{exhibit_id}_chunk_{chunk_index}",
+                "exhibit_id": exhibit_id,
                 "chunk_index": chunk_index,
                 "content": chunk_content,
                 "word_count": len(chunk_words)

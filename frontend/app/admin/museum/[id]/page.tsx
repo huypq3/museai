@@ -16,7 +16,7 @@ export default function MuseumAdminHome() {
   const tr = (vi: string, en: string) => (locale === 'en' ? en : vi)
   const [tab, setTab] = useState<Tab>('exhibits')
   const [museum, setMuseum] = useState<any>(null)
-  const [artifacts, setArtifacts] = useState<any[]>([])
+  const [exhibits, setExhibits] = useState<any[]>([])
   const [analytics, setAnalytics] = useState<any>(null)
   const [qrData, setQrData] = useState<any>(null)
   const [password, setPassword] = useState('')
@@ -27,7 +27,7 @@ export default function MuseumAdminHome() {
       adminFetch(`/admin/exhibits?museum_id=${museumId}`),
     ])
     setMuseum(m)
-    setArtifacts(a)
+    setExhibits(a)
   }
 
   useEffect(() => {
@@ -51,7 +51,7 @@ export default function MuseumAdminHome() {
     <div style={{ flex: 1, padding: 24 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
         <div>
-          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>MuseAI Admin</div>
+          <div style={{ fontFamily: 'Cormorant Garamond, serif', fontSize: 28, color: '#C9A84C' }}>{museum?.name || museumId}</div>
           <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.15em', textTransform: 'uppercase' }}>
             {museum?.name || museumId}
           </div>
@@ -63,7 +63,7 @@ export default function MuseumAdminHome() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,minmax(140px,1fr))', gap: 10, marginBottom: 14 }}>
-        <Stat title={tr('Hiện vật', 'Exhibits')} value={artifacts.length} />
+        <Stat title={tr('Hiện vật', 'Exhibits')} value={exhibits.length} />
         <Stat title={tr('Lượt QR', 'QR visits')} value={museum?.total_visits || 0} />
         <Stat title={tr('Ngôn ngữ', 'Languages')} value={(museum?.supported_languages || []).length} />
       </div>
@@ -81,7 +81,7 @@ export default function MuseumAdminHome() {
             <div style={{ fontWeight: 600 }}>{tr('Danh sách hiện vật', 'Exhibit list')}</div>
             <button onClick={() => router.push(`/admin/exhibits/new?museum=${museumId}`)} style={btnPrimary}>+ {tr('Thêm hiện vật', 'Add exhibit')}</button>
           </div>
-          {artifacts.map((a) => (
+          {exhibits.map((a) => (
             <div key={a.id} style={{ display: 'grid', gridTemplateColumns: '56px 1fr auto auto', gap: 10, alignItems: 'center', borderTop: '1px solid rgba(255,255,255,0.07)', padding: '10px 0' }}>
               <img src={a.primary_image_url || a.image_url || ''} style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 8, background: '#111' }} />
               <div>
@@ -111,8 +111,8 @@ export default function MuseumAdminHome() {
               ))}
               <SectionTitle>{tr('Heatmap hiện vật', 'Exhibit heatmap')}</SectionTitle>
               {(analytics.heatmap || []).map((h: any, idx: number) => (
-                <div key={h.artifact_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
-                  <span>{idx + 1}. {h.artifact_id}</span>
+                <div key={h.exhibit_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderTop: '1px solid rgba(255,255,255,0.07)' }}>
+                  <span>{idx + 1}. {h.exhibit_id}</span>
                   <span style={{ color: '#C9A84C' }}>{h.scan_count}</span>
                 </div>
               ))}
@@ -139,12 +139,12 @@ export default function MuseumAdminHome() {
               </div>
               <SectionTitle>{tr('QR từng hiện vật', 'Exhibit QR codes')}</SectionTitle>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(180px,1fr))', gap: 10 }}>
-                {qrData.artifacts.map((a: any) => (
-                  <div key={a.artifact_id} style={{ border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
+                {qrData.exhibits.map((a: any) => (
+                  <div key={a.exhibit_id} style={{ border: '1px solid rgba(255,255,255,0.07)', borderRadius: 10, padding: 10 }}>
                     <img src={a.qr_data_url} style={{ width: 120, height: 120 }} />
                     <div style={{ fontSize: 13, margin: '6px 0' }}>{a.name}</div>
                     <div style={{ display: 'flex', gap: 6 }}>
-                      <a href={a.qr_data_url} download={`${a.artifact_id}.png`} style={btnLink}>↓ PNG</a>
+                      <a href={a.qr_data_url} download={`${a.exhibit_id}.png`} style={btnLink}>↓ PNG</a>
                       <button onClick={() => navigator.clipboard.writeText(a.qr_url)} style={btn}>📋</button>
                     </div>
                   </div>

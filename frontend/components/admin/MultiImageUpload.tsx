@@ -5,7 +5,7 @@ import ImageUpload from './ImageUpload'
 export default function MultiImageUpload({
   values,
   onChange,
-  label = 'Gallery ảnh',
+  label = 'Gallery images',
 }: {
   values: string[]
   onChange: (values: string[]) => void
@@ -25,16 +25,16 @@ export default function MultiImageUpload({
     <div style={{ marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.72)' }}>{label}</div>
-        <button type="button" onClick={add} style={btn}>+ Thêm ảnh</button>
+        <button type="button" onClick={add} style={btn}>+ Add image</button>
       </div>
       {values.map((v, i) => (
         <div key={i} style={{ border: '1px solid rgba(255,255,255,0.09)', borderRadius: 10, padding: 10, marginBottom: 8 }}>
-          <ImageUpload value={v} onChange={(url) => update(i, url)} label={`Ảnh #${i + 1}`} />
-          <button type="button" onClick={() => remove(i)} style={btnDanger}>Xóa ảnh</button>
+          <ImageUpload value={v} onChange={(url) => update(i, url)} label={`Image #${i + 1}`} />
+          <button type="button" onClick={() => remove(i)} style={btnDanger}>Remove image</button>
         </div>
       ))}
       {values.length === 0 && (
-        <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.55)' }}>Chưa có ảnh gallery</div>
+        <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.55)' }}>No gallery images yet</div>
       )}
     </div>
   )

@@ -22,21 +22,25 @@ export default function MuseumDetailPage() {
   const params = useParams()
   const museumId = params.id as string
   
-  const [artifacts, setArtifacts] = useState<Exhibit[]>([])
+  const [exhibits, setExhibits] = useState<Exhibit[]>([])
   const [loading, setLoading] = useState(true)
   const [museumName, setMuseumName] = useState('')
+  const [museumQr, setMuseumQr] = useState<{ qr_data_url: string; qr_url: string } | null>(null)
 
   useEffect(() => {
-    loadArtifacts()
+    loadExhibits()
   }, [])
 
-  const loadArtifacts = async () => {
+  const loadExhibits = async () => {
     try {
-      const data = await adminFetch(`/admin/exhibits/?museum_id=${museumId}`)
-      setArtifacts(data)
-      
-      // Get museum name
-      const museums = await adminFetch('/admin/museums/')
+      const [data, museums, qrRes] = await Promise.all([
+        adminFetch(`/admin/exhibits/?museum_id=${museumId}`),
+        adminFetch('/admin/museums/'),
+        adminFetch(`/admin/qr/museum/${museumId}`),
+      ])
+      setExhibits(data)
+      setMuseumQr(qrRes?.museum_qr || null)
+
       const museum = museums.find((m: any) => m.id === museumId)
       if (museum) setMuseumName(museum.name)
     } catch (e) {
@@ -49,7 +53,7 @@ export default function MuseumDetailPage() {
   const handleDelete = async (id: string) => {
     if (!confirm(tr('Xóa hiện vật này?', 'Delete this exhibit?'))) return
     await adminFetch(`/admin/exhibits/${id}`, { method: 'DELETE' })
-    loadArtifacts()
+    loadExhibits()
   }
 
   return (
@@ -75,7 +79,7 @@ export default function MuseumDetailPage() {
               letterSpacing: '0.15em',
               textTransform: 'uppercase',
             }}>
-              {artifacts.length} {tr('hiện vật', 'exhibits')}
+              {exhibits.length} {tr('hiện vật', 'exhibits')}
             </div>
           </div>
           <button
@@ -96,6 +100,39 @@ export default function MuseumDetailPage() {
         </div>
       </div>
 
+      {museumQr && (
+        <div style={{
+          background: 'rgba(255,255,255,0.04)',
+          border: '1px solid rgba(255,255,255,0.08)',
+          borderRadius: 12,
+          padding: 12,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 18,
+        }}>
+          <img src={museumQr.qr_data_url} alt={`Museum QR ${museumName || museumId}`} style={{ width: 92, height: 92 }} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ fontSize: 12, opacity: 0.75 }}>{tr('QR bảo tàng', 'Museum QR')}</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a
+                href={museumQr.qr_data_url}
+                download={`museum-${museumId}.png`}
+                style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', textDecoration: 'none', fontSize: 13 }}
+              >
+                ↓ PNG
+              </a>
+              <button
+                onClick={() => navigator.clipboard.writeText(museumQr.qr_url)}
+                style={{ padding: '8px 12px', borderRadius: 10, border: '1px solid rgba(255,255,255,0.14)', background: 'rgba(255,255,255,0.04)', color: '#F5F0E8', fontSize: 13, cursor: 'pointer' }}
+              >
+                📋 {tr('Sao chép', 'Copy')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Exhibits grid */}
       {loading ? (
         <div style={{
@@ -105,7 +142,7 @@ export default function MuseumDetailPage() {
         }}>
           {tr('Đang tải...', 'Loading...')}
         </div>
-      ) : artifacts.length === 0 ? (
+      ) : exhibits.length === 0 ? (
         <div style={{
           color: 'rgba(245,240,232,0.4)',
           textAlign: 'center',
@@ -119,7 +156,7 @@ export default function MuseumDetailPage() {
           gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
           gap: 16,
         }}>
-          {artifacts.map(a => (
+          {exhibits.map(a => (
             <div
               key={a.id}
               style={{

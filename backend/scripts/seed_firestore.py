@@ -6,6 +6,7 @@ Creates/updates museum "demo_museum" with 3 exhibits and 3 personas.
 import os
 import sys
 import asyncio
+import inspect
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,10 +24,14 @@ async def seed_firestore(project_id: str | None = None):
     print(f"🌱 Starting Firestore seed... (project={resolved_project})")
 
     db = firestore.AsyncClient(project=resolved_project)
+    museums_collection = os.getenv("MUSEUMS_COLLECTION", "museums")
+    exhibits_collection_name = os.getenv("EXHIBITS_COLLECTION", "exhibits")
+    personas_collection_name = os.getenv("PERSONAS_COLLECTION", "personas")
+    museum_id = os.getenv("SEED_MUSEUM_ID", "demo_museum")
 
     # Museum document (so Admin CMS can list/edit it like a normal museum)
     museum_data = {
-        "id": "demo_museum",
+        "id": museum_id,
         "name": "Demo Museum",
         "name_en": "Demo Museum",
         "slug": "demo-museum",
@@ -67,7 +72,7 @@ async def seed_firestore(project_id: str | None = None):
             "zh": "欢迎。我是您的AI博物馆导览。",
         },
         "status": "active",
-        "artifact_count": 3,
+        "exhibit_count": 0,
         "total_visits": 0,
         "museum_admin_uid": "",
         "created_by": "seed_script",
@@ -75,12 +80,12 @@ async def seed_firestore(project_id: str | None = None):
         "updated_at": firestore.SERVER_TIMESTAMP,
     }
 
-    museum_ref = db.collection("museums").document("demo_museum")
+    museum_ref = db.collection(museums_collection).document(museum_id)
     await museum_ref.set(museum_data, merge=True)
-    print("  ✅ Upserted museum: demo_museum")
+    print(f"  ✅ Upserted museum: {museum_id}")
     
     # Exhibits data
-    artifacts_data = [
+    exhibits_data = [
         {
             "id": "statue_tran_hung_dao",
             "data": {
@@ -90,7 +95,7 @@ async def seed_firestore(project_id: str | None = None):
                 "description": "Tượng đồng cao 1.8m, mô phỏng Đại tướng Trần Quốc Tuấn trong tư thế đứng vững vàng, mặc giáp chiến binh, tay phải cầm kiếm, ánh mắt hướng về phía trước. Khuôn mặt thể hiện sự cương nghị của vị tướng tài ba đã 3 lần đánh tan quân Nguyên-Mông.",
                 "short_description": "Tượng đồng vị tướng mặc giáp, tay cầm kiếm, cao 1.8m, thế kỷ 13",
                 "persona_id": "tran_hung_dao",
-                "museum_id": "demo_museum"
+                "museum_id": museum_id
             }
         },
         {
@@ -102,7 +107,7 @@ async def seed_firestore(project_id: str | None = None):
                 "description": "Bình gốm cao 25cm, đường kính thân 15cm, men ngọc xanh đặc trưng của gốm Lý với ánh lung linh. Dáng mảnh mai, cổ thon dài, thân phình, đáy thu. Bề mặt trang trí hoa văn sen cách điệu ở phần vai bình. Nung ở nhiệt độ 1250 độ C với men làm từ tro thực vật.",
                 "short_description": "Bình gốm men ngọc xanh, cao 25cm, dáng mảnh mai, thế kỷ 11 nhà Lý",
                 "persona_id": "pottery_guide",
-                "museum_id": "demo_museum"
+                "museum_id": museum_id
             }
         },
         {
@@ -114,7 +119,7 @@ async def seed_firestore(project_id: str | None = None):
                 "description": "Tranh dân gian Đông Hồ với đề tài Đám cưới chuột, kích thước 30x40cm. Sử dụng màu tự nhiên từ thực vật và khoáng chất: đỏ từ hoa đào, xanh từ lá cây, vàng từ nghệ. Thể hiện cảnh chuột rước dâu với đoàn người mang lễ vật, phản ánh đời sống dân gian Việt Nam.",
                 "short_description": "Tranh dân gian Đông Hồ, cảnh đám cưới chuột, màu tự nhiên, 30x40cm",
                 "persona_id": "art_guide",
-                "museum_id": "demo_museum"
+                "museum_id": museum_id
             }
         }
     ]
@@ -201,28 +206,31 @@ async def seed_firestore(project_id: str | None = None):
         }
     ]
     
-    # Seed exhibits and mirror to legacy artifacts collection for compatibility
-    exhibits_collection = db.collection("exhibits")
-    artifacts_collection = db.collection("artifacts")
-    for artifact in artifacts_data:
-        data = dict(artifact["data"])
-        data["exhibit_id"] = artifact["id"]
-        exhibit_ref = exhibits_collection.document(artifact["id"])
-        legacy_ref = artifacts_collection.document(artifact["id"])
+    # Seed exhibits
+    exhibits_collection = db.collection(exhibits_collection_name)
+    for exhibit in exhibits_data:
+        data = dict(exhibit["data"])
+        data["exhibit_id"] = exhibit["id"]
+        exhibit_ref = exhibits_collection.document(exhibit["id"])
         await exhibit_ref.set(data)
-        await legacy_ref.set(data)
-        print(f"  ✅ Created exhibit: {artifact['id']}")
+        print(f"  ✅ Created exhibit: {exhibit['id']}")
     
     # Seed personas
-    personas_collection = db.collection("personas")
+    personas_collection = db.collection(personas_collection_name)
     for persona in personas_data:
         doc_ref = personas_collection.document(persona["id"])
         await doc_ref.set(persona["data"])
         print(f"  ✅ Created persona: {persona['id']}")
     
-    print(f"\n🎉 Seeded {len(artifacts_data)} exhibits, {len(personas_data)} personas")
-    print(f"   Museum ID: demo_museum")
+    await museum_ref.set({"exhibit_count": len(exhibits_data), "updated_at": firestore.SERVER_TIMESTAMP}, merge=True)
+
+    print(f"\n🎉 Seeded {len(exhibits_data)} exhibits, {len(personas_data)} personas")
+    print(f"   Museum ID: {museum_id}")
     print(f"   Ready for Vision testing!")
+
+    close_result = db.close()
+    if inspect.isawaitable(close_result):
+        await close_result
 
 
 if __name__ == "__main__":

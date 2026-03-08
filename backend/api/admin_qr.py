@@ -29,7 +29,6 @@ router = APIRouter(prefix="/admin/qr", tags=["admin"])
 class GenerateQRBody(BaseModel):
     museum_id: str
     exhibit_id: str | None = None
-    artifact_id: str | None = None  # legacy alias
 
 
 def _to_data_url(value: str) -> str:
@@ -63,7 +62,7 @@ async def generate_qr(body: GenerateQRBody, admin=Depends(get_current_admin)):
     db = get_db()
     base_url = "https://guideqr.ai/welcome"
 
-    exhibit_id = body.exhibit_id or body.artifact_id
+    exhibit_id = body.exhibit_id
     params = {"museum": body.museum_id}
     if exhibit_id:
         params["exhibit"] = exhibit_id
@@ -74,19 +73,11 @@ async def generate_qr(body: GenerateQRBody, admin=Depends(get_current_admin)):
         exhibit_ref = db.collection("exhibits").document(exhibit_id)
         exhibit_doc = await exhibit_ref.get()
         if not exhibit_doc.exists:
-            legacy_ref = db.collection("artifacts").document(exhibit_id)
-            legacy_doc = await legacy_ref.get()
-            if not legacy_doc.exists:
-                raise HTTPException(status_code=404, detail="Exhibit not found")
-            legacy_data = legacy_doc.to_dict() or {}
-            if legacy_data.get("museum_id") != body.museum_id:
-                raise HTTPException(status_code=403, detail="Exhibit does not belong to this museum")
-            await legacy_ref.set({"qr_url": qr_url}, merge=True)
-        else:
-            exhibit_data = exhibit_doc.to_dict() or {}
-            if exhibit_data.get("museum_id") != body.museum_id:
-                raise HTTPException(status_code=403, detail="Exhibit does not belong to this museum")
-            await exhibit_ref.set({"qr_url": qr_url}, merge=True)
+            raise HTTPException(status_code=404, detail="Exhibit not found")
+        exhibit_data = exhibit_doc.to_dict() or {}
+        if exhibit_data.get("museum_id") != body.museum_id:
+            raise HTTPException(status_code=403, detail="Exhibit does not belong to this museum")
+        await exhibit_ref.set({"qr_url": qr_url}, merge=True)
     else:
         await db.collection("museums").document(body.museum_id).set(
             {"qr_url": qr_url}, merge=True
@@ -110,39 +101,21 @@ async def get_museum_qrs(museum_id: str, admin=Depends(get_current_admin)):
 
     exhibits = []
     query = db.collection("exhibits").where("museum_id", "==", museum_id)
-    found_exhibits = False
     async for doc in query.stream():
-        found_exhibits = True
         data = doc.to_dict() or {}
         url = data.get("qr_url") or f"https://guideqr.ai/welcome?museum={museum_id}&exhibit={doc.id}"
         exhibits.append(
             {
                 "exhibit_id": doc.id,
-                "artifact_id": doc.id,  # legacy field for old frontend
                 "name": data.get("name", doc.id),
                 "qr_url": url,
             }
         )
 
-    # Legacy fallback when exhibits collection is not migrated yet.
-    if not found_exhibits:
-        legacy_query = db.collection("artifacts").where("museum_id", "==", museum_id)
-        async for doc in legacy_query.stream():
-            data = doc.to_dict() or {}
-            url = data.get("qr_url") or f"https://guideqr.ai/welcome?museum={museum_id}&artifact={doc.id}"
-            exhibits.append(
-                {
-                    "exhibit_id": doc.id,
-                    "artifact_id": doc.id,
-                    "name": data.get("name", doc.id),
-                    "qr_url": url,
-                }
-            )
-
     return {
         "museum_id": museum_id,
         "museum_qr": {"qr_url": museum_qr_url, "qr_data_url": _to_data_url(museum_qr_url)},
-        "artifacts": [
+        "exhibits": [
             {**a, "qr_data_url": _to_data_url(a["qr_url"])}
             for a in exhibits
         ],
@@ -157,8 +130,8 @@ async def get_museum_qrs_zip(museum_id: str, admin=Depends(get_current_admin)):
     with zipfile.ZipFile(stream, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
         museum_url = payload["museum_qr"]["qr_url"]
         zf.writestr(f"{museum_id}/museum_qr.png", _to_png_bytes(museum_url))
-        for item in payload["artifacts"]:
-            safe_name = str(item.get("exhibit_id") or item.get("artifact_id")).replace("/", "_")
+        for item in payload["exhibits"]:
+            safe_name = str(item.get("exhibit_id")).replace("/", "_")
             zf.writestr(f"{museum_id}/{safe_name}.png", _to_png_bytes(item["qr_url"]))
     stream.seek(0)
     return StreamingResponse(
