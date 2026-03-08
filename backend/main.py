@@ -134,6 +134,12 @@ if "https://www.guideqr.ai" in ALLOWED_ORIGINS and "https://guideqr.ai" not in A
     ALLOWED_ORIGINS.append("https://guideqr.ai")
 
 logger.info("CORS allowed origins: %s", ALLOWED_ORIGINS)
+# NOTE: Starlette applies middlewares in reverse order of registration.
+# Register CORS last so even early responses (e.g., 429 from rate limit middleware)
+# still include Access-Control-Allow-Origin headers.
+app.add_middleware(ContentSizeLimitMiddleware, max_content_size=10 * 1024 * 1024)
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
@@ -141,9 +147,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(ContentSizeLimitMiddleware, max_content_size=10 * 1024 * 1024)
-app.add_middleware(RateLimitMiddleware)
-app.add_middleware(SecurityHeadersMiddleware)
 
 APP_ENV = os.getenv("APP_ENV", os.getenv("ENV", "development")).lower()
 ENFORCE_HTTPS = os.getenv("ENFORCE_HTTPS", "false").lower() == "true" or APP_ENV in {"production", "prod"}

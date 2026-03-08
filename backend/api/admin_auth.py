@@ -12,7 +12,6 @@ sys.path.append('..')
 from auth.admin import authenticate_admin, create_token, get_current_admin, get_db, hash_password
 from fastapi import Depends
 from middleware.audit_log import audit_log
-from security.rate_limit import check_rate_limit
 from security.login_protection import (
     apply_progressive_delay,
     clear_failed_login,
@@ -53,7 +52,6 @@ async def login(request: Request, body: LoginRequest):
     """Login with username/password and return JWT token + role."""
     started_at = time.monotonic()
     ip = get_real_ip(request)
-    await check_rate_limit(scope="login", key=f"ip:{ip}", limit=5, window_seconds=15 * 60)
     signals = await precheck_login(body.username, ip)
     await apply_progressive_delay(signals.suggested_delay_seconds)
 
