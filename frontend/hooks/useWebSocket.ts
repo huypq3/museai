@@ -246,7 +246,7 @@ export function useWebSocket(exhibitId: string | null, language: string) {
       }
       const ws = wsRef.current;
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        ws.close(1001, "Component unmounted");
+        ws.close(1000, "Component unmounted");
       }
       wsRef.current = null;
       isConnectingRef.current = false;
