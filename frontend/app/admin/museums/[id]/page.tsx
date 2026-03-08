@@ -37,7 +37,7 @@ export default function MuseumDetailPage() {
   const loadExhibits = async () => {
     try {
       const [data, museums, qrRes] = await Promise.all([
-        adminFetch(`/admin/exhibits/?museum_id=${museumId}`),
+        adminFetch(`/admin/exhibits?museum_id=${museumId}`),
         adminFetch('/admin/museums/'),
         adminFetch(`/admin/qr/museum/${museumId}`),
       ])
