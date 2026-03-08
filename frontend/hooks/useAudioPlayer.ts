@@ -16,8 +16,12 @@ export function useAudioPlayer() {
 
   const getContext = (): AudioContext => {
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
-      // Let iOS choose device sample rate for best compatibility.
-      audioContextRef.current = new AudioContext();
+      // Keep context sample rate aligned with incoming PCM stream when possible.
+      try {
+        audioContextRef.current = new AudioContext({ sampleRate: STREAM_SAMPLE_RATE });
+      } catch {
+        audioContextRef.current = new AudioContext();
+      }
       nextStartTimeRef.current = 0;
       console.log("🎚️ AudioContext created", {
         state: audioContextRef.current.state,
@@ -53,7 +57,7 @@ export function useAudioPlayer() {
       source.buffer = audioBuffer;
 
       const gainNode = ctx.createGain();
-      gainNode.gain.value = 1.35;
+      gainNode.gain.value = 1.0;
       source.connect(gainNode);
       gainNode.connect(ctx.destination);
 
