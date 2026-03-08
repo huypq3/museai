@@ -154,6 +154,7 @@ async def create_exhibit(body: ExhibitCreate, admin=Depends(get_current_admin)):
     data = body.model_dump()
     data["id"] = exhibit_id
     data["created_at"] = firestore.SERVER_TIMESTAMP
+    data["updated_at"] = firestore.SERVER_TIMESTAMP
     data["total_scans"] = 0
     data["total_conversations"] = 0
     if not data.get("primary_image_url"):
@@ -248,6 +249,7 @@ async def update_exhibit(exhibit_id: str, body: ExhibitUpdate, admin=Depends(get
             )
 
     if update_data:
+        update_data["updated_at"] = firestore.SERVER_TIMESTAMP
         await db.collection(PRIMARY_COLLECTION).document(exhibit_id).set(update_data, merge=True)
         if update_data.get("status") == "published":
             await audit_log(

@@ -10,6 +10,7 @@ type Dictionary = Record<string, string>
 const MESSAGES: Record<AdminLocale, Dictionary> = {
   vi: {
     nav_overview: 'Tổng quan',
+    nav_exhibits: 'Hiện vật',
     nav_museums: 'Bảo tàng',
     nav_users: 'Tài khoản',
     nav_analytics: 'Analytics',
@@ -22,6 +23,7 @@ const MESSAGES: Record<AdminLocale, Dictionary> = {
   },
   en: {
     nav_overview: 'Overview',
+    nav_exhibits: 'Exhibits',
     nav_museums: 'Museums',
     nav_users: 'Users',
     nav_analytics: 'Analytics',
