@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import base64
 import io
+import os
 import zipfile
 from urllib.parse import urlencode
 
@@ -29,6 +30,36 @@ router = APIRouter(prefix="/admin/qr", tags=["admin"])
 class GenerateQRBody(BaseModel):
     museum_id: str
     exhibit_id: str | None = None
+
+
+def _normalized_base(value: str) -> str:
+    return value.rstrip("/")
+
+
+def _default_public_base() -> str:
+    """
+    Resolve public app base URL from environment for portable deployments.
+    """
+    return _normalized_base(
+        os.getenv("PUBLIC_APP_URL")
+        or os.getenv("FRONTEND_PUBLIC_URL")
+        or os.getenv("APP_PUBLIC_URL")
+        or "http://localhost:3000"
+    )
+
+
+async def _museum_public_base(museum_id: str) -> str:
+    """
+    Use museum-level qr_base_url when available, otherwise global env base.
+    """
+    db = get_db()
+    museum_doc = await db.collection("museums").document(museum_id).get()
+    if museum_doc.exists:
+        data = museum_doc.to_dict() or {}
+        museum_base = str(data.get("qr_base_url") or "").strip()
+        if museum_base:
+            return _normalized_base(museum_base)
+    return _default_public_base()
 
 
 def _to_data_url(value: str) -> str:
@@ -60,7 +91,8 @@ def _to_png_bytes(value: str) -> bytes:
 async def generate_qr(body: GenerateQRBody, admin=Depends(get_current_admin)):
     ensure_museum_scope(admin, body.museum_id)
     db = get_db()
-    base_url = "https://guideqr.ai/welcome"
+    public_base = await _museum_public_base(body.museum_id)
+    base_url = f"{public_base}/welcome"
 
     exhibit_id = body.exhibit_id
     params = {"museum": body.museum_id}
@@ -95,15 +127,19 @@ async def get_museum_qrs(museum_id: str, admin=Depends(get_current_admin)):
     if not museum_doc.exists:
         raise HTTPException(status_code=404, detail="Museum not found")
     museum_data = museum_doc.to_dict() or {}
+    public_base = str(museum_data.get("qr_base_url") or "").strip()
+    if not public_base:
+        public_base = _default_public_base()
+    public_base = _normalized_base(public_base)
     museum_qr_url = museum_data.get("qr_url")
     if not museum_qr_url:
-        museum_qr_url = f"https://guideqr.ai/welcome?museum={museum_id}"
+        museum_qr_url = f"{public_base}/welcome?museum={museum_id}"
 
     exhibits = []
     query = db.collection("exhibits").where("museum_id", "==", museum_id)
     async for doc in query.stream():
         data = doc.to_dict() or {}
-        url = data.get("qr_url") or f"https://guideqr.ai/welcome?museum={museum_id}&exhibit={doc.id}"
+        url = data.get("qr_url") or f"{public_base}/welcome?museum={museum_id}&exhibit={doc.id}"
         exhibits.append(
             {
                 "exhibit_id": doc.id,

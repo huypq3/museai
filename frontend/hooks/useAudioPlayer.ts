@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 
 const STREAM_SAMPLE_RATE = 24000;
 const BUFFER_DELAY_SEC = 0.1;
-const PLAYBACK_GAIN = 1.0;
-const EDGE_FADE_SAMPLES = 96;
 
 export function useAudioPlayer() {
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -15,35 +13,11 @@ export function useAudioPlayer() {
   const pendingChunksRef = useRef<string[]>([]);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const stopDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const iosPrimeDoneRef = useRef(false);
-
-  const isIOS = (): boolean => {
-    if (typeof navigator === "undefined") return false;
-    return /iPad|iPhone|iPod/.test(navigator.userAgent);
-  };
-
-  const primeIosAudioRoute = async () => {
-    if (!isIOS() || iosPrimeDoneRef.current) return;
-    try {
-      const a = new Audio(
-        "data:audio/mp3;base64,SUQzAwAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4LjI5LjEwMAAAAAAAAAAAAAAA//uQxAADBzQAFhI0AAADaAAAArkxBTUUzLjk4LjIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
-      );
-      a.muted = true;
-      a.setAttribute("playsinline", "true");
-      await a.play();
-      a.pause();
-      a.currentTime = 0;
-      iosPrimeDoneRef.current = true;
-      console.log("📱 iOS audio route primed");
-    } catch (e) {
-      console.warn("iOS audio priming failed:", e);
-    }
-  };
 
   const getContext = (): AudioContext => {
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       // Let iOS choose device sample rate for best compatibility.
-      audioContextRef.current = new AudioContext({ latencyHint: "interactive" });
+      audioContextRef.current = new AudioContext();
       nextStartTimeRef.current = 0;
       console.log("🎚️ AudioContext created", {
         state: audioContextRef.current.state,
@@ -60,50 +34,17 @@ export function useAudioPlayer() {
       bytes[i] = binaryStr.charCodeAt(i);
     }
 
-    // Decode as little-endian PCM16 explicitly to avoid platform assumptions.
-    const sampleCount = Math.floor(bytes.byteLength / 2);
-    const view = new DataView(bytes.buffer, bytes.byteOffset, sampleCount * 2);
-    const float32 = new Float32Array(sampleCount);
-    for (let i = 0; i < sampleCount; i++) {
-      const sample = view.getInt16(i * 2, true);
-      float32[i] = Math.max(-1, Math.min(1, sample / 32768.0));
+    const pcm16 = new Int16Array(bytes.buffer);
+    const float32 = new Float32Array(pcm16.length);
+    for (let i = 0; i < pcm16.length; i++) {
+      float32[i] = pcm16[i] / 32768.0;
     }
     return float32;
   };
 
-  const applyEdgeFade = (samples: Float32Array): void => {
-    if (samples.length < 8) return;
-    const fade = Math.min(EDGE_FADE_SAMPLES, Math.floor(samples.length / 4));
-    if (fade <= 0) return;
-
-    for (let i = 0; i < fade; i++) {
-      const gain = i / fade;
-      samples[i] *= gain;
-      samples[samples.length - 1 - i] *= gain;
-    }
-  };
-
-  const tryResumeContext = useCallback(async (): Promise<AudioContext | null> => {
-    const ctx = getContext();
-    if (ctx.state === "running") return ctx;
-    try {
-      await ctx.resume();
-      const resumedState = getContext().state;
-      if (resumedState !== "running") {
-        console.warn("⚠️ AudioContext resume attempted but still not running", { state: ctx.state });
-        return null;
-      }
-      return ctx;
-    } catch (e) {
-      console.warn("AudioContext resume failed:", e);
-      return null;
-    }
-  }, []);
-
   const scheduleChunk = useCallback(async (ctx: AudioContext, base64: string) => {
     try {
       const float32 = decodePcmChunk(base64);
-      applyEdgeFade(float32);
       const audioBuffer = ctx.createBuffer(1, float32.length, STREAM_SAMPLE_RATE);
       const channelData = audioBuffer.getChannelData(0);
       channelData.set(float32);
@@ -112,7 +53,7 @@ export function useAudioPlayer() {
       source.buffer = audioBuffer;
 
       const gainNode = ctx.createGain();
-      gainNode.gain.value = PLAYBACK_GAIN;
+      gainNode.gain.value = 1.35;
       source.connect(gainNode);
       gainNode.connect(ctx.destination);
 
@@ -182,9 +123,10 @@ export function useAudioPlayer() {
   const unlockAndFlush = useCallback(async () => {
     if (isUnlockedRef.current) return;
     try {
-      await primeIosAudioRoute();
-      const ctx = await tryResumeContext();
-      if (!ctx) return;
+      const ctx = getContext();
+      if (ctx.state !== "running") {
+        await ctx.resume();
+      }
       if (ctx.state === "running") {
         warmUpOutput(ctx);
         isUnlockedRef.current = true;
@@ -197,16 +139,11 @@ export function useAudioPlayer() {
     } catch (e) {
       console.warn("AudioContext unlock failed:", e);
     }
-  }, [flushPending, tryResumeContext]);
+  }, [flushPending]);
 
   const playChunk = useCallback(async (base64: string) => {
     try {
-      let ctx = getContext();
-
-      if (ctx.state !== "running") {
-        const resumed = await tryResumeContext();
-        if (resumed) ctx = resumed;
-      }
+      const ctx = getContext();
 
       if (ctx.state !== "running") {
         pendingChunksRef.current.push(base64);
@@ -230,7 +167,7 @@ export function useAudioPlayer() {
     } catch (err) {
       console.error("❌ playChunk error:", err);
     }
-  }, [flushPending, scheduleChunk, tryResumeContext]);
+  }, [flushPending, scheduleChunk]);
 
   const stopPlayback = useCallback(() => {
     if (stopDebounceRef.current) {
@@ -269,30 +206,6 @@ export function useAudioPlayer() {
     isUnlockedRef.current = false;
     setIsUnlocked(false);
   }, [stopPlayback]);
-
-  useEffect(() => {
-    const tryResumeOnLifecycle = async () => {
-      if (!audioContextRef.current) return;
-      await tryResumeContext();
-    };
-
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        void tryResumeOnLifecycle();
-      }
-    };
-
-    const onPageShow = () => {
-      void tryResumeOnLifecycle();
-    };
-
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("pageshow", onPageShow);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("pageshow", onPageShow);
-    };
-  }, [tryResumeContext]);
 
   return { playChunk, stopPlayback, stop, isPlaying, isUnlocked, unlockAndFlush };
 }

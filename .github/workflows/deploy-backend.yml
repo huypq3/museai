@@ -43,16 +43,101 @@ jobs:
 
       - name: Create env vars file
         run: |
+          pick() {
+            local value="$1"
+            local fallback="$2"
+            if [ -n "$value" ]; then
+              echo "$value"
+            else
+              echo "$fallback"
+            fi
+          }
+
           ORIGINS_RAW="${{ vars.ALLOWED_ORIGINS }}"
           # Normalize accidental '.env style' values like:
           # 'ALLOWED_ORIGINS=https://a.com,https://b.com'
           # 'ALLOWED_ORIGINS = https://a.com,https://b.com'
           ORIGINS_CLEAN=$(echo "$ORIGINS_RAW" | sed -E 's/^[[:space:]]*ALLOWED_ORIGINS[[:space:]]*=[[:space:]]*//; s/^[[:space:]]+//; s/[[:space:]]+$//')
+          PUBLIC_BASE=$(pick "${{ vars.PUBLIC_APP_URL }}" "https://guideqr.ai")
+          APP_ENV_VAL=$(pick "${{ vars.APP_ENV }}" "production")
+          ENFORCE_HTTPS_VAL=$(pick "${{ vars.ENFORCE_HTTPS }}" "true")
+          GCS_BUCKET_VAL=$(pick "${{ vars.GCS_BUCKET_NAME }}" "")
+
+          GEMINI_LIVE_MODEL_VAL=$(pick "${{ vars.GEMINI_LIVE_MODEL }}" "gemini-2.5-flash-native-audio-preview-12-2025")
+          GEMINI_EMBEDDING_MODEL_VAL=$(pick "${{ vars.GEMINI_EMBEDDING_MODEL }}" "gemini-embedding-001")
+          VOICE_NAME_VAL=$(pick "${{ vars.VOICE_NAME }}" "Kore")
+          VOICE_TEMPERATURE_VAL=$(pick "${{ vars.VOICE_TEMPERATURE }}" "0.55")
+          VOICE_MAX_OUTPUT_TOKENS_VAL=$(pick "${{ vars.VOICE_MAX_OUTPUT_TOKENS }}" "1400")
+          VOICE_SYSTEM_PROMPT_MAX_CHARS_VAL=$(pick "${{ vars.VOICE_SYSTEM_PROMPT_MAX_CHARS }}" "12000")
+
+          WS_REQUIRE_EPHEMERAL_TOKEN_VAL=$(pick "${{ vars.WS_REQUIRE_EPHEMERAL_TOKEN }}" "true")
+          EPHEMERAL_TOKEN_EXPIRE_SECONDS_VAL=$(pick "${{ vars.EPHEMERAL_TOKEN_EXPIRE_SECONDS }}" "3600")
+          WS_MAX_PER_IP_VAL=$(pick "${{ vars.WS_MAX_PER_IP }}" "3")
+          WS_MAX_PER_HOUR_VAL=$(pick "${{ vars.WS_MAX_PER_HOUR }}" "20")
+          WS_GLOBAL_MAX_SESSIONS_VAL=$(pick "${{ vars.WS_GLOBAL_MAX_SESSIONS }}" "500")
+          WS_HEARTBEAT_INTERVAL_SEC_VAL=$(pick "${{ vars.WS_HEARTBEAT_INTERVAL_SEC }}" "30")
+          WS_PONG_TIMEOUT_SEC_VAL=$(pick "${{ vars.WS_PONG_TIMEOUT_SEC }}" "10")
+          WS_INACTIVITY_TIMEOUT_SEC_VAL=$(pick "${{ vars.WS_INACTIVITY_TIMEOUT_SEC }}" "180")
+          WS_INACTIVITY_GRACE_SEC_VAL=$(pick "${{ vars.WS_INACTIVITY_GRACE_SEC }}" "30")
+          WS_MAX_SESSION_SEC_VAL=$(pick "${{ vars.WS_MAX_SESSION_SEC }}" "900")
+          WS_MAX_SESSION_GRACE_SEC_VAL=$(pick "${{ vars.WS_MAX_SESSION_GRACE_SEC }}" "30")
+          WS_HARD_LIMIT_SEC_VAL=$(pick "${{ vars.WS_HARD_LIMIT_SEC }}" "1200")
+          WS_MAX_AUDIO_CHUNK_BYTES_VAL=$(pick "${{ vars.WS_MAX_AUDIO_CHUNK_BYTES }}" "65536")
+          WS_MAX_MESSAGE_SIZE_VAL=$(pick "${{ vars.WS_MAX_MESSAGE_SIZE }}" "262144")
+          WS_MAX_AUDIO_SECONDS_PER_MINUTE_VAL=$(pick "${{ vars.WS_MAX_AUDIO_SECONDS_PER_MINUTE }}" "45")
+          WS_MAX_CONTINUOUS_AUDIO_SEC_VAL=$(pick "${{ vars.WS_MAX_CONTINUOUS_AUDIO_SEC }}" "300")
+
+          LOGIN_MAX_ATTEMPTS_VAL=$(pick "${{ vars.LOGIN_MAX_ATTEMPTS }}" "5")
+          LOGIN_LOCKOUT_MINUTES_VAL=$(pick "${{ vars.LOGIN_LOCKOUT_MINUTES }}" "15")
+          LOGIN_IP_MAX_ATTEMPTS_VAL=$(pick "${{ vars.LOGIN_IP_MAX_ATTEMPTS }}" "15")
+          LOGIN_IP_LOCKOUT_MINUTES_VAL=$(pick "${{ vars.LOGIN_IP_LOCKOUT_MINUTES }}" "60")
+          LOGIN_TARGET_RESPONSE_MS_VAL=$(pick "${{ vars.LOGIN_TARGET_RESPONSE_MS }}" "300")
+          MAX_REQUEST_BYTES_VAL=$(pick "${{ vars.MAX_REQUEST_BYTES }}" "10485760")
+
+          DAILY_GEMINI_BUDGET_USD_VAL=$(pick "${{ vars.DAILY_GEMINI_BUDGET_USD }}" "50")
+          MONTHLY_GEMINI_BUDGET_USD_VAL=$(pick "${{ vars.MONTHLY_GEMINI_BUDGET_USD }}" "500")
+          GEMINI_EST_COST_PER_SESSION_USD_VAL=$(pick "${{ vars.GEMINI_EST_COST_PER_SESSION_USD }}" "0.5")
 
           printf 'GOOGLE_CLOUD_PROJECT: "%s"\n' "${{ env.PROJECT_ID }}" > /tmp/env-vars.yaml
+          printf 'APP_ENV: "%s"\n' "$APP_ENV_VAL" >> /tmp/env-vars.yaml
+          printf 'ENFORCE_HTTPS: "%s"\n' "$ENFORCE_HTTPS_VAL" >> /tmp/env-vars.yaml
           printf 'ALLOWED_ORIGINS: "%s"\n' "$ORIGINS_CLEAN" >> /tmp/env-vars.yaml
-          printf 'GCS_BUCKET: "%s"\n' "${{ vars.GCS_BUCKET_NAME }}" >> /tmp/env-vars.yaml
-          printf 'GCS_BUCKET_NAME: "%s"\n' "${{ vars.GCS_BUCKET_NAME }}" >> /tmp/env-vars.yaml
+          printf 'PUBLIC_APP_URL: "%s"\n' "$PUBLIC_BASE" >> /tmp/env-vars.yaml
+          printf 'FRONTEND_PUBLIC_URL: "%s"\n' "$PUBLIC_BASE" >> /tmp/env-vars.yaml
+          printf 'APP_PUBLIC_URL: "%s"\n' "$PUBLIC_BASE" >> /tmp/env-vars.yaml
+          printf 'GCS_BUCKET: "%s"\n' "$GCS_BUCKET_VAL" >> /tmp/env-vars.yaml
+          printf 'GCS_BUCKET_NAME: "%s"\n' "$GCS_BUCKET_VAL" >> /tmp/env-vars.yaml
+          printf 'GEMINI_LIVE_MODEL: "%s"\n' "$GEMINI_LIVE_MODEL_VAL" >> /tmp/env-vars.yaml
+          printf 'GEMINI_EMBEDDING_MODEL: "%s"\n' "$GEMINI_EMBEDDING_MODEL_VAL" >> /tmp/env-vars.yaml
+          printf 'VOICE_NAME: "%s"\n' "$VOICE_NAME_VAL" >> /tmp/env-vars.yaml
+          printf 'VOICE_TEMPERATURE: "%s"\n' "$VOICE_TEMPERATURE_VAL" >> /tmp/env-vars.yaml
+          printf 'VOICE_MAX_OUTPUT_TOKENS: "%s"\n' "$VOICE_MAX_OUTPUT_TOKENS_VAL" >> /tmp/env-vars.yaml
+          printf 'VOICE_SYSTEM_PROMPT_MAX_CHARS: "%s"\n' "$VOICE_SYSTEM_PROMPT_MAX_CHARS_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_REQUIRE_EPHEMERAL_TOKEN: "%s"\n' "$WS_REQUIRE_EPHEMERAL_TOKEN_VAL" >> /tmp/env-vars.yaml
+          printf 'EPHEMERAL_TOKEN_EXPIRE_SECONDS: "%s"\n' "$EPHEMERAL_TOKEN_EXPIRE_SECONDS_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_PER_IP: "%s"\n' "$WS_MAX_PER_IP_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_PER_HOUR: "%s"\n' "$WS_MAX_PER_HOUR_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_GLOBAL_MAX_SESSIONS: "%s"\n' "$WS_GLOBAL_MAX_SESSIONS_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_HEARTBEAT_INTERVAL_SEC: "%s"\n' "$WS_HEARTBEAT_INTERVAL_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_PONG_TIMEOUT_SEC: "%s"\n' "$WS_PONG_TIMEOUT_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_INACTIVITY_TIMEOUT_SEC: "%s"\n' "$WS_INACTIVITY_TIMEOUT_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_INACTIVITY_GRACE_SEC: "%s"\n' "$WS_INACTIVITY_GRACE_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_SESSION_SEC: "%s"\n' "$WS_MAX_SESSION_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_SESSION_GRACE_SEC: "%s"\n' "$WS_MAX_SESSION_GRACE_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_HARD_LIMIT_SEC: "%s"\n' "$WS_HARD_LIMIT_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_AUDIO_CHUNK_BYTES: "%s"\n' "$WS_MAX_AUDIO_CHUNK_BYTES_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_MESSAGE_SIZE: "%s"\n' "$WS_MAX_MESSAGE_SIZE_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_AUDIO_SECONDS_PER_MINUTE: "%s"\n' "$WS_MAX_AUDIO_SECONDS_PER_MINUTE_VAL" >> /tmp/env-vars.yaml
+          printf 'WS_MAX_CONTINUOUS_AUDIO_SEC: "%s"\n' "$WS_MAX_CONTINUOUS_AUDIO_SEC_VAL" >> /tmp/env-vars.yaml
+          printf 'LOGIN_MAX_ATTEMPTS: "%s"\n' "$LOGIN_MAX_ATTEMPTS_VAL" >> /tmp/env-vars.yaml
+          printf 'LOGIN_LOCKOUT_MINUTES: "%s"\n' "$LOGIN_LOCKOUT_MINUTES_VAL" >> /tmp/env-vars.yaml
+          printf 'LOGIN_IP_MAX_ATTEMPTS: "%s"\n' "$LOGIN_IP_MAX_ATTEMPTS_VAL" >> /tmp/env-vars.yaml
+          printf 'LOGIN_IP_LOCKOUT_MINUTES: "%s"\n' "$LOGIN_IP_LOCKOUT_MINUTES_VAL" >> /tmp/env-vars.yaml
+          printf 'LOGIN_TARGET_RESPONSE_MS: "%s"\n' "$LOGIN_TARGET_RESPONSE_MS_VAL" >> /tmp/env-vars.yaml
+          printf 'MAX_REQUEST_BYTES: "%s"\n' "$MAX_REQUEST_BYTES_VAL" >> /tmp/env-vars.yaml
+          printf 'DAILY_GEMINI_BUDGET_USD: "%s"\n' "$DAILY_GEMINI_BUDGET_USD_VAL" >> /tmp/env-vars.yaml
+          printf 'MONTHLY_GEMINI_BUDGET_USD: "%s"\n' "$MONTHLY_GEMINI_BUDGET_USD_VAL" >> /tmp/env-vars.yaml
+          printf 'GEMINI_EST_COST_PER_SESSION_USD: "%s"\n' "$GEMINI_EST_COST_PER_SESSION_USD_VAL" >> /tmp/env-vars.yaml
           printf 'JWT_SECRET: "%s"\n' "${{ secrets.JWT_SECRET }}" >> /tmp/env-vars.yaml
           printf 'GEMINI_API_KEY: "%s"\n' "${{ secrets.GEMINI_API_KEY }}" >> /tmp/env-vars.yaml
           printf 'REDIS_URL: "%s"\n' "${{ secrets.REDIS_URL }}" >> /tmp/env-vars.yaml

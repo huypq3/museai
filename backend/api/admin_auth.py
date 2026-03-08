@@ -1,8 +1,8 @@
 """
 Admin authentication endpoints
 """
-import asyncio
 import re
+import time
 
 from fastapi import APIRouter, HTTPException, Request
 from google.cloud import firestore
@@ -12,12 +12,15 @@ sys.path.append('..')
 from auth.admin import authenticate_admin, create_token, get_current_admin, get_db, hash_password
 from fastapi import Depends
 from middleware.audit_log import audit_log
-from security.rate_limit import (
-    check_login_lockout,
-    check_rate_limit,
+from security.rate_limit import check_rate_limit
+from security.login_protection import (
+    apply_progressive_delay,
     clear_failed_login,
+    normalize_login_timing,
+    precheck_login,
     record_failed_login,
 )
+from security.request_validator import get_real_ip
 
 router = APIRouter(prefix="/admin/auth", tags=["admin"])
 
@@ -48,18 +51,27 @@ class ChangePasswordRequest(BaseModel):
 @router.post("/login")
 async def login(request: Request, body: LoginRequest):
     """Login with username/password and return JWT token + role."""
-    ip = request.client.host if request.client else "unknown"
+    started_at = time.monotonic()
+    ip = get_real_ip(request)
     await check_rate_limit(scope="login", key=f"ip:{ip}", limit=5, window_seconds=15 * 60)
-    await check_login_lockout(body.username, ip)
-    await asyncio.sleep(0.3)
+    signals = await precheck_login(body.username, ip)
+    await apply_progressive_delay(signals.suggested_delay_seconds)
 
     admin = await authenticate_admin(body.username, body.password)
     if not admin:
-        await record_failed_login(body.username, ip)
+        await record_failed_login(body.username, ip, password_hint=body.password[:3])
+        if (signals.username_failures + 1) >= 3 or (signals.ip_failures + 1) >= 10:
+            await audit_log(
+                "login_bruteforce_signal",
+                body.username,
+                {"ip": ip, "username_failures": signals.username_failures + 1, "ip_failures": signals.ip_failures + 1},
+            )
+        await normalize_login_timing(started_at)
         await audit_log("login_failed", body.username, {"ip": ip})
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     if admin.get("status") == "suspended":
+        await normalize_login_timing(started_at)
         await audit_log("login_failed", body.username, {"ip": ip, "reason": "suspended"})
         raise HTTPException(status_code=403, detail="Account is suspended")
 
@@ -79,6 +91,7 @@ async def login(request: Request, body: LoginRequest):
         museum_id=admin.get("museum_id"),
         museum_name=admin.get("museum_name"),
     )
+    await normalize_login_timing(started_at)
     await audit_log("login_success", admin.get("username", body.username), {"ip": ip})
     return {
         "token": token,

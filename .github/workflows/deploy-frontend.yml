@@ -35,7 +35,7 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_BACKEND_URL: ${{ vars.NEXT_PUBLIC_BACKEND_URL }}
-          NEXT_PUBLIC_BACKEND_WS_URL: ${{ vars.NEXT_PUBLIC_BACKEND_WS_URL }}
+          NEXT_PUBLIC_APP_URL: ${{ vars.NEXT_PUBLIC_APP_URL }}
 
       - name: Pull Vercel environment
         run: npx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}

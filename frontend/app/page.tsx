@@ -21,8 +21,8 @@ export const metadata: Metadata = {
     "real-time voice guide",
     "museum digital transformation",
     "museum visitor engagement",
-    "hướng dẫn viên AI cho bảo tàng",
-    "thuyết minh bảo tàng bằng AI",
+    "ai guide for museums",
+    "museum narration with ai",
   ],
   alternates: {
     canonical: "/",

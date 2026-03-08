@@ -20,7 +20,7 @@ export async function getExhibit(exhibitId: string) {
 
 
 export async function validateMuseum(museumId: string): Promise<MuseumValidation> {
-  const res = await fetch(`${BACKEND_URL}/museums/${encodeURIComponent(museumId)}/validate`);
+  const res = await fetch(`${BACKEND_URL}/api/museum/validate?museum_id=${encodeURIComponent(museumId)}`);
   if (!res.ok) throw new Error("Museum validation failed");
   return res.json();
 }

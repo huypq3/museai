@@ -37,7 +37,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
       }
     } catch (err) {
       console.error("Camera error:", err);
-      setError("Không thể truy cập camera");
+      setError("Cannot access camera.");
     }
   };
 
@@ -92,7 +92,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
       }
     } catch (err) {
       console.error("Analysis error:", err);
-      setError("Không thể phân tích ảnh. Vui lòng thử lại.");
+      setError("Unable to analyze image. Please try again.");
     } finally {
       setIsAnalyzing(false);
     }
@@ -112,7 +112,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
     <div className="fixed inset-0 bg-black z-50 flex flex-col">
       {/* Header */}
       <div className="bg-slate-900 p-4 flex items-center justify-between">
-        <h2 className="text-white text-lg font-semibold">Nhận diện hiện vật</h2>
+        <h2 className="text-white text-lg font-semibold">Exhibit Recognition</h2>
         <button onClick={handleClose} className="text-white text-2xl">
           ✕
         </button>
@@ -138,13 +138,13 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
                   <div className="text-center mb-4">
                     <div className="text-6xl mb-4">✅</div>
                     <h3 className="text-white text-xl font-bold mb-2">
-                      Đã nhận diện!
+                      Exhibit detected!
                     </h3>
                     <p className="text-gray-300 text-sm mb-2">
                       {result.reasoning}
                     </p>
                     <div className="flex items-center justify-center gap-2 text-blue-400">
-                      <span>Độ chính xác:</span>
+                      <span>Confidence:</span>
                       <span className="font-bold">
                         {Math.round(result.confidence * 100)}%
                       </span>
@@ -154,7 +154,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
                     onClick={() => onExhibitDetected(result.exhibit_id, result.confidence)}
                     className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition"
                   >
-                    Bắt đầu trò chuyện
+                    Start conversation
                   </button>
                 </>
               ) : (
@@ -162,7 +162,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
                   <div className="text-center mb-4">
                     <div className="text-6xl mb-4">❓</div>
                     <h3 className="text-white text-xl font-bold mb-2">
-                      Không nhận diện được
+                      Not detected
                     </h3>
                     <p className="text-gray-300 text-sm">
                       {result.reasoning}
@@ -172,7 +172,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
                     onClick={captureAndAnalyze}
                     className="w-full bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-lg transition"
                   >
-                    Thử lại
+                    Retry
                   </button>
                 </>
               )}
@@ -193,7 +193,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
                 }}
                 className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-lg transition"
               >
-                Thử lại
+                Retry
               </button>
             </div>
           </div>
@@ -210,7 +210,7 @@ export default function CameraVision({ museumId, onExhibitDetected, onClose }: P
             <span className="text-4xl">📷</span>
           </button>
           <p className="text-gray-300 text-sm mt-4">
-            Hướng camera vào hiện vật và chụp ảnh
+            Point the camera at an exhibit and capture an image
           </p>
         </div>
       )}

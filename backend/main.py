@@ -18,6 +18,8 @@ if not BACKEND_ENV_PATH.exists() and ROOT_ENV_PATH.exists():
 import os
 import logging
 import base64
+import asyncio
+import signal
 from typing import Optional
 
 from fastapi import FastAPI, WebSocket, HTTPException, Query, UploadFile, File, Request
@@ -31,9 +33,21 @@ from cms.upload import upload_pdf, get_document_status
 from rag.query_engine import answer_with_rag
 from vision.recognizer import recognize_exhibit as recognize_exhibit
 from vision.camera_tour import analyze_frame, generate_commentary
-from middleware.security_headers import SecurityHeadersMiddleware
 from middleware.audit_log import audit_log
-from security.rate_limit import check_rate_limit, check_ws_limits, register_ws_session, unregister_ws_session
+from security.rate_limit import (
+    RateLimitMiddleware,
+    check_qr_scan_limits,
+    check_rate_limit,
+    check_ws_limits,
+    enforce_qr_block_state,
+    get_real_ip,
+)
+from security.request_validator import (
+    ContentSizeLimitMiddleware,
+    SecurityHeadersMiddleware,
+    is_suspicious_request,
+)
+from security.budget_guard import budget_guard
 from auth.ephemeral import create_ephemeral_token, verify_ephemeral_token
 
 # Import admin routers
@@ -56,6 +70,7 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+_shutdown_in_progress = False
 
 # Guard against stale SSL_CERT_FILE values pointing to missing files.
 _ssl_cert_file = os.getenv("SSL_CERT_FILE")
@@ -69,6 +84,35 @@ app = FastAPI(
     version="0.1.0",
     description="AI museum guide backend with Gemini Live voice Q&A"
 )
+
+
+async def _graceful_sigterm_shutdown() -> None:
+    global _shutdown_in_progress
+    if _shutdown_in_progress:
+        return
+    _shutdown_in_progress = True
+    try:
+        from live.ws_handler import session_manager as ws_session_manager
+
+        logger.warning("SIGTERM received: closing active websocket sessions gracefully")
+        await ws_session_manager.shutdown_all(reason="server_shutdown")
+    except Exception as e:
+        logger.error("SIGTERM graceful shutdown failed: %s", e, exc_info=True)
+
+
+@app.on_event("startup")
+async def _register_signal_handlers() -> None:
+    loop = asyncio.get_running_loop()
+
+    def _schedule_shutdown() -> None:
+        loop.create_task(_graceful_sigterm_shutdown())
+
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            loop.add_signal_handler(sig, _schedule_shutdown)
+        except NotImplementedError:
+            # Some environments do not support signal handlers in event loop.
+            pass
 
 # CORS middleware
 def _normalize_origin(origin: str) -> str:
@@ -88,6 +132,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(ContentSizeLimitMiddleware, max_content_size=10 * 1024 * 1024)
+app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 APP_ENV = os.getenv("APP_ENV", os.getenv("ENV", "development")).lower()
@@ -153,6 +199,14 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 
 @app.middleware("http")
+async def suspicious_bot_guard(request: Request, call_next):
+    if is_suspicious_request(request):
+        if request.url.path.startswith("/admin") or request.url.path.startswith("/ws"):
+            return JSONResponse(status_code=403, content={"detail": "Forbidden"})
+    return await call_next(request)
+
+
+@app.middleware("http")
 async def museum_api_rate_limit(request: Request, call_next):
     # public/museum-facing APIs
     if (
@@ -160,7 +214,7 @@ async def museum_api_rate_limit(request: Request, call_next):
         or request.url.path.startswith("/qa/")
         or request.url.path.startswith("/exhibits/")
     ):
-        ip = request.client.host if request.client else "unknown"
+        ip = get_real_ip(request)
         await check_rate_limit(scope="museum_api", key=f"ip:{ip}", limit=300, window_seconds=60)
     return await call_next(request)
 
@@ -231,16 +285,25 @@ async def health():
 
 
 @app.get("/museums/{museum_id}/validate")
-async def validate_museum(museum_id: str):
+async def validate_museum(museum_id: str, request: Request):
     """Validate museum existence + active status for public flows."""
+    if not museum_id or len(museum_id) > 50 or not museum_id.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=404, detail="Resource not found")
+
+    ip = get_real_ip(request)
+    await enforce_qr_block_state(ip)
+    await check_qr_scan_limits(ip, museum_id)
+    await check_rate_limit(scope="museum_validate", key=f"ip:{ip}", limit=20, window_seconds=60)
+
     db = get_firestore()
     museum_doc = await db.collection("museums").document(museum_id).get()
     if not museum_doc.exists:
-        raise HTTPException(status_code=404, detail="Museum not found")
+        await audit_log("museum_validate_failed", "anonymous", {"museum_id": museum_id, "ip": ip})
+        raise HTTPException(status_code=404, detail="Resource not found")
 
     museum = museum_doc.to_dict() or {}
     if museum.get("status", "active") != "active":
-        raise HTTPException(status_code=403, detail="Museum is not active")
+        raise HTTPException(status_code=404, detail="Resource not found")
 
     return {
         "id": museum_id,
@@ -253,6 +316,11 @@ async def validate_museum(museum_id: str):
         "status": museum.get("status", "active"),
         "theme": museum.get("theme") or {},
     }
+
+
+@app.get("/api/museum/validate")
+async def validate_museum_api(request: Request, museum_id: str = Query(...)):
+    return await validate_museum(museum_id=museum_id, request=request)
 
 
 @app.get("/exhibits/{exhibit_id}/validate")
@@ -358,14 +426,14 @@ async def websocket_persona(
         ip = websocket.client.host if websocket.client else "unknown"
         try:
             await check_ws_limits(ip)
+            await budget_guard.check_budget()
         except HTTPException as rl_e:
             logger.warning("WS rate limit exceeded: ip=%s exhibit=%s detail=%s", ip, exhibit_id, rl_e.detail)
             await websocket.accept()
             await websocket.send_json({"type": "error", "code": "WS_RATE_LIMIT", "message": str(rl_e.detail)})
-            await websocket.close(code=4029, reason=str(rl_e.detail))
+            await websocket.close(code=4003, reason=str(rl_e.detail))
             await audit_log("ws_limit_exceeded", "anonymous", {"ip": ip, "exhibit_id": exhibit_id})
             return
-        await register_ws_session(ip)
 
         require_ws_token = os.getenv("WS_REQUIRE_EPHEMERAL_TOKEN", "true").lower() == "true"
         if require_ws_token:
@@ -373,7 +441,7 @@ async def websocket_persona(
                 logger.warning("WS missing ephemeral token: ip=%s exhibit=%s", ip, exhibit_id)
                 await websocket.accept()
                 await websocket.send_json({"type": "error", "code": "WS_TOKEN_MISSING", "message": "Missing ephemeral token"})
-                await websocket.close(code=4001, reason="Missing token")
+                await websocket.close(code=4401, reason="Missing token")
                 return
             try:
                 payload = verify_ephemeral_token(token)
@@ -381,7 +449,7 @@ async def websocket_persona(
                 logger.warning("WS invalid ephemeral token: ip=%s exhibit=%s detail=%s", ip, exhibit_id, token_e.detail)
                 await websocket.accept()
                 await websocket.send_json({"type": "error", "code": "WS_TOKEN_INVALID", "message": str(token_e.detail)})
-                await websocket.close(code=4001, reason=str(token_e.detail))
+                await websocket.close(code=4401, reason=str(token_e.detail))
                 return
             requested_id = payload.get("exhibit_id")
             if requested_id != exhibit_id:
@@ -393,7 +461,7 @@ async def websocket_persona(
                 )
                 await websocket.accept()
                 await websocket.send_json({"type": "error", "code": "WS_TOKEN_EXHIBIT_MISMATCH", "message": "Token exhibit mismatch"})
-                await websocket.close(code=4003, reason="Token exhibit mismatch")
+                await websocket.close(code=4403, reason="Token exhibit mismatch")
                 return
 
         # Load exhibit data from Firestore
@@ -425,6 +493,7 @@ async def websocket_persona(
             exhibit_data["persona"] = {}
         
         # Start websocket session handler
+        await budget_guard.record_session_start()
         await handle_persona_websocket(websocket, exhibit_data, language)
         
     except Exception as e:
@@ -438,11 +507,6 @@ async def websocket_persona(
             await websocket.close()
         except:
             pass
-    finally:
-        ip = websocket.client.host if websocket.client else "unknown"
-        await unregister_ws_session(ip)
-
-
 @app.websocket("/live/ws/{exhibit_id}")
 async def websocket_live_alias(
     websocket: WebSocket,

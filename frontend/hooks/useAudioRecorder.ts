@@ -35,9 +35,9 @@ export function useAudioRecorder() {
         audio: {
           sampleRate: 16000,
           channelCount: 1,
-          echoCancellation: true,  // Loại bỏ echo
-          noiseSuppression: true,  // Loại bỏ noise
-          autoGainControl: true,   // Tự động điều chỉnh âm lượng
+          echoCancellation: true,  // Reduce echo
+          noiseSuppression: true,  // Reduce background noise
+          autoGainControl: true,   // Auto-adjust microphone gain
         }
       });
       
@@ -121,7 +121,7 @@ export function useAudioRecorder() {
       console.log("🎤 Recording started (PCM 16kHz mono)");
     } catch (error) {
       console.error("Failed to start recording:", error);
-      alert("Không thể truy cập microphone. Vui lòng cấp quyền.");
+      alert("Cannot access microphone. Please grant permission.");
     }
   }, []);
 
@@ -151,7 +151,7 @@ export function useAudioRecorder() {
     setIsRecording(false);
   }, []);
 
-  // VAD Mode: Continuous streaming (luôn gửi audio, Gemini VAD tự detect)
+  // VAD mode: continuous streaming (always send audio, Gemini detects activity)
   const startContinuous = useCallback(
     async (onChunk: (base64: string, rms: number) => void) => {
       try {
@@ -174,7 +174,7 @@ export function useAudioRecorder() {
         const processor = audioContext.createScriptProcessor(2048, 1, 1);
         processorRef.current = processor;
 
-        // LUÔN stream, không cần check isRecordingRef
+        // Always stream in VAD mode; no isRecordingRef gate needed.
         processor.onaudioprocess = (e) => {
           const inputData = e.inputBuffer.getChannelData(0);
           const pcmData = new Int16Array(inputData.length);
@@ -197,7 +197,7 @@ export function useAudioRecorder() {
         console.log("🎤 Continuous streaming started (VAD mode, 2048 buffer)");
       } catch (error) {
         console.error("Failed to start continuous recording:", error);
-        alert("Không thể truy cập microphone. Vui lòng cấp quyền.");
+        alert("Cannot access microphone. Please grant permission.");
       }
     },
     []

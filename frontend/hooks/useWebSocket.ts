@@ -5,18 +5,112 @@ type WSMessage = {
   type: string;
   audio?: string;
   text?: string;
-  [key: string]: any;
+  data?: string;
+  reason?: string;
+  code?: string | number;
+  seconds_left?: number;
+  [key: string]: unknown;
 };
+
+type WSNotice = {
+  code: number;
+  reason: string;
+  messageVi: string;
+  messageEn: string;
+  reconnectAllowed: boolean;
+};
+
+const MAX_RETRY_DEFAULT = 5;
+
+function mapCloseToNotice(code: number, reason: string): WSNotice {
+  switch (code) {
+    case 1000:
+      return {
+        code,
+        reason: reason || "normal",
+        messageVi: "Session ended.",
+        messageEn: "Session ended.",
+        reconnectAllowed: true,
+      };
+    case 1001:
+      return {
+        code,
+        reason: reason || "going_away",
+        messageVi: "Connection closed because page/app was left.",
+        messageEn: "Connection closed because page/app was left.",
+        reconnectAllowed: true,
+      };
+    case 1008:
+    case 4003:
+      return {
+        code,
+        reason: reason || "rate_limit",
+        messageVi: "Rate limit reached. Please wait and retry.",
+        messageEn: "Rate limit reached. Please wait and retry.",
+        reconnectAllowed: true,
+      };
+    case 4001:
+      return {
+        code,
+        reason: reason || "inactivity",
+        messageVi: "Session closed due to inactivity.",
+        messageEn: "Session closed due to inactivity.",
+        reconnectAllowed: true,
+      };
+    case 4002:
+      return {
+        code,
+        reason: reason || "max_duration",
+        messageVi: "Session reached maximum duration.",
+        messageEn: "Session reached maximum duration.",
+        reconnectAllowed: true,
+      };
+    case 4010:
+      return {
+        code,
+        reason: reason || "hard_limit",
+        messageVi: "Session hit hard server limit, please reconnect.",
+        messageEn: "Session hit hard server limit, please reconnect.",
+        reconnectAllowed: true,
+      };
+    case 4011:
+      return {
+        code,
+        reason: reason || "heartbeat_timeout",
+        messageVi: "Network heartbeat timeout.",
+        messageEn: "Network heartbeat timeout.",
+        reconnectAllowed: true,
+      };
+    case 1011:
+      return {
+        code,
+        reason: reason || "server_error",
+        messageVi: "Server internal error. Retrying connection.",
+        messageEn: "Server internal error. Retrying connection.",
+        reconnectAllowed: true,
+      };
+    default:
+      return {
+        code,
+        reason: reason || "unexpected_close",
+        messageVi: "Connection interrupted. Retrying.",
+        messageEn: "Connection interrupted. Retrying.",
+        reconnectAllowed: true,
+      };
+  }
+}
 
 export function useWebSocket(exhibitId: string | null, language: string) {
   const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<WSMessage[]>([]);
+  const [notice, setNotice] = useState<WSNotice | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const retryCountRef = useRef(0);
   const isConnectingRef = useRef(false);
   const shouldReconnectRef = useRef(true);
-  const MAX_RETRY = 3;
+  const shouldAutoReconnectRef = useRef(true);
+  const MAX_RETRY = MAX_RETRY_DEFAULT;
 
   const connect = useCallback(async () => {
     if (!exhibitId) return;
@@ -59,13 +153,49 @@ export function useWebSocket(exhibitId: string | null, language: string) {
       isConnectingRef.current = false;
       retryCountRef.current = 0;
       shouldReconnectRef.current = true;
+      shouldAutoReconnectRef.current = true;
       setIsConnected(true);
+      setNotice(null);
     };
 
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
         console.log("📨", data.type, "received");
+
+        // Heartbeat response path.
+        if (data.type === "ping") {
+          try {
+            ws.send(JSON.stringify({ type: "pong", ts: Date.now() }));
+          } catch (e) {
+            console.warn("⚠️ Failed to send pong:", e);
+          }
+          return;
+        }
+
+        if (data.type === "session_end") {
+          shouldAutoReconnectRef.current = false;
+          const mapped = mapCloseToNotice(
+            typeof data.code === "number" ? data.code : 1000,
+            typeof data.reason === "string" ? data.reason : "session_end"
+          );
+          setNotice(mapped);
+        }
+
+        if (data.type === "session_warning") {
+          const warningReason = typeof data.reason === "string" ? data.reason : "warning";
+          const secLeft = typeof data.seconds_left === "number" ? data.seconds_left : 0;
+          const warningText =
+            warningReason === "inactivity"
+              ? `Session will close for inactivity in ${secLeft}s`
+              : `Session time limit reached, closing in ${secLeft}s`;
+          setMessages((prev) => [
+            ...prev,
+            { type: "notice", text: warningText, reason: warningReason, seconds_left: secLeft },
+          ]);
+          return;
+        }
+
         setMessages((prev) => [...prev, data]);
       } catch (e) {
         console.error("Failed to parse WS message:", e);
@@ -73,17 +203,23 @@ export function useWebSocket(exhibitId: string | null, language: string) {
     };
 
     ws.onclose = (event) => {
-      console.log("❌ WS closed, code:", event.code, "wasClean:", event.wasClean);
+      console.log("❌ WS closed, code:", event.code, "wasClean:", event.wasClean, "reason:", event.reason);
       isConnectingRef.current = false;
       wsRef.current = null;
       setIsConnected(false);
+      const mapped = mapCloseToNotice(event.code, event.reason || "");
+      setNotice(mapped);
 
-      if (!shouldReconnectRef.current) return;
+      if (!shouldReconnectRef.current || !shouldAutoReconnectRef.current || !mapped.reconnectAllowed) return;
+      if (event.code === 1000 || event.code === 1001 || event.code === 4401 || event.code === 4403) return;
 
       if (retryCountRef.current < MAX_RETRY) {
         retryCountRef.current++;
-        const delay = 2000 * retryCountRef.current;
-        console.log(`⏳ Reconnecting in ${delay}ms (${retryCountRef.current}/${MAX_RETRY})...`);
+        // Exponential backoff + jitter to reduce thundering herd.
+        const base = Math.min(30000, 1000 * 2 ** retryCountRef.current);
+        const jitter = Math.floor(Math.random() * 400);
+        const delay = base + jitter;
+        console.log(`⏳ Reconnecting in ${delay}ms (${retryCountRef.current}/${MAX_RETRY})`);
         reconnectTimeoutRef.current = setTimeout(connect, delay);
       } else {
         console.error("❌ Max retries reached");
@@ -110,7 +246,7 @@ export function useWebSocket(exhibitId: string | null, language: string) {
       }
       const ws = wsRef.current;
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
-        ws.close(1000, "Component unmounted");
+        ws.close(1001, "Component unmounted");
       }
       wsRef.current = null;
       isConnectingRef.current = false;
@@ -134,9 +270,17 @@ export function useWebSocket(exhibitId: string | null, language: string) {
 
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false;
+    shouldAutoReconnectRef.current = false;
     if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     wsRef.current?.close(1000, "Manual disconnect");
   }, []);
 
-  return { isConnected, messages, sendMessage, disconnect };
+  const reconnectNow = useCallback(() => {
+    shouldReconnectRef.current = true;
+    shouldAutoReconnectRef.current = true;
+    retryCountRef.current = 0;
+    void connect();
+  }, [connect]);
+
+  return { isConnected, messages, notice, sendMessage, disconnect, reconnectNow };
 }

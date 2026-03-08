@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MuseAI - Hướng dẫn viên bảo tàng AI",
-  description: "AI Agent cho bảo tàng với Gemini Live",
+  title: "MuseAI - AI Museum Voice Guide",
+  description: "AI museum guide powered by Gemini Live",
 };
 
 export default function RootLayout({
@@ -12,7 +12,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="vi">
+    <html lang="en">
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />

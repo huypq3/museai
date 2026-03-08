@@ -60,17 +60,17 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const autoStopHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Refs — không gây re-render
+  // Refs that should not trigger re-renders
   const lastProcessedIndexRef = useRef<number>(-1);
   const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waitingForAudioRef = useRef(false);
   const pendingAITextRef = useRef("");
   const pendingUserTextRef = useRef("");
   const hasAiOutputThisTurnRef = useRef(false);
-  // Khi user interrupt → bỏ qua mọi message cho đến turn_complete tiếp theo (của turn CŨ)
+  // When user interrupts, skip old-turn messages until next turn_complete.
   const skipOldTurnRef = useRef(false);
 
-  const { isConnected, messages: wsMessages, sendMessage } = useWebSocket(exhibitId, language);
+  const { isConnected, messages: wsMessages, notice: wsNotice, sendMessage, reconnectNow } = useWebSocket(exhibitId, language);
   const { start, stop: stopRecording } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
   const sentences = useMemo(
@@ -120,17 +120,17 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
   }, [isConnected]); // chỉ depend vào isConnected
 
-  // Auto-greeting được xử lý bởi backend ngay sau khi connect
+  // Auto-greeting is handled by backend immediately after connect.
 
-  // ─── Khi audio phát xong, nếu đang chờ → về ready ────────────────────
+  // ─── When audio playback ends while waiting, return to ready ──────────
   useEffect(() => {
     if (!isPlaying && waitingForAudioRef.current) {
-      // Không override nếu user đã bắt đầu ghi âm hoặc đang xử lý
+      // Do not override if user already started recording or is processing.
       if (stateRef.current === "recording" || stateRef.current === "processing") {
         waitingForAudioRef.current = false;
         return;
       }
-      // Chỉ tự về ready sau khi AI đã thực sự ở trạng thái speaking.
+      // Only return to ready if AI was actually in speaking state.
       if (stateRef.current !== "ai_speaking") {
         waitingForAudioRef.current = false;
         return;
@@ -141,7 +141,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
   }, [isPlaying]);
 
-  // ─── Xử lý WS messages (chỉ depend vào wsMessages) ───────────────────
+  // ─── Process WS messages (depends only on wsMessages) ─────────────────
   useEffect(() => {
     if (wsMessages.length === 0) return;
 
@@ -162,10 +162,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         continue;
       }
 
-      // ── Đang skip turn cũ (user đã interrupt) ──
+      // ── Skipping old turn after user interrupt ──
       if (skipOldTurnRef.current) {
         if (msg.type === "turn_complete") {
-          // Turn cũ kết thúc → clear flag, xử lý bình thường từ message tiếp theo
+          // Old turn ended: clear skip flag and resume normal processing.
           console.log("⏭️ Old turn_complete skipped, resuming normal processing");
           skipOldTurnRef.current = false;
         }
@@ -174,15 +174,15 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
       // ── User transcript ──
       if ((msg.type === "user_transcript" || msg.type === "user_text") && (msg.data || msg.text)) {
-        const txt = msg.data || msg.text;
+        const txt = msg.data || msg.text || "";
         pendingUserTextRef.current = txt;
         setCurrentUserText(txt);
       }
 
-      // ── Audio chunk từ AI ──
+      // ── AI audio chunk ──
       if ((msg.type === "audio_chunk" || msg.type === "audio") && (msg.data || msg.audio)) {
-        const audioData = msg.data || msg.audio;
-        // Khi recording → không phát audio
+        const audioData = msg.data || msg.audio || "";
+        // While recording, do not play AI audio.
         if (stateRef.current === "recording") continue;
 
         hasAiOutputThisTurnRef.current = true;
@@ -197,7 +197,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       // ── AI text/transcript ──
       if ((msg.type === "transcript" || msg.type === "text") && (msg.data || msg.text)) {
         if (stateRef.current === "recording") continue;
-        const txt = msg.data || msg.text;
+        const txt = msg.data || msg.text || "";
         console.log("📝 Transcript received:", txt);
         hasAiOutputThisTurnRef.current = true;
         pendingAITextRef.current = mergeTranscript(pendingAITextRef.current, txt);
@@ -246,7 +246,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           return next;
         });
 
-        // Nếu user đang recording → bỏ qua, không chuyển state
+        // If user is recording, skip state transition.
         if (stateRef.current === "recording") continue;
 
         waitingForAudioRef.current = true;
@@ -266,7 +266,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
 
     lastProcessedIndexRef.current = wsMessages.length - 1;
-  }, [wsMessages]); // CHỈ depend vào wsMessages — không include isPlaying, playChunk, etc.
+  }, [wsMessages]); // Depend only on wsMessages, not isPlaying/playChunk/etc.
 
   useEffect(() => {
     if (sentences.length > 0 || currentAIText) {
@@ -274,7 +274,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
   }, [sentences, currentAIText]);
 
-  // ─── Clear timeout khi unmount ────────────────────────────────────────
+  // ─── Clear timers on unmount ───────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
@@ -290,7 +290,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     stopRecording();
     if (reason === "no_speech") {
       setState("ready");
-      setAutoStopHint("Không nghe rõ giọng nói, vui lòng thử lại");
+      setAutoStopHint("No speech detected clearly. Please try again.");
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 2200);
       return;
@@ -306,12 +306,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setState("processing");
     hasAiOutputThisTurnRef.current = false;
     if (reason === "silence") {
-      setAutoStopHint("Đã tự gửi khi bạn dừng nói");
+      setAutoStopHint("Auto-sent because you stopped speaking.");
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 2200);
     }
 
-    // Timeout 15s: nếu Gemini không trả lời → giữ processing để tránh nhảy UI.
+    // 15s timeout: keep processing state if Gemini has not responded yet.
     processingTimeoutRef.current = setTimeout(() => {
       console.warn("⚠️ 15s timeout while processing (keep processing state)");
     }, 15000);
@@ -335,7 +335,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     // Starting a fresh user turn => clear stale skip flag first.
     skipOldTurnRef.current = false;
 
-    // Dừng audio + đánh dấu skip mọi message còn lại từ turn CŨ
+    // Stop local audio and skip remaining messages from the old turn.
     stopPlayback();
     waitingForAudioRef.current = false;
     pendingAITextRef.current = "";
@@ -344,12 +344,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     pendingUserTextRef.current = "";
 
     if (stateRef.current === "ai_speaking") {
-      // AI đang nói → skip toàn bộ message đến turn_complete
+      // AI is speaking: skip all old-turn messages until turn_complete.
       skipOldTurnRef.current = true;
       sendMessage({ type: "interrupt" });
     }
 
-    // SET STATE NGAY — trước await để stateRef block audio chunks
+    // Set recording state before awaiting so stateRef can block incoming audio.
     setState("recording");
     const started = sendMessage({ type: "start_of_turn" });
     if (!started) {
@@ -446,6 +446,41 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           gap: "12px",
         }}
       >
+        {wsNotice && (
+          <div
+            style={{
+              marginBottom: 8,
+              background: "rgba(255,255,255,0.06)",
+              border: "1px solid rgba(255,255,255,0.14)",
+              color: "#F5F0E8",
+              borderRadius: 10,
+              padding: "6px 10px",
+              fontSize: 12,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 10,
+            }}
+          >
+            <span>{language === "vi" ? wsNotice.messageVi : wsNotice.messageEn}</span>
+            {wsNotice.reconnectAllowed && (
+              <button
+                onClick={reconnectNow}
+                style={{
+                  background: "transparent",
+                  border: "1px solid rgba(201,168,76,0.5)",
+                  color: "#C9A84C",
+                  borderRadius: 8,
+                  padding: "2px 8px",
+                  fontSize: 11,
+                  cursor: "pointer",
+                }}
+              >
+                {"Reconnect"}
+              </button>
+            )}
+          </div>
+        )}
         <button
           onClick={handleBack}
           style={{
@@ -738,7 +773,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             : isProcessingState
             ? `⏳ ${t(language, "voice.processing")}`
             : isSpeakingState
-            ? "✋ Nhấn để dừng"
+            ? "✋ Tap to stop"
             : `🎙 ${t(language, "voice.ask")}`}
         </button>
         {autoStopHint && (

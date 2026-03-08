@@ -150,14 +150,44 @@ Critical vars:
 - `GOOGLE_CLOUD_PROJECT` (required)
 - `GOOGLE_APPLICATION_CREDENTIALS` (required for local GCP auth)
 - `ALLOWED_ORIGINS` (must include frontend origin)
+- `PUBLIC_APP_URL` (recommended, used for QR URL fallback)
 - `GCS_BUCKET` / `GCS_BUCKET_NAME`
+- `MAX_REQUEST_BYTES` (default: `10485760`)
+- `WS_MAX_PER_IP`, `WS_MAX_PER_HOUR`, `WS_MAX_AUDIO_CHUNK_BYTES`, `WS_MAX_MESSAGE_SIZE`
+- `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`, `LOGIN_IP_MAX_ATTEMPTS`
+- `DAILY_GEMINI_BUDGET_USD`, `MONTHLY_GEMINI_BUDGET_USD`
+
+QR URL fallback order in backend: `museum.qr_base_url` -> `PUBLIC_APP_URL` -> `FRONTEND_PUBLIC_URL` -> `APP_PUBLIC_URL` -> `http://localhost:3000`.
 
 ### Frontend
 See [`frontend/.env.example`](frontend/.env.example).
 Critical vars:
 - `NEXT_PUBLIC_BACKEND_URL`
+- `NEXT_PUBLIC_APP_URL`
 
 Note: frontend auto-derives WebSocket URL from `NEXT_PUBLIC_BACKEND_URL` automatically.
+
+### GitHub Actions Variables/Secrets
+If you deploy from GitHub Actions, configure:
+
+Variables:
+- `GCP_PROJECT_ID`
+- `CLOUD_RUN_REGION`
+- `CLOUD_RUN_SERVICE`
+- `ARTIFACT_REPOSITORY`
+- `ALLOWED_ORIGINS`
+- `PUBLIC_APP_URL`
+- `GCS_BUCKET_NAME`
+- `NEXT_PUBLIC_BACKEND_URL`
+- `NEXT_PUBLIC_APP_URL`
+- Optional tuning vars: `GEMINI_LIVE_MODEL`, `GEMINI_EMBEDDING_MODEL`, `VOICE_*`, `WS_*`, `LOGIN_*`, `MAX_REQUEST_BYTES`, `DAILY_GEMINI_BUDGET_USD`, `MONTHLY_GEMINI_BUDGET_USD`
+
+Secrets:
+- `GCP_SA_KEY`
+- `JWT_SECRET`
+- `GEMINI_API_KEY`
+- `REDIS_URL` (optional; empty allowed)
+- `VERCEL_TOKEN` (frontend deploy)
 
 ## Deploy to Google Cloud
 
@@ -177,7 +207,7 @@ gcloud run deploy "${SERVICE}" \
   --platform managed \
   --region "${REGION}" \
   --allow-unauthenticated \
-  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},APP_ENV=production,ENFORCE_HTTPS=true,ALLOWED_ORIGINS=https://guideqr.ai,https://www.guideqr.ai"
+  --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},APP_ENV=production,ENFORCE_HTTPS=true,ALLOWED_ORIGINS=https://guideqr.ai,https://www.guideqr.ai,PUBLIC_APP_URL=https://guideqr.ai,MAX_REQUEST_BYTES=10485760,WS_MAX_PER_IP=3,WS_MAX_PER_HOUR=20"
 ```
 
 ### Frontend

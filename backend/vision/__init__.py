@@ -1,4 +1,4 @@
-"""Vision module - Gemini Vision cho exhibit recognition."""
+"""Vision module for Gemini-powered exhibit recognition."""
 
 from .recognizer import recognize_exhibit
 from .camera_tour import analyze_frame, generate_commentary

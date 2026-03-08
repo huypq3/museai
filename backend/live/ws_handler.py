@@ -20,9 +20,17 @@ from google.genai import types
 
 from persona.prompt_builder import build_prompt
 from live.rag_context import get_exhibit_context, get_exhibit_name, get_museum_prompt_config
+from live.session_manager import SessionManager
+from security.rate_limit import register_ws_session, unregister_ws_session
 
 
 logger = logging.getLogger(__name__)
+session_manager = SessionManager()
+MAX_AUDIO_CHUNK_BYTES = int(os.getenv("WS_MAX_AUDIO_CHUNK_BYTES", str(64 * 1024)))
+MAX_MESSAGE_SIZE = int(os.getenv("WS_MAX_MESSAGE_SIZE", str(256 * 1024)))
+MAX_AUDIO_SECONDS_PER_MINUTE = int(os.getenv("WS_MAX_AUDIO_SECONDS_PER_MINUTE", "45"))
+PCM_16KHZ_MONO_BYTES_PER_SEC = 16000 * 2
+MAX_CONTINUOUS_AUDIO_SEC = int(os.getenv("WS_MAX_CONTINUOUS_AUDIO_SEC", "300"))
 
 
 class GeminiLiveHandler:
@@ -44,8 +52,21 @@ class GeminiLiveHandler:
 
         self.client = genai.Client(api_key=api_key)
         self.session: Optional[genai.types.LiveSession] = None
+        self.session_state = None
         self.last_audio_chunk_at_ms: int = 0
         self._last_assistant_transcript: str = ""
+        self._closing = False
+        self._closed = False
+        self._close_reason = "normal"
+        self._accepting_input = True
+        self._tasks: list[asyncio.Task] = []
+        self._ai_turn_active = False
+        self._client_ip = "unknown"
+        self._registered_ws_slot = False
+        self._started_at = time.monotonic()
+        self._audio_window_started_at = time.monotonic()
+        self._audio_window_bytes = 0
+        self._turn_started_at: float | None = None
         try:
             self._genai_version = pkg_version("google-genai")
         except PackageNotFoundError:
@@ -57,8 +78,20 @@ class GeminiLiveHandler:
         exhibit_name = self.exhibit.get("name", "exhibit")
         logger.info("🔌 Client connected: %s | exhibit=%s", websocket.client, exhibit_name)
         logger.info("📦 google-genai version: %s", self._genai_version)
+        self._client_ip = websocket.client.host if websocket.client else "unknown"
 
         try:
+            await register_ws_session(self._client_ip)
+            self._registered_ws_slot = True
+            self.session_state = await session_manager.create_session(
+                exhibit_id=str(self.exhibit.get("id", self.exhibit_id or "unknown")),
+                language=self.language,
+                client_ip=self._client_ip,
+            )
+            await session_manager.register_shutdown_hook(
+                self.session_state.session_id,
+                lambda why: self.close_session(websocket, reason=why),
+            )
             exhibit_name = self._exhibit_name
             exhibit_context = ""
             if self.exhibit_id:
@@ -146,50 +179,176 @@ class GeminiLiveHandler:
                 send_task = asyncio.create_task(
                     self._send_to_client(websocket, session)
                 )
+                watchdog_task = asyncio.create_task(
+                    self._watchdog_loop(websocket, session)
+                )
+                heartbeat_task = asyncio.create_task(
+                    self._heartbeat_loop(websocket)
+                )
+                self._tasks = [receive_task, send_task, watchdog_task, heartbeat_task]
 
                 try:
                     done, pending = await asyncio.wait(
-                        [receive_task, send_task],
+                        self._tasks,
                         return_when=asyncio.FIRST_EXCEPTION,
                     )
-                    for task in pending:
-                        task.cancel()
                     for task in done:
                         if task.exception():
                             logger.error("Task raised: %s", task.exception())
+                            self._close_reason = "internal_error"
+                    if not self._closing:
+                        if self._close_reason != "internal_error":
+                            self._close_reason = "normal"
                 except Exception as e:
                     logger.error("gather error: %s", e)
-                    receive_task.cancel()
-                    send_task.cancel()
+                    self._close_reason = "internal_error"
 
-                logger.info("WebSocket session ended")
+                await self.close_session(websocket, reason=self._close_reason)
+                logger.info("WebSocket session ended: reason=%s", self._close_reason)
 
         except WebSocketDisconnect:
             logger.info("Client disconnected")
+            await self.close_session(websocket, reason="client_disconnect")
         except Exception as e:
             logger.error(f"Error in WebSocket handler: {e}", exc_info=True)
             try:
                 await websocket.send_json({"type": "error", "message": "Internal server error"})
             except Exception:
                 pass
+            await self.close_session(websocket, reason="internal_error")
         finally:
+            await self.close_session(websocket, reason=self._close_reason or "normal")
+
+    async def close_session(self, websocket: WebSocket, reason: str):
+        """
+        Graceful shutdown sequence for one websocket session.
+        """
+        if self._closed:
+            return
+        self._closing = True
+        self._close_reason = reason
+        self._accepting_input = False
+
+        ws_code = self._reason_to_ws_code(reason)
+        session_id = self.session_state.session_id if self.session_state else "unknown"
+
+        # 1-2. Notify client session is ending.
+        try:
+            await websocket.send_json({"type": "session_end", "reason": reason, "code": ws_code})
+        except Exception:
+            pass
+
+        # 3. Best-effort flush: avoid cutting a sentence mid-turn.
+        flush_deadline = time.monotonic() + 3.0
+        while self._ai_turn_active and time.monotonic() < flush_deadline:
+            await asyncio.sleep(0.05)
+
+        # 4. Cancel background tasks.
+        current = asyncio.current_task()
+        for task in self._tasks:
+            if task is current:
+                continue
+            if not task.done():
+                task.cancel()
+        for task in self._tasks:
+            if task is current:
+                continue
             try:
-                await websocket.close()
+                await task
+            except asyncio.CancelledError:
+                pass
             except Exception:
                 pass
+        self._tasks = []
+
+        # 5. Close Gemini live stream.
+        try:
+            if self.session is not None:
+                await self.session.aclose()
+        except Exception:
+            pass
+        self.session = None
+
+        # 6. Decrement ws_active counter.
+        if self._registered_ws_slot:
+            try:
+                await unregister_ws_session(self._client_ip)
+            except Exception:
+                logger.warning("Failed to unregister ws slot for ip=%s", self._client_ip)
+            self._registered_ws_slot = False
+
+        # 7. Session stats log.
+        summary = None
+        if self.session_state:
+            try:
+                await session_manager.unregister_shutdown_hook(self.session_state.session_id)
+            except Exception:
+                pass
+            try:
+                summary = await session_manager.finish_session(self.session_state.session_id, reason=reason)
+            except Exception:
+                logger.warning("Failed to finish session in manager: %s", session_id)
+            self.session_state = None
+        if summary:
+            logger.info("📊 session_summary: %s", summary)
+        else:
+            logger.info(
+                "📊 session_summary: {'session_id': '%s', 'reason': '%s', 'duration_sec': %.3f}",
+                session_id,
+                reason,
+                max(0.0, time.monotonic() - self._started_at),
+            )
+
+        # 8. Close websocket with mapped code.
+        try:
+            await websocket.close(code=ws_code, reason=reason)
+        except Exception:
+            pass
+        self._closed = True
 
     async def _receive_from_client(self, websocket: WebSocket, session):
         """Receive audio/text from client and forward to Gemini."""
         try:
             while True:
                 raw = await websocket.receive_text()
+                if len(raw.encode("utf-8")) > MAX_MESSAGE_SIZE:
+                    self._close_reason = "policy_violation"
+                    await self.close_session(websocket, reason="policy_violation")
+                    break
                 message = json.loads(raw)
                 msg_type = message.get("type")
+                if self._closing:
+                    break
+                if self.session_state:
+                    await session_manager.touch_client_activity(self.session_state.session_id)
+                    await session_manager.incr_in(self.session_state.session_id)
 
                 if msg_type == "audio":
+                    if not self._accepting_input:
+                        continue
                     audio_b64 = message.get("data", "")
                     if audio_b64:
                         audio_bytes = base64.b64decode(audio_b64)
+                        if len(audio_bytes) > MAX_AUDIO_CHUNK_BYTES:
+                            logger.warning("Audio chunk too large: %d bytes", len(audio_bytes))
+                            self._close_reason = "policy_violation"
+                            await self.close_session(websocket, reason="policy_violation")
+                            break
+                        now = time.monotonic()
+                        if (now - self._audio_window_started_at) > 60:
+                            self._audio_window_started_at = now
+                            self._audio_window_bytes = 0
+                        self._audio_window_bytes += len(audio_bytes)
+                        audio_seconds_minute = self._audio_window_bytes / PCM_16KHZ_MONO_BYTES_PER_SEC
+                        if audio_seconds_minute > MAX_AUDIO_SECONDS_PER_MINUTE:
+                            logger.warning("Audio flood detected: %.2fs in current minute", audio_seconds_minute)
+                            self._close_reason = "policy_violation"
+                            await self.close_session(websocket, reason="policy_violation")
+                            break
+                        if self.session_state:
+                            await session_manager.incr_in(
+                                self.session_state.session_id, audio_bytes=len(audio_bytes)
+                            )
                         self.last_audio_chunk_at_ms = int(time.monotonic() * 1000)
                         await session.send_realtime_input(
                             audio=types.Blob(data=audio_bytes, mime_type="audio/pcm;rate=16000")
@@ -197,11 +356,17 @@ class GeminiLiveHandler:
                         logger.debug("🎙️ Forwarded audio chunk (%d bytes) to Gemini", len(audio_bytes))
 
                 elif msg_type == "start_of_turn":
+                    if not self._accepting_input:
+                        continue
+                    self._turn_started_at = time.monotonic()
                     # Manual turn mode with realtime input boundaries.
                     await session.send_realtime_input(activity_start=types.ActivityStart())
                     logger.info("📥 start_of_turn from client → activity_start sent")
 
                 elif msg_type == "end_of_turn":
+                    if not self._accepting_input:
+                        continue
+                    self._turn_started_at = None
                     # Manual turn mode: close current activity so Gemini can respond
                     # to the audio just streamed. Avoid sending dummy text payloads.
                     now_ms = int(time.monotonic() * 1000)
@@ -216,6 +381,8 @@ class GeminiLiveHandler:
                     logger.info("✅ end_of_turn sent (activity_end)")
 
                 elif msg_type == "request_greeting":
+                    if not self._accepting_input:
+                        continue
                     # Keep greeting trigger short; persona/style already lives in system prompt.
                     lang_name = self._language_label(self.language)
                     welcome_by_lang = self._museum_welcome_messages or {}
@@ -241,14 +408,27 @@ class GeminiLiveHandler:
                     logger.info("📥 interrupt from client — client stopped audio, waiting for next turn")
 
                 elif msg_type == "text":
+                    if not self._accepting_input:
+                        continue
                     # Fallback text input
                     text = message.get("data", "")
                     if text:
                         await session.send(input=text, end_of_turn=True)
                         logger.info("📤 Sent to Gemini: %s", text[:80])
 
+                elif msg_type == "pong":
+                    if self.session_state:
+                        await session_manager.touch_pong(self.session_state.session_id)
+                    continue
+
                 else:
                     logger.warning("Unknown msg type: %s", msg_type)
+
+                if self._turn_started_at and (time.monotonic() - self._turn_started_at) > MAX_CONTINUOUS_AUDIO_SEC:
+                    logger.warning("Continuous client stream over %ss without end_of_turn", MAX_CONTINUOUS_AUDIO_SEC)
+                    self._close_reason = "policy_violation"
+                    await self.close_session(websocket, reason="policy_violation")
+                    break
 
         except WebSocketDisconnect:
             logger.info("Client disconnected in receive loop")
@@ -270,9 +450,14 @@ class GeminiLiveHandler:
             turn_audio_chunks = 0
             turn_transcript_chunks = 0
             while True:
+                if self._closing:
+                    break
                 got_any = False
                 async for response in session.receive():
+                    if self._closing:
+                        break
                     got_any = True
+                    self._ai_turn_active = True
                     try:
                         self._log_response(response)
                         logger.info(
@@ -286,6 +471,10 @@ class GeminiLiveHandler:
                         if response.data:
                             audio_b64 = base64.b64encode(response.data).decode("utf-8")
                             await websocket.send_json({"type": "audio_chunk", "audio": audio_b64})
+                            if self.session_state:
+                                await session_manager.incr_out(
+                                    self.session_state.session_id, audio_bytes=len(response.data)
+                                )
                             logger.info("🔊 Audio chunk: %d bytes", len(response.data))
                             turn_audio_chunks += 1
 
@@ -318,14 +507,18 @@ class GeminiLiveHandler:
 
                             # Interrupted
                             if getattr(sc, "interrupted", False):
-                                await websocket.send_json({"type": "interrupted"})
-                                logger.info("⚠️ Gemini interrupted")
+                                    await websocket.send_json({"type": "interrupted"})
+                                    if self.session_state:
+                                        await session_manager.incr_out(self.session_state.session_id)
+                                    logger.info("⚠️ Gemini interrupted")
 
                             # Input transcription (user speech transcript, if available)
                             if getattr(sc, "input_transcription", None):
                                 txt = sc.input_transcription.text
                                 logger.info("🎤 Input transcript: %s", str(txt)[:80])
                                 await websocket.send_json({"type": "user_transcript", "text": txt})
+                                if self.session_state:
+                                    await session_manager.incr_out(self.session_state.session_id)
 
                             # Turn complete
                             if getattr(sc, "turn_complete", False):
@@ -359,12 +552,15 @@ class GeminiLiveHandler:
                                     continue
 
                                 await websocket.send_json({"type": "turn_complete"})
+                                if self.session_state:
+                                    await session_manager.incr_out(self.session_state.session_id)
                                 logger.info("✅ turn_complete sent to client")
                                 self._last_assistant_transcript = ""
                                 current_turn_text = ""
                                 recovery_attempted = False
                                 turn_audio_chunks = 0
                                 turn_transcript_chunks = 0
+                                self._ai_turn_active = False
 
                     except WebSocketDisconnect:
                         raise
@@ -375,6 +571,8 @@ class GeminiLiveHandler:
                 if not got_any:
                     # session.receive() returned without responses; back off briefly.
                     await asyncio.sleep(0.1)
+                else:
+                    self._ai_turn_active = False
 
         except WebSocketDisconnect:
             logger.info("Client disconnected in send loop")
@@ -427,9 +625,104 @@ class GeminiLiveHandler:
             "role": "assistant",
             "text": payload_text,
         })
+        if self.session_state:
+            await session_manager.incr_out(self.session_state.session_id)
         logger.info("📝 Transcript: %s", payload_text[:80])
         self._last_assistant_transcript = normalized
         return payload_text
+
+    async def _heartbeat_loop(self, websocket: WebSocket):
+        """
+        Layer 3: heartbeat ping/pong to detect zombie connections.
+        """
+        interval_sec = int(os.getenv("WS_HEARTBEAT_INTERVAL_SEC", "30"))
+        pong_timeout_sec = int(os.getenv("WS_PONG_TIMEOUT_SEC", "10"))
+        while not self._closing:
+            await asyncio.sleep(interval_sec)
+            if self._closing:
+                break
+            try:
+                await websocket.send_json({"type": "ping", "ts": int(time.time() * 1000)})
+                if self.session_state:
+                    await session_manager.incr_out(self.session_state.session_id)
+            except Exception:
+                self._close_reason = "network_drop"
+                break
+
+            # Wait for pong freshness.
+            await asyncio.sleep(pong_timeout_sec)
+            if self.session_state:
+                state = await session_manager.get_session(self.session_state.session_id)
+                if state and (time.monotonic() - state.last_pong_at) > (interval_sec + pong_timeout_sec):
+                    self._close_reason = "heartbeat_timeout"
+                    await self.close_session(websocket, reason="heartbeat_timeout")
+                    break
+
+    async def _watchdog_loop(self, websocket: WebSocket, session):
+        """
+        Layered timeout protections:
+        1) inactivity, 2) max session duration, 4) hard absolute limit.
+        """
+        del session  # reserved for future adaptive checks
+
+        inactivity_sec = int(os.getenv("WS_INACTIVITY_TIMEOUT_SEC", "180"))
+        inactivity_grace_sec = int(os.getenv("WS_INACTIVITY_GRACE_SEC", "30"))
+        max_duration_sec = int(os.getenv("WS_MAX_SESSION_SEC", "900"))
+        max_duration_grace_sec = int(os.getenv("WS_MAX_SESSION_GRACE_SEC", "30"))
+        hard_limit_sec = int(os.getenv("WS_HARD_LIMIT_SEC", "1200"))
+
+        inactivity_warned = False
+        duration_warned = False
+
+        while not self._closing:
+            await asyncio.sleep(1.0)
+            if self._closing or not self.session_state:
+                break
+
+            state = await session_manager.get_session(self.session_state.session_id)
+            if not state:
+                break
+
+            now = time.monotonic()
+            idle = now - state.last_client_activity_at
+            age = now - state.started_at
+
+            # Layer 4: hard absolute limit.
+            if age >= hard_limit_sec:
+                await self.close_session(websocket, reason="hard_limit")
+                break
+
+            # Layer 1: inactivity warning then close.
+            if not inactivity_warned and idle >= inactivity_sec:
+                inactivity_warned = True
+                try:
+                    await websocket.send_json({
+                        "type": "session_warning",
+                        "reason": "inactivity",
+                        "seconds_left": inactivity_grace_sec,
+                    })
+                    await session_manager.incr_out(self.session_state.session_id)
+                except Exception:
+                    pass
+            if inactivity_warned and idle >= (inactivity_sec + inactivity_grace_sec):
+                await self.close_session(websocket, reason="inactivity")
+                break
+
+            # Layer 2: max duration warning then close.
+            if not duration_warned and age >= max_duration_sec:
+                duration_warned = True
+                try:
+                    await websocket.send_json({
+                        "type": "session_warning",
+                        "reason": "max_duration",
+                        "seconds_left": max_duration_grace_sec,
+                    })
+                    await session_manager.incr_out(self.session_state.session_id)
+                except Exception:
+                    pass
+            if duration_warned and age >= (max_duration_sec + max_duration_grace_sec):
+                await self.close_session(websocket, reason="max_duration")
+                break
 
     def _looks_truncated(self, text: str) -> bool:
         """Heuristic check for likely cut-off endings."""
@@ -464,6 +757,20 @@ class GeminiLiveHandler:
             "ko": "Korean",
             "zh": "Chinese",
         }.get(language, "English")
+
+    def _reason_to_ws_code(self, reason: str) -> int:
+        return {
+            "normal": 1000,
+            "client_disconnect": 1001,
+            "inactivity": 4001,
+            "max_duration": 4002,
+            "rate_limit": 4003,
+            "hard_limit": 4010,
+            "heartbeat_timeout": 4011,
+            "network_drop": 1001,
+            "policy_violation": 1008,
+            "internal_error": 1011,
+        }.get(reason, 1000)
 
     def _compose_system_prompt(self, exhibit_name: str, exhibit_context: str) -> tuple[str, dict[str, object]]:
         """
