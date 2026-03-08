@@ -27,7 +27,6 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
   const canBack = !['/admin', '/admin/login', '/admin/dashboard'].includes(pathname)
   const isSuper = session?.role === 'super_admin'
   const museumHome = session?.museum_id ? `/admin/museum/${session.museum_id}` : '/admin/dashboard'
-  const museumTab = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('tab') : null
 
   const navItems = useMemo(
     () =>
@@ -40,11 +39,11 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
             { icon: '⚙️', label: t('nav_settings'), href: '/admin/settings', activePrefixes: ['/admin/settings'] },
           ]
         : [
-            { icon: '🏛️', label: t('nav_exhibits'), href: museumHome, activePrefixes: ['/admin/museum/'], matchTab: 'exhibits' },
+            { icon: '🏛️', label: t('nav_exhibits'), href: museumHome, activePrefixes: [museumHome], excludePrefixes: [`${museumHome}/settings`] },
             { icon: '📊', label: t('nav_analytics'), href: '/admin/analytics', activePrefixes: ['/admin/analytics'] },
-            { icon: '⚙️', label: t('nav_settings'), href: `${museumHome}?tab=settings`, activePrefixes: ['/admin/museum/'], matchTab: 'settings' },
+            { icon: '⚙️', label: t('nav_settings'), href: `${museumHome}/settings`, activePrefixes: [`${museumHome}/settings`] },
           ],
-    [isSuper, museumHome, t]
+    [isSuper, museumHome, session?.museum_id, t]
   )
 
   return (
@@ -75,9 +74,8 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
                 const matchesPath = (item.activePrefixes || []).some((p: string) =>
                   p.endsWith('/') ? pathname.startsWith(p) : pathname === p || pathname.startsWith(`${p}/`)
                 )
-                const isActive = item.matchTab
-                  ? matchesPath && (item.matchTab === 'settings' ? museumTab === 'settings' : museumTab !== 'settings')
-                  : matchesPath
+                const matchesExclude = (item.excludePrefixes || []).some((p: string) => pathname.includes(p))
+                const isActive = matchesPath && !matchesExclude
                 return (
               <button
                 key={item.href + item.label}
