@@ -10,7 +10,6 @@ type MuseumRow = { id: string; name: string; address?: string; exhibit_count?: n
 
 type Overview = {
   total_museums: number
-  total_exhibits: number
   total_exhibits?: number
   total_events: number
   top_museums: { museum_id: string; name: string; count: number }[]
@@ -72,7 +71,7 @@ export default function AdminDashboardPage() {
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(180px,1fr))', gap: 12, marginBottom: 24 }}>
         <Card title={tr('Bảo tàng', 'Museums')} value={overview?.total_museums ?? 0} />
-        <Card title={tr('Hiện vật', 'Exhibits')} value={overview?.total_exhibits ?? overview?.total_exhibits ?? 0} />
+        <Card title={tr('Hiện vật', 'Exhibits')} value={overview?.total_exhibits ?? 0} />
         <Card title={tr('Sự kiện', 'Events')} value={overview?.total_events ?? 0} />
       </div>
 
