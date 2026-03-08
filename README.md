@@ -95,7 +95,7 @@ MuseAI is designed for mixed visitor groups in real museums:
   - Artifact Registry API
   - Cloud Build API
 
-## Spin-up Instructions (Local)
+## Quick Start (Local, 10-15 minutes)
 
 ### 1) Clone
 ```bash
@@ -103,27 +103,30 @@ git clone https://github.com/huypq3/museai.git
 cd museai
 ```
 
-### 2) Backend
+### 2) Backend setup
 ```bash
 cd backend
 python3 -m venv .venv
 source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
 pip install -r requirements.txt
 cp .env.example .env
-# Fill required vars in .env:
-# - JWT_SECRET
-# - GEMINI_API_KEY
-# - GOOGLE_CLOUD_PROJECT
-# - GOOGLE_APPLICATION_CREDENTIALS
+# Fill required vars in .env (minimum):
+# JWT_SECRET=<32+ chars>
+# GEMINI_API_KEY=<your key>
+# GOOGLE_CLOUD_PROJECT=<your-gcp-project>
+# GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
+# ALLOWED_ORIGINS=http://localhost:3000
 uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-### 3) Frontend
+### 3) Frontend setup
 ```bash
 cd ../frontend
 npm install
 cp .env.example .env.local
-# Set NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
+# Set:
+# NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
+# NEXT_PUBLIC_APP_URL=http://localhost:3000
 npm run dev
 ```
 
@@ -136,10 +139,14 @@ python scripts/seed_knowledge_base.py
 python scripts/seed_scenes.py
 ```
 
-### 5) Smoke Test
+### 5) Smoke test
 - Frontend: http://localhost:3000
 - Health: http://localhost:8080/health
 - Welcome demo: http://localhost:3000/welcome?museum=demo_museum
+
+Default seeded admin:
+- Super admin username: `admin`
+- Password: use your seeded/reset password from backend scripts or Firestore admin user record.
 
 ## Environment Variables
 
@@ -169,10 +176,15 @@ Critical vars:
 
 Note: frontend auto-derives WebSocket URL from `NEXT_PUBLIC_BACKEND_URL` automatically.
 
-### GitHub Actions Variables/Secrets
-If you deploy from GitHub Actions, configure:
+## Deployment Modes (Important)
+
+### Mode A: GitHub Actions deploy (recommended in this repo)
+This repository is configured to build/deploy from GitHub Actions workflows.  
+For this mode, build-time frontend env comes from **GitHub Actions Variables**.
 
 Variables:
+- `NEXT_PUBLIC_BACKEND_URL` (must be `https://...run.app` in production)
+- `NEXT_PUBLIC_APP_URL` (for example `https://www.guideqr.ai`)
 - `GCP_PROJECT_ID`
 - `CLOUD_RUN_REGION`
 - `CLOUD_RUN_SERVICE`
@@ -180,8 +192,6 @@ Variables:
 - `ALLOWED_ORIGINS`
 - `PUBLIC_APP_URL`
 - `GCS_BUCKET_NAME`
-- `NEXT_PUBLIC_BACKEND_URL`
-- `NEXT_PUBLIC_APP_URL`
 - Optional tuning vars: `GEMINI_LIVE_MODEL`, `GEMINI_EMBEDDING_MODEL`, `VOICE_*`, `WS_*`, `LOGIN_*`, `MAX_REQUEST_BYTES`, `DAILY_GEMINI_BUDGET_USD`, `MONTHLY_GEMINI_BUDGET_USD`
 
 Secrets:
@@ -190,6 +200,18 @@ Secrets:
 - `GEMINI_API_KEY`
 - `REDIS_URL` (optional; empty allowed)
 - `VERCEL_TOKEN` (frontend deploy)
+
+### Mode B: Direct Vercel deploy (without GitHub Actions)
+If you deploy directly in Vercel UI/CLI, frontend env comes from **Vercel Environment Variables**.
+
+At minimum set:
+- `NEXT_PUBLIC_BACKEND_URL=https://<your-cloud-run-service>.run.app`
+- `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>`
+
+## GitHub Actions Variables/Secrets Reference
+If you deploy from GitHub Actions, configure:
+
+- Same as listed above in Mode A.
 
 ## Deploy to Google Cloud
 
@@ -216,6 +238,19 @@ gcloud run deploy "${SERVICE}" \
 Deploy `frontend/` to Vercel (recommended) or Cloud Run.
 Set:
 - `NEXT_PUBLIC_BACKEND_URL=https://<your-cloud-run-service>.run.app`
+
+## Troubleshooting
+
+### Mixed Content error (`http://...run.app` from `https://...`)
+- Ensure frontend production env is HTTPS:
+  - `NEXT_PUBLIC_BACKEND_URL=https://<service>.run.app`
+- If using GitHub Actions deploy, fix this variable in **GitHub Actions Variables** (not only Vercel UI).
+- Redeploy frontend and hard refresh browser cache.
+
+### CORS error on login/admin APIs
+- Backend `ALLOWED_ORIGINS` must include both domains:
+  - `https://guideqr.ai,https://www.guideqr.ai`
+- Redeploy backend after env changes.
 
 ## Proof of Google Cloud Deployment
 Provide at least one for judges:
