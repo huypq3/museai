@@ -1,38 +1,15 @@
-const RAW_BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8080";
+import { CONFIG } from "./config";
 
-function normalizeBackendUrl(rawUrl: string): string {
-  const normalizedInput = (rawUrl || "").trim();
-  if (!normalizedInput) return "http://localhost:8080";
-
-  // Handle protocol-relative URLs.
-  if (normalizedInput.startsWith("//")) {
-    if (typeof window !== "undefined" && window.location.protocol === "https:") {
-      return `https:${normalizedInput}`;
-    }
-    return `http:${normalizedInput}`;
-  }
-
-  let out = normalizedInput;
-
-  // On HTTPS pages, force HTTPS backend to avoid mixed-content blocking.
-  if (typeof window !== "undefined" && window.location.protocol === "https:" && /^http:\/\//i.test(out)) {
-    out = out.replace(/^http:\/\//i, "https://");
-  }
-
-  return out;
-}
+export const BACKEND_URL = CONFIG.BACKEND_URL;
+export const WS_BACKEND_URL = CONFIG.WS_URL;
 
 export function getBackendUrl(): string {
-  return normalizeBackendUrl(RAW_BACKEND_URL);
+  return CONFIG.BACKEND_URL;
 }
 
 export function getWsBackendUrl(): string {
-  return getBackendUrl().replace(/^http:\/\//, "ws://").replace(/^https:\/\//, "wss://");
+  return CONFIG.WS_URL;
 }
-
-// Backward-compatible exports.
-export const BACKEND_URL = getBackendUrl();
-export const WS_BACKEND_URL = getWsBackendUrl();
 
 export const SUPPORTED_LANGUAGES = [
   { code: "vi", name: "Tiếng Việt", flag: "🇻🇳" },
@@ -42,6 +19,6 @@ export const SUPPORTED_LANGUAGES = [
   { code: "ja", name: "日本語", flag: "🇯🇵" },
   { code: "ko", name: "한국어", flag: "🇰🇷" },
   { code: "zh", name: "中文", flag: "🇨🇳" },
-];
+] as const;
 
 export type LanguageCode = "vi" | "en" | "es" | "fr" | "ja" | "ko" | "zh";

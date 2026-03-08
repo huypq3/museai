@@ -64,7 +64,7 @@ jobs:
 
       - name: Verify built frontend has no insecure backend URL
         run: |
-          ! rg -n "http://museai-backend|admin/exhibits/\\?museum_id" .next .vercel/output -S
+          ! rg -n "http://museai-backend|http://localhost:8080|admin/exhibits/\\?museum_id" .next .vercel/output -S
 
       - name: Deploy to Vercel (production)
         run: npx vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
