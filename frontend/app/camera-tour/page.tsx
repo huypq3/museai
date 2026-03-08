@@ -30,6 +30,7 @@ export default function CameraTourPage() {
   const [museumId, setMuseumId] = useState("demo_museum");
   const [museumName, setMuseumName] = useState<string>(t(language, "camera.demo_museum"));
   const [museumValidated, setMuseumValidated] = useState(false);
+  const [museumData, setMuseumData] = useState<{ id: string; name?: string; name_en?: string } | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -54,11 +55,7 @@ export default function CameraTourPage() {
 
         setMuseumId(museum.id);
         localStorage.setItem("museum_id", museum.id);
-        setMuseumName(
-          language === "en"
-            ? museum.name_en || museum.name || museum.id
-            : museum.name || museum.name_en || museum.id
-        );
+        setMuseumData({ id: museum.id, name: museum.name, name_en: museum.name_en });
         setMuseumValidated(true);
         trackEvent("camera_opened", museum.id);
       } catch {
@@ -71,7 +68,16 @@ export default function CameraTourPage() {
     return () => {
       mounted = false;
     };
-  }, [language, router]);
+  }, [router]);
+
+  useEffect(() => {
+    if (!museumData) return;
+    setMuseumName(
+      language === "en"
+        ? museumData.name_en || museumData.name || museumData.id
+        : museumData.name || museumData.name_en || museumData.id
+    );
+  }, [language, museumData]);
 
   const LANGUAGE_FLAGS: Record<LanguageCode, string> = {
     vi: "🇻🇳",
@@ -229,11 +235,7 @@ export default function CameraTourPage() {
         const museum = await validateMuseum(data.museum_id);
         localStorage.setItem("museum_id", museum.id);
         setMuseumId(museum.id);
-        setMuseumName(
-          language === "en"
-            ? museum.name_en || museum.name || museum.id
-            : museum.name || museum.name_en || museum.id
-        );
+        setMuseumData({ id: museum.id, name: museum.name, name_en: museum.name_en });
         alert(t(language, "camera.qr_museum_only"));
       } catch {
         alert(t(language, "error.museum_not_found"));

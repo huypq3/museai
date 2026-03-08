@@ -7,11 +7,13 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { t } from "@/lib/i18n";
 import VoiceChat from "@/components/VoiceChat";
 import { trackEvent } from "@/lib/analytics";
+import { LanguageCode } from "@/lib/constants";
 
 export default function ExhibitPage() {
   const params = useParams();
   const router = useRouter();
-  const exhibitId = params.id as string;
+  const exhibitIdRaw = params?.id;
+  const exhibitId = Array.isArray(exhibitIdRaw) ? exhibitIdRaw[0] : exhibitIdRaw;
 
   const { language, changeLanguage } = useLanguage();
   const [exhibit, setExhibit] = useState<any>(null);
@@ -19,14 +21,20 @@ export default function ExhibitPage() {
   const [error, setError] = useState<string | null>(null);
   const [museumId, setMuseumId] = useState<string>("demo_museum");
   const [museumName, setMuseumName] = useState<string>("demo_museum");
+  const [museumData, setMuseumData] = useState<{ id: string; name?: string; name_en?: string } | null>(null);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadExhibit() {
+      if (!exhibitId) {
+        setError("Exhibit not found");
+        setLoading(false);
+        return;
+      }
       try {
-        const params = new URLSearchParams(window.location.search);
-        const museumFromQuery = params.get("museum");
+        const queryParams = new URLSearchParams(window.location.search);
+        const museumFromQuery = queryParams.get("museum");
         const museumFromLocal = localStorage.getItem("museum_id");
         const resolvedMuseumId = museumFromQuery || museumFromLocal;
 
@@ -43,7 +51,7 @@ export default function ExhibitPage() {
 
         localStorage.setItem("museum_id", museum.id);
         setMuseumId(museum.id);
-        setMuseumName(language === "en" ? (museum.name_en || museum.name || museum.id) : (museum.name || museum.name_en || museum.id));
+        setMuseumData({ id: museum.id, name: museum.name, name_en: museum.name_en });
         setExhibit(data.data);
         trackEvent("qr_scan", museum.id, exhibitId);
         trackEvent("conversation_start", museum.id, exhibitId);
@@ -64,7 +72,16 @@ export default function ExhibitPage() {
     return () => {
       mounted = false;
     };
-  }, [exhibitId, language, router]);
+  }, [exhibitId, router]);
+
+  useEffect(() => {
+    if (!museumData) return;
+    setMuseumName(
+      language === "en"
+        ? museumData.name_en || museumData.name || museumData.id
+        : museumData.name || museumData.name_en || museumData.id
+    );
+  }, [language, museumData]);
 
   if (loading) {
     return (
@@ -96,11 +113,17 @@ export default function ExhibitPage() {
   return (
     <div style={{ height: "100dvh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
       <VoiceChat
-        exhibitId={exhibitId}
+        exhibitId={exhibitId || ""}
         language={language}
         onLanguageChange={(next) => {
-          trackEvent("language_changed", museumId, exhibitId, { from: language, to: next });
-          changeLanguage(next);
+          const nextLang = next as LanguageCode;
+          if (!nextLang || nextLang === language) return;
+          try {
+            trackEvent("language_changed", museumId, exhibitId || undefined, { from: language, to: nextLang });
+          } catch {
+            // best effort analytics
+          }
+          changeLanguage(nextLang);
         }}
         museumName={museumName || exhibit.museum_id || museumId}
       />
