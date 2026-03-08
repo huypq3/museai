@@ -29,7 +29,6 @@ export const trackEvent = async (
         event_type,
         museum_id,
         exhibit_id,
-        exhibit_id: exhibit_id,
         language: getCurrentLanguage(),
         timestamp: new Date().toISOString(),
         session_id: getSessionId(),
