@@ -150,6 +150,7 @@ async def _museum_stats(museum_id: str) -> dict[str, int]:
     return {"exhibit_count": exhibit_count}
 
 
+@router.get("")
 @router.get("/")
 async def list_museums(
     include_inactive: bool = Query(default=False),
@@ -170,6 +171,7 @@ async def list_museums(
     return museums
 
 
+@router.post("")
 @router.post("/")
 async def create_museum(body: MuseumCreate, admin=Depends(get_current_admin)):
     require_super_admin(admin)

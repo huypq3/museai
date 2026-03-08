@@ -114,6 +114,7 @@ async def _get_exhibit_or_404(exhibit_id: str) -> tuple[dict[str, Any], firestor
     return data, db
 
 
+@router.get("")
 @router.get("/")
 async def list_exhibits(
     museum_id: str | None = Query(default=None),
@@ -139,6 +140,7 @@ async def list_exhibits(
     return exhibits
 
 
+@router.post("")
 @router.post("/")
 async def create_exhibit(body: ExhibitCreate, admin=Depends(get_current_admin)):
     ensure_museum_scope(admin, body.museum_id)

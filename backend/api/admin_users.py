@@ -92,6 +92,7 @@ class UpdateUserRequest(BaseModel):
             raise ValueError("Invalid email format")
 
 
+@router.get("")
 @router.get("/")
 async def list_users(_: dict = Depends(get_super_admin)):
     db = get_db()
@@ -105,6 +106,7 @@ async def list_users(_: dict = Depends(get_super_admin)):
     return {"users": users}
 
 
+@router.post("")
 @router.post("/")
 async def create_museum_admin(body: CreateUserRequest, admin: dict = Depends(get_super_admin)):
     if not _valid_username(body.username):

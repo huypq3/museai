@@ -95,6 +95,31 @@ MuseAI is designed for mixed visitor groups in real museums:
   - Artifact Registry API
   - Cloud Build API
 
+## Cloud Dependency Notice
+This project is not a fully offline demo.
+Running it locally still requires real cloud services for the core experience:
+
+- Firestore for museums, exhibits, analytics, and admin data
+- Google Cloud Storage for uploaded assets
+- Gemini API / Gemini Live for voice interaction
+- Google Cloud credentials for backend access to GCP services
+
+To run the project end-to-end after cloning, a user must provide:
+- a valid Google Cloud project
+- a service account JSON with the required permissions
+- a valid `GEMINI_API_KEY`
+- a valid `JWT_SECRET`
+
+Without GCP configuration, the frontend can start, but most museum, admin, analytics, upload, and live voice features will not work correctly.
+
+## Before You Start
+Prepare these four items before running the repo:
+
+1. A Google Cloud project with billing enabled
+2. A service account JSON file with access to Firestore and Cloud Storage
+3. A valid `GEMINI_API_KEY`
+4. A strong `JWT_SECRET`
+
 ## Quick Start (Local, 10-15 minutes)
 
 ### 1) Clone
@@ -179,8 +204,9 @@ Note: frontend auto-derives WebSocket URL from `NEXT_PUBLIC_BACKEND_URL` automat
 ## Deployment Modes (Important)
 
 ### Mode A: GitHub Actions deploy (recommended in this repo)
-This repository is configured to build/deploy from GitHub Actions workflows.  
-For this mode, build-time frontend env comes from **GitHub Actions Variables**.
+This repository is configured to build/deploy from GitHub Actions workflows.
+For this mode, frontend build-time env comes only from **GitHub Actions Variables** and **GitHub Actions Secrets**.
+The workflow does not rely on Vercel project env during CI build.
 
 Variables:
 - `NEXT_PUBLIC_BACKEND_URL` (must be `https://...run.app` in production)
@@ -200,8 +226,11 @@ Secrets:
 - `GEMINI_API_KEY`
 - `REDIS_URL` (optional; empty allowed)
 - `VERCEL_TOKEN` (frontend deploy)
+- `VERCEL_ORG_ID`
+- `VERCEL_PROJECT_ID`
 
 ### Mode B: Direct Vercel deploy (without GitHub Actions)
+Use this mode only if you are not using the GitHub Actions workflow.
 If you deploy directly in Vercel UI/CLI, frontend env comes from **Vercel Environment Variables**.
 
 At minimum set:
@@ -209,9 +238,7 @@ At minimum set:
 - `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>`
 
 ## GitHub Actions Variables/Secrets Reference
-If you deploy from GitHub Actions, configure:
-
-- Same as listed above in Mode A.
+If you deploy from GitHub Actions, configure the same variables/secrets listed in Mode A.
 
 ## Deploy to Google Cloud
 
@@ -235,22 +262,16 @@ gcloud run deploy "${SERVICE}" \
 ```
 
 ### Frontend
-Deploy `frontend/` to Vercel (recommended) or Cloud Run.
-Set:
-- `NEXT_PUBLIC_BACKEND_URL=https://<your-cloud-run-service>.run.app`
+Deploy `frontend/` to Vercel (recommended).
 
-## Troubleshooting
+If using GitHub Actions:
+- Set `NEXT_PUBLIC_BACKEND_URL=https://<your-cloud-run-service>.run.app` in GitHub Actions Variables
+- Set `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>` in GitHub Actions Variables
+- Set `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID` in GitHub
 
-### Mixed Content error (`http://...run.app` from `https://...`)
-- Ensure frontend production env is HTTPS:
-  - `NEXT_PUBLIC_BACKEND_URL=https://<service>.run.app`
-- If using GitHub Actions deploy, fix this variable in **GitHub Actions Variables** (not only Vercel UI).
-- Redeploy frontend and hard refresh browser cache.
-
-### CORS error on login/admin APIs
-- Backend `ALLOWED_ORIGINS` must include both domains:
-  - `https://guideqr.ai,https://www.guideqr.ai`
-- Redeploy backend after env changes.
+If using direct Vercel deploy instead:
+- Set `NEXT_PUBLIC_BACKEND_URL=https://<your-cloud-run-service>.run.app` in Vercel Environment Variables
+- Set `NEXT_PUBLIC_APP_URL=https://<your-frontend-domain>` in Vercel Environment Variables
 
 ## Proof of Google Cloud Deployment
 Provide at least one for judges:
