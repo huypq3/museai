@@ -46,7 +46,8 @@ export function useAudioPlayer() {
     try {
       const float32 = decodePcmChunk(base64);
       const audioBuffer = ctx.createBuffer(1, float32.length, STREAM_SAMPLE_RATE);
-      audioBuffer.copyToChannel(float32, 0);
+      const channelData = audioBuffer.getChannelData(0);
+      channelData.set(float32);
 
       const source = ctx.createBufferSource();
       source.buffer = audioBuffer;
