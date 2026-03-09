@@ -96,7 +96,7 @@ export default function ExhibitPage() {
       <div className="min-h-screen flex flex-col items-center justify-center p-8">
         <div className="text-red-400 text-xl mb-4 font-display">{error || "Error"}</div>
         <button
-          onClick={() => router.push(`/welcome?museum=${encodeURIComponent(museumId)}`)}
+          onClick={() => router.push(`/camera-tour?museum=${encodeURIComponent(museumId)}`)}
           className="px-6 py-3 rounded-[14px]"
           style={{
             background: "var(--gold)",

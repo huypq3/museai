@@ -174,15 +174,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [, setCurrentUserText] = useState("");
   const [exhibitName, setExhibitName] = useState("");
   const [showLangMenu, setShowLangMenu] = useState(false);
-  const [conversationLanguage, setConversationLanguage] = useState<LanguageCode>(language);
   const [showIntroButton, setShowIntroButton] = useState<boolean>(true);
   const [autoStopHint, setAutoStopHint] = useState("");
-  const [languageSwitchHint, setLanguageSwitchHint] = useState("");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const autoStopHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const languageHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const onLanguageChangeRef = useRef(onLanguageChange);
-  const showLanguageHintRef = useRef<(lang: LanguageCode) => void>(() => {});
 
   // Refs that should not trigger re-renders
   const lastProcessedIndexRef = useRef<number>(-1);
@@ -206,21 +201,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setShowIntroButton(false);
   }, []);
 
-  const showLanguageHint = useCallback((lang: LanguageCode) => {
-    const label = lang.toUpperCase();
-    setLanguageSwitchHint(language === "vi" ? `🌐 Đã chuyển sang ${label}` : `🌐 Switched to ${label}`);
-    if (languageHintTimerRef.current) clearTimeout(languageHintTimerRef.current);
-    languageHintTimerRef.current = setTimeout(() => setLanguageSwitchHint(""), 2200);
-  }, [language]);
-
-  useEffect(() => {
-    showLanguageHintRef.current = showLanguageHint;
-  }, [showLanguageHint]);
-
-  useEffect(() => {
-    onLanguageChangeRef.current = onLanguageChange;
-  }, [onLanguageChange]);
-
   // ─── Load exhibit name ────────────────────────────────────────────────
   useEffect(() => {
     fetch(`${BACKEND_URL}/exhibits/${exhibitId}`)
@@ -231,12 +211,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   useEffect(() => {
     setShowIntroButton(true);
-    setConversationLanguage(language);
   }, [exhibitId]);
-
-  useEffect(() => {
-    setConversationLanguage(language);
-  }, [language]);
 
   // ─── Connect → ready ──────────────────────────────────────────────────
   useEffect(() => {
@@ -302,16 +277,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         if (skipOldTurnRef.current) {
           console.log("🔄 ready received after reconnect → clear skipOldTurn");
           skipOldTurnRef.current = false;
-        }
-        continue;
-      }
-
-      if (msg.type === "language_switched") {
-        const nextLang = typeof msg.to === "string" ? (msg.to as LanguageCode) : null;
-        if (nextLang && LANGUAGES[nextLang]) {
-          setConversationLanguage(nextLang);
-          showLanguageHintRef.current(nextLang);
-          if (onLanguageChangeRef.current) onLanguageChangeRef.current(nextLang);
         }
         continue;
       }
@@ -433,7 +398,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     return () => {
       if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
-      if (languageHintTimerRef.current) clearTimeout(languageHintTimerRef.current);
       stopRecording();
       stopAudio();
     };
@@ -534,12 +498,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const handleBack = useCallback(() => {
     stopRecording();
     stopAudio();
-    const museumId = typeof window !== "undefined" ? localStorage.getItem("museum_id") : null;
-    if (museumId) {
-      router.push(`/welcome?museum=${encodeURIComponent(museumId)}`);
-      return;
-    }
-    router.push("/");
+    router.push("/camera-tour");
   }, [stopRecording, stopAudio, router]);
 
   const handleInterrupt = useCallback(() => {
@@ -681,10 +640,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               flexShrink: 0,
             }}
           >
-            {LANGUAGES[conversationLanguage]?.flag || "🌐"}
+            {LANGUAGES[language]?.flag || "🌐"}
           </button>
 
-          {showLangMenu && (
+          {showLangMenu && onLanguageChange && (
             <div
               style={{
                 position: "absolute",
@@ -701,11 +660,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 <button
                   key={lang}
                   onClick={() => {
-                    const nextLang = lang as LanguageCode;
-                    if (onLanguageChange) onLanguageChange(nextLang);
-                    sendMessage({ type: "set_language", language: nextLang });
-                    setConversationLanguage(nextLang);
-                    showLanguageHintRef.current(nextLang);
+                    onLanguageChange(lang as LanguageCode);
                     setShowLangMenu(false);
                   }}
                   style={{
@@ -714,7 +669,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    background: conversationLanguage === lang ? "rgba(201,168,76,0.2)" : "transparent",
+                    background: language === lang ? "rgba(201,168,76,0.2)" : "transparent",
                     border: "none",
                     color: "#F5F0E8",
                     fontSize: 14,
@@ -957,20 +912,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             ? "✋ Tap to stop"
             : `🎙 ${t(language, "voice.ask")}`}
         </button>
-        {languageSwitchHint && (
-          <p
-            style={{
-              margin: 0,
-              marginTop: -2,
-              color: "rgba(201,168,76,0.95)",
-              fontFamily: "DM Sans, sans-serif",
-              fontSize: 12,
-              letterSpacing: "0.01em",
-            }}
-          >
-            {languageSwitchHint}
-          </p>
-        )}
         {autoStopHint && (
           <p
             style={{

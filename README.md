@@ -28,7 +28,7 @@ MuseAI transforms any museum exhibit into a real-time, interruptible AI conversa
 1. **Scan** — Visitor scans a QR code at the museum entrance or beside any exhibit
 2. **Identify** — Camera vision recognizes the exhibit instantly
 3. **Converse** — Gemini Live API answers questions in real-time, grounded in verified museum knowledge (no hallucinations)
-4. **Switch** — Visitor changes language mid-conversation across 7 most common languages
+4. **Switch** — Visitor changes language mid-conversation across 10 supported languages (VI, EN, DE, RU, AR, ES, FR, JA, KO, ZH)
 5. **Read + See** — Live transcript displays alongside voice output, and contextual illustration images from museum data are shown to make explanations more vivid (useful in noisy spaces and for accessibility)
 
 Zero installation. Zero language barrier. 
@@ -45,7 +45,7 @@ QR Scan -> Next.js PWA -> /welcome -> /camera-tour or /exhibit/[id]
 -> Real-time voice response + transcript
 
 Flow B (Camera Recognition)
-Camera Tour -> Vision Matching (Vertex/Gemini Vision)
+Camera Tour -> /vision/recognize/{museum_id} Vision Matching (Gemini Vision)
 -> Exhibit Match -> Context Load
 -> Gemini Live conversation
 ```
@@ -65,8 +65,10 @@ Camera Tour -> Vision Matching (Vertex/Gemini Vision)
 ## Features
 - Real-time voice conversation (interruptible)
 - Camera-based exhibit recognition
+- Camera tour flow (`/camera-tour`) for guided object scan before conversation
 - RAG-grounded answers from museum data
-- Multilingual guide for tourists: VI, EN, ES, FR, JA, KO, ZH
+- Multilingual guide for tourists: VI, EN, DE, RU, AR, ES, FR, JA, KO, ZH
+- Landing page demo localized in 10 languages with browser language detection and `?lang=` override
 - Voice + transcript mode for noisy environments
 - Transcript-linked visual illustrations from museum-curated image data
 - Accessibility support for deaf/hard-of-hearing visitors

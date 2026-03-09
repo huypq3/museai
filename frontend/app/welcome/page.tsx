@@ -108,7 +108,7 @@ export default function WelcomePage() {
       return;
     }
     localStorage.setItem("museum_id", museum.id);
-    router.push("/");
+    router.push(`/camera-tour?museum=${encodeURIComponent(museum.id)}`);
   };
 
   const handleLanguageChange = (newLang: LanguageCode) => {
