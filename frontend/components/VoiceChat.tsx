@@ -16,7 +16,7 @@ type Props = {
   museumName?: string;
 };
 
-type State = "connecting" | "ready" | "recording" | "processing" | "ai_speaking";
+type State = "connecting" | "ready" | "paused" | "recording" | "processing" | "ai_speaking";
 
 type Message = {
   role: "user" | "assistant";
@@ -185,6 +185,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const waitingForAudioRef = useRef(false);
   const pendingAITextRef = useRef("");
   const pendingUserTextRef = useRef("");
+  const previousStateRef = useRef<"ready" | "paused">("ready");
   const hasAiOutputThisTurnRef = useRef(false);
   // When user interrupts, skip old-turn messages until next turn_complete.
   const skipOldTurnRef = useRef(false);
@@ -469,6 +470,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
 
     // Set recording state before awaiting so stateRef can block incoming audio.
+    previousStateRef.current = stateRef.current === "paused" ? "paused" : "ready";
     setState("recording");
     const started = sendMessage({ type: "start_of_turn" });
     if (!started) {
@@ -508,6 +510,33 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     sendMessage({ type: "interrupt" });
     setState("ready");
   }, [stopPlayback, sendMessage]);
+
+  const handleStop = useCallback(() => {
+    stopPlayback();
+    waitingForAudioRef.current = false;
+    setState("paused");
+  }, [stopPlayback]);
+
+  const handleResume = useCallback(() => {
+    sendMessage({ type: "resume_greeting" });
+    setState("ai_speaking");
+  }, [sendMessage]);
+
+  const handleAsk = useCallback(async () => {
+    stopPlayback();
+    waitingForAudioRef.current = false;
+    await handleStartRecording();
+  }, [stopPlayback, handleStartRecording]);
+
+  const handleCancelRecording = useCallback(() => {
+    stopRecording();
+    setCurrentAIText("");
+    setCurrentUserText("");
+    pendingAITextRef.current = "";
+    pendingUserTextRef.current = "";
+    hasAiOutputThisTurnRef.current = false;
+    setState(previousStateRef.current);
+  }, [stopRecording]);
 
   const handleIntro = useCallback(async () => {
     markIntroUsed();
@@ -878,40 +907,146 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           </button>
         </div>
 
-        <button
-          onClick={isSpeakingState ? handleInterrupt : handleMicPress}
-          disabled={state === "connecting"}
-          style={{
-            width: "100%",
-            maxWidth: "320px",
-            padding: "14px",
-            borderRadius: "12px",
-            border: "none",
-            cursor: state === "connecting" ? "not-allowed" : "pointer",
-            background: isSpeakingState
-              ? "linear-gradient(135deg, #4b1111, #7f1d1d)"
-              : `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
-            color: isSpeakingState ? "#fca5a5" : "#0A0A0A",
-            fontFamily: "DM Sans, sans-serif",
-            fontSize: "15px",
-            fontWeight: "600",
-            transition: "all 0.2s ease",
-            opacity: state === "connecting" ? 0.7 : 1,
-            boxShadow: isSpeakingState
-              ? "0 12px 26px rgba(127,29,29,0.35)"
-              : "0 12px 30px rgba(246,196,83,0.38)",
-          }}
-        >
-          {showIntroButton && state === "ready"
-            ? `🎵 ${t(language, "voice.listen_guide")}`
-            : isRecordingState
-            ? `🔴 ${t(language, "voice.recording")}`
-            : isProcessingState
-            ? `⏳ ${t(language, "voice.processing")}`
-            : isSpeakingState
-            ? "✋ Tap to stop"
-            : `🎙 ${t(language, "voice.ask")}`}
-        </button>
+          {isSpeakingState ? (
+            <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 12 }}>
+              <button
+                onClick={handleStop}
+                style={{
+                  flex: 1,
+                  height: "56px",
+                  background: "transparent",
+                  border: "1.5px solid #666",
+                  borderRadius: "12px",
+                  color: "#F5F0E8",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                ⏹ {t(language, "voice.stop")}
+              </button>
+              <button
+                onClick={handleAsk}
+                style={{
+                  flex: 1,
+                  height: "56px",
+                  background: "#C9A84C",
+                  border: "none",
+                  borderRadius: "12px",
+                  color: "#0A0A0A",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                🎙 {t(language, "voice.ask")}
+              </button>
+            </div>
+          ) : state === "paused" ? (
+            <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 12 }}>
+              <button
+                onClick={handleResume}
+                style={{
+                  flex: 1,
+                  height: "56px",
+                  background: "transparent",
+                  border: "1.5px solid #666",
+                  borderRadius: "12px",
+                  color: "#F5F0E8",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                ▶ {t(language, "voice.resume")}
+              </button>
+              <button
+                onClick={handleStartRecording}
+                style={{
+                  flex: 1,
+                  height: "56px",
+                  background: "#C9A84C",
+                  border: "none",
+                  borderRadius: "12px",
+                  color: "#0A0A0A",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                🎙 {t(language, "voice.ask")}
+              </button>
+            </div>
+          ) : isRecordingState ? (
+            <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 10 }}>
+              <button
+                onClick={handleMicPress}
+                style={{
+                  flex: 1,
+                  padding: "14px",
+                  borderRadius: "12px",
+                  border: "none",
+                  cursor: "pointer",
+                  background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
+                  color: "#0A0A0A",
+                  fontFamily: "DM Sans, sans-serif",
+                  fontSize: "15px",
+                  fontWeight: "600",
+                  transition: "all 0.2s ease",
+                  boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
+                }}
+              >
+                🔴 {t(language, "voice.recording")}
+              </button>
+              <button
+                onClick={handleCancelRecording}
+                style={{
+                  padding: "14px 12px",
+                  borderRadius: "12px",
+                  border: "1px solid rgba(245,240,232,0.28)",
+                  background: "transparent",
+                  color: "#F5F0E8",
+                  fontFamily: "DM Sans, sans-serif",
+                  fontSize: "14px",
+                  fontWeight: 600,
+                  cursor: "pointer",
+                }}
+              >
+                ✕ {t(language, "voice.cancel")}
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleMicPress}
+              disabled={state === "connecting" || isProcessingState}
+              style={{
+                width: "100%",
+                maxWidth: "320px",
+                padding: "14px",
+                borderRadius: "12px",
+                border: "none",
+                cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
+                background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
+                color: "#0A0A0A",
+                fontFamily: "DM Sans, sans-serif",
+                fontSize: "15px",
+                fontWeight: "600",
+                transition: "all 0.2s ease",
+                opacity: state === "connecting" || isProcessingState ? 0.7 : 1,
+                boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
+              }}
+            >
+              {showIntroButton && state === "ready"
+                ? `🎵 ${t(language, "voice.listen_guide")}`
+                : isProcessingState
+                ? `⏳ ${t(language, "voice.processing")}`
+                : `🎙 ${t(language, "voice.ask")}`}
+            </button>
+          )}
         {autoStopHint && (
           <p
             style={{
