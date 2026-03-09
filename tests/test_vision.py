@@ -12,7 +12,6 @@ from PIL import Image
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
 
 from vision.recognizer import recognize_exhibit
-from vision.camera_tour import analyze_frame, generate_commentary
 
 
 def create_blank_image() -> bytes:
@@ -77,60 +76,6 @@ async def test_recognize_with_description():
     print(f"   Reasoning: {result['reasoning'][:100]}...")
 
 
-@pytest.mark.asyncio
-async def test_camera_tour_same_exhibit():
-    """Test camera tour với cùng exhibit → same=True."""
-    print("\n🧪 Test 3: Camera tour - same exhibit detection")
-    
-    image_bytes = create_blank_image()
-    
-    # Lần 1: phát hiện exhibit
-    result1 = await analyze_frame(
-        image_bytes=image_bytes,
-        museum_id="demo_museum",
-        last_exhibit_id=None
-    )
-    
-    exhibit_id = result1["exhibit_id"]
-    print(f"   First frame: {exhibit_id}")
-    
-    # Lần 2: cùng exhibit
-    result2 = await analyze_frame(
-        image_bytes=image_bytes,
-        museum_id="demo_museum",
-        last_exhibit_id=exhibit_id
-    )
-    
-    print(f"   Second frame: same={result2['same']}")
-    
-    # Verify same=True
-    assert result2["same"] == True
-    assert result2["exhibit_id"] == exhibit_id
-    
-    print(f"   ✅ Same exhibit detected correctly")
-
-
-@pytest.mark.asyncio
-async def test_generate_commentary():
-    """Test generate commentary for exhibit."""
-    print("\n🧪 Test 4: Generate commentary")
-    
-    # Test với pottery_ly exhibit
-    commentary = await generate_commentary(
-        exhibit_id="pottery_ly",
-        language="vi"
-    )
-    
-    print(f"   Commentary: {commentary}")
-    
-    assert commentary is not None
-    assert len(commentary) > 0
-    assert isinstance(commentary, str)
-    
-    print(f"   ✅ Commentary generated successfully")
-    print(f"   Length: {len(commentary)} characters")
-
-
 def main():
     """Run all tests."""
     print("\n" + "="*60)
@@ -142,8 +87,6 @@ def main():
     # Run tests
     asyncio.run(test_recognize_unknown())
     asyncio.run(test_recognize_with_description())
-    asyncio.run(test_camera_tour_same_exhibit())
-    asyncio.run(test_generate_commentary())
     
     print("\n" + "="*60)
     print("✅ ALL VISION TESTS PASSED!")

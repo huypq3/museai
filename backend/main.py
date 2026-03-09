@@ -17,7 +17,6 @@ if not BACKEND_ENV_PATH.exists() and ROOT_ENV_PATH.exists():
 
 import os
 import logging
-import base64
 import asyncio
 import signal
 from typing import Optional
@@ -32,7 +31,6 @@ from live.ws_handler import handle_persona_websocket
 from cms.upload import upload_pdf, get_document_status
 from rag.query_engine import answer_with_rag
 from vision.recognizer import recognize_exhibit as recognize_exhibit
-from vision.camera_tour import analyze_frame, generate_commentary
 from middleware.audit_log import audit_log
 from security.rate_limit import (
     RateLimitMiddleware,
@@ -276,8 +274,7 @@ async def root():
             "upload_pdf": "/admin/upload-pdf/{exhibit_id}",
             "document_status": "/admin/document-status/{exhibit_id}",
             "rag_qa": "/rag/qa/{exhibit_id}",
-            "vision_recognize": "/vision/recognize/{museum_id}",
-            "camera_tour": "/vision/camera-tour/{museum_id}"
+            "vision_recognize": "/vision/recognize/{museum_id}"
         }
     }
 
@@ -423,7 +420,7 @@ async def get_exhibit(exhibit_id: str):
 async def websocket_persona(
     websocket: WebSocket,
     exhibit_id: str,
-    language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
+    language: str = Query(default="vi", description="Language code (vi, en, de, ru, ar, es, fr, zh, ja, ko)"),
     token: str | None = Query(default=None),
 ):
     """
@@ -523,7 +520,7 @@ async def websocket_persona(
 async def websocket_live_alias(
     websocket: WebSocket,
     exhibit_id: str,
-    language: str = Query(default="vi", description="Language code (vi, en, fr, zh, ja, ko)"),
+    language: str = Query(default="vi", description="Language code (vi, en, de, ru, ar, es, fr, zh, ja, ko)"),
     token: str | None = Query(default=None),
 ):
     await websocket_persona(websocket=websocket, exhibit_id=exhibit_id, language=language, token=token)
@@ -533,13 +530,6 @@ async def websocket_live_alias(
 class QARequest(BaseModel):
     """Request body for Q&A endpoint."""
     question: str
-    language: str = "vi"
-
-
-class CameraTourRequest(BaseModel):
-    """Request body for Camera Tour endpoint."""
-    image_base64: str
-    last_exhibit_id: Optional[str] = None
     language: str = "vi"
 
 
@@ -694,59 +684,6 @@ async def vision_recognize_endpoint(
         raise
     except Exception as e:
         logger.error(f"Error in vision recognize endpoint: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
-
-
-@app.post("/vision/camera-tour/{museum_id}")
-async def camera_tour_endpoint(
-    museum_id: str,
-    request: CameraTourRequest
-):
-    """
-    Camera tour mode: detect new exhibits and generate commentary.
-    
-    Args:
-        museum_id: Museum ID
-        request: CameraTourRequest with image_base64, last_exhibit_id, and language
-    
-    Returns:
-        Dict: {same, exhibit_id, confidence, commentary}
-    """
-    try:
-        logger.info(f"Camera tour request for museum: {museum_id}")
-        
-        # Decode base64 image
-        try:
-            image_bytes = base64.b64decode(request.image_base64)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid base64 image: {str(e)}")
-        
-        # Analyze frame
-        result = await analyze_frame(
-            image_bytes=image_bytes,
-            museum_id=museum_id,
-            last_exhibit_id=request.last_exhibit_id
-        )
-        
-        # If a new exhibit is detected, generate commentary
-        commentary = None
-        if not result["same"] and result["exhibit_id"] != "unknown":
-            commentary = await generate_commentary(
-                exhibit_id=result["exhibit_id"],
-                language=request.language
-            )
-        
-        return {
-            "same": result["same"],
-            "exhibit_id": result["exhibit_id"],
-            "confidence": result["confidence"],
-            "commentary": commentary
-        }
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error in camera tour endpoint: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
 
 

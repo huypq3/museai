@@ -10,6 +10,9 @@ import { MuseumValidation, validateMuseum } from "@/lib/api";
 const FLAG_MAP: Record<LanguageCode, string> = {
   vi: "🇻🇳",
   en: "🇺🇸",
+  de: "🇩🇪",
+  ru: "🇷🇺",
+  ar: "🇸🇦",
   es: "🇪🇸",
   fr: "🇫🇷",
   ja: "🇯🇵",
@@ -20,6 +23,9 @@ const FLAG_MAP: Record<LanguageCode, string> = {
 const LANG_NAME: Record<LanguageCode, string> = {
   vi: "VI",
   en: "EN",
+  de: "DE",
+  ru: "RU",
+  ar: "AR",
   es: "ES",
   fr: "FR",
   ja: "JP",
@@ -102,7 +108,7 @@ export default function WelcomePage() {
       return;
     }
     localStorage.setItem("museum_id", museum.id);
-    router.push(`/camera-tour?museum=${encodeURIComponent(museum.id)}`);
+    router.push("/");
   };
 
   const handleLanguageChange = (newLang: LanguageCode) => {
