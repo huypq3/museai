@@ -14,6 +14,9 @@ export function getWsBackendUrl(): string {
 export const SUPPORTED_LANGUAGES = [
   { code: "vi", name: "Tiếng Việt", flag: "🇻🇳" },
   { code: "en", name: "English", flag: "🇺🇸" },
+  { code: "de", name: "Deutsch", flag: "🇩🇪" },
+  { code: "ru", name: "Русский", flag: "🇷🇺" },
+  { code: "ar", name: "العربية", flag: "🇸🇦" },
   { code: "es", name: "Español", flag: "🇪🇸" },
   { code: "fr", name: "Français", flag: "🇫🇷" },
   { code: "ja", name: "日本語", flag: "🇯🇵" },
@@ -21,4 +24,4 @@ export const SUPPORTED_LANGUAGES = [
   { code: "zh", name: "中文", flag: "🇨🇳" },
 ] as const;
 
-export type LanguageCode = "vi" | "en" | "es" | "fr" | "ja" | "ko" | "zh";
+export type LanguageCode = "vi" | "en" | "de" | "ru" | "ar" | "es" | "fr" | "ja" | "ko" | "zh";

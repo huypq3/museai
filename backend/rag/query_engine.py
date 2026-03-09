@@ -103,7 +103,7 @@ async def answer_with_rag(
     Args:
         question: User question
         exhibit_id: Exhibit ID
-        language: Output language (vi, en, fr, zh, ja, ko)
+        language: Output language (vi, en, de, ru, ar, es, fr, zh, ja, ko)
         project_id: GCP project ID
     
     Returns:
@@ -141,6 +141,10 @@ async def answer_with_rag(
         language_map = {
             "vi": "Respond in Vietnamese.",
             "en": "Respond in English.",
+            "de": "Respond in German.",
+            "ru": "Respond in Russian.",
+            "ar": "Respond in Arabic.",
+            "es": "Respond in Spanish.",
             "fr": "Respond in French.",
             "zh": "Respond in Chinese.",
             "ja": "Respond in Japanese.",

@@ -9,7 +9,7 @@ import { useAdminI18n } from '@/lib/i18n/admin'
 
 type Tab = 'basic' | 'ops' | 'ai' | 'account'
 
-const LANGS = ['vi', 'en', 'fr', 'ja', 'ko', 'zh']
+const LANGS = ['vi', 'en', 'de', 'ru', 'ar', 'es', 'fr', 'ja', 'ko', 'zh']
 
 export default function NewMuseumPage() {
   const router = useRouter()

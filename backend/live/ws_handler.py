@@ -11,6 +11,7 @@ import json
 import logging
 import time
 import re
+import unicodedata
 from typing import Optional
 from importlib.metadata import version as pkg_version, PackageNotFoundError
 
@@ -31,6 +32,63 @@ MAX_MESSAGE_SIZE = int(os.getenv("WS_MAX_MESSAGE_SIZE", str(256 * 1024)))
 MAX_AUDIO_SECONDS_PER_MINUTE = int(os.getenv("WS_MAX_AUDIO_SECONDS_PER_MINUTE", "45"))
 PCM_16KHZ_MONO_BYTES_PER_SEC = 16000 * 2
 MAX_CONTINUOUS_AUDIO_SEC = int(os.getenv("WS_MAX_CONTINUOUS_AUDIO_SEC", "300"))
+
+LANGUAGE_NAMES = {
+    "vi": "Vietnamese",
+    "en": "English",
+    "de": "German",
+    "ru": "Russian",
+    "ar": "Arabic",
+    "es": "Spanish",
+    "fr": "French",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "zh": "Chinese",
+}
+
+LANGUAGE_COMMANDS = {
+    "en": [
+        "switch to english",
+        "in english",
+        "speak english",
+        "answer in english",
+        "continue in english",
+        "explain in english",
+        "tell me in english",
+    ],
+    "de": ["auf deutsch", "in german", "switch to german", "speak german"],
+    "ru": ["по-русски", "in russian", "switch to russian", "speak russian"],
+    "ar": ["بالعربية", "in arabic", "switch to arabic", "speak arabic"],
+    "vi": [
+        "tieng viet",
+        "bang tieng viet",
+        "tra loi tieng viet",
+        "noi tieng viet",
+        "chuyen sang tieng viet",
+    ],
+    "fr": ["en francais", "in french", "switch to french", "parle francais"],
+    "ja": ["日本語で", "japanese please", "switch to japanese", "in japanese"],
+    "ko": ["한국어로", "in korean", "switch to korean"],
+    "zh": ["用中文", "in chinese", "switch to chinese", "说中文"],
+    "es": ["en espanol", "in spanish", "switch to spanish", "habla espanol"],
+}
+
+
+def _normalize_for_command(text: str) -> str:
+    lowered = (text or "").lower().strip()
+    normalized = unicodedata.normalize("NFKD", lowered)
+    no_accents = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+    return re.sub(r"\s+", " ", no_accents)
+
+
+def detect_language_command(transcript: str) -> str | None:
+    text = _normalize_for_command(transcript)
+    if len(text) < 5:
+        return None
+    for lang_code, patterns in LANGUAGE_COMMANDS.items():
+        if any(pattern in text for pattern in patterns):
+            return lang_code
+    return None
 
 
 class GeminiLiveHandler:
@@ -67,6 +125,7 @@ class GeminiLiveHandler:
         self._audio_window_started_at = time.monotonic()
         self._audio_window_bytes = 0
         self._turn_started_at: float | None = None
+        self._pending_language_reminder = False
         try:
             self._genai_version = pkg_version("google-genai")
         except PackageNotFoundError:
@@ -377,6 +436,7 @@ class GeminiLiveHandler:
                         "📥 end_of_turn from client → signaling Gemini (last_audio=%dms)",
                         since_last_audio,
                     )
+                    await self._inject_language_reminder(session)
                     await session.send_realtime_input(activity_end=types.ActivityEnd())
                     logger.info("✅ end_of_turn sent (activity_end)")
 
@@ -415,6 +475,19 @@ class GeminiLiveHandler:
                     if text:
                         await session.send(input=text, end_of_turn=True)
                         logger.info("📤 Sent to Gemini: %s", text[:80])
+
+                elif msg_type == "set_language":
+                    requested = str(message.get("language", "")).strip().lower()
+                    switched = await self._switch_language(websocket, requested, source="manual_ui")
+                    if switched:
+                        await websocket.send_json(
+                            {
+                                "type": "language_switch_ack",
+                                "language": self.language,
+                            }
+                        )
+                        if self.session_state:
+                            await session_manager.incr_out(self.session_state.session_id)
 
                 elif msg_type == "pong":
                     if self.session_state:
@@ -519,6 +592,13 @@ class GeminiLiveHandler:
                                 await websocket.send_json({"type": "user_transcript", "text": txt})
                                 if self.session_state:
                                     await session_manager.incr_out(self.session_state.session_id)
+                                requested_lang = detect_language_command(str(txt or ""))
+                                if requested_lang:
+                                    await self._switch_language(
+                                        websocket,
+                                        requested_lang,
+                                        source="voice_command",
+                                    )
 
                             # Turn complete
                             if getattr(sc, "turn_complete", False):
@@ -749,15 +829,56 @@ class GeminiLiveHandler:
         return last_word.lower() in dangling_words
 
     def _language_label(self, language: str) -> str:
-        return {
-            "vi": "Vietnamese",
-            "en": "English",
-            "es": "Spanish",
-            "fr": "French",
-            "ja": "Japanese",
-            "ko": "Korean",
-            "zh": "Chinese",
-        }.get(language, "English")
+        return LANGUAGE_NAMES.get(language, "English")
+
+    async def _switch_language(
+        self,
+        websocket: WebSocket,
+        to_language: str,
+        source: str,
+    ) -> bool:
+        target = str(to_language or "").strip().lower()
+        if target not in LANGUAGE_NAMES:
+            return False
+        if target == self.language:
+            return False
+
+        previous = self.language
+        self.language = target
+        self._pending_language_reminder = True
+        logger.info("🌐 Language switched: %s -> %s (source=%s)", previous, target, source)
+
+        try:
+            await websocket.send_json(
+                {
+                    "type": "language_switched",
+                    "from": previous,
+                    "to": target,
+                    "source": source,
+                }
+            )
+            if self.session_state:
+                await session_manager.incr_out(self.session_state.session_id)
+        except Exception:
+            logger.warning("Failed to emit language_switched event")
+        return True
+
+    async def _inject_language_reminder(self, session) -> None:
+        if not self._pending_language_reminder:
+            return
+        lang_name = self._language_label(self.language)
+        reminder = (
+            "[System instruction update: "
+            f"From now on, respond in {lang_name} for all following answers "
+            "until the visitor asks to switch again. Keep the same persona and factual constraints.]"
+        )
+        try:
+            await session.send(input=reminder, end_of_turn=False)
+            logger.info("✅ Injected language reminder: %s", lang_name)
+        except Exception as e:
+            logger.warning("Failed to inject language reminder: %s", e)
+        finally:
+            self._pending_language_reminder = False
 
     def _reason_to_ws_code(self, reason: str) -> int:
         return {
@@ -799,7 +920,10 @@ class GeminiLiveHandler:
         prompt_with_fallback = f"""You are a professional museum guide currently presenting: {exhibit_name}.
 
 LANGUAGE
-- Always respond in {language_label}.
+- Current default response language is {language_label}.
+- If the visitor asks to switch language (for example: "switch to English", "trả lời bằng tiếng Việt"),
+  comply immediately and continue in the new language.
+- Keep using the new language for subsequent answers until the visitor asks to switch again.
 
 STYLE POLICY (tone and delivery)
 - Museum persona baseline: {museum_persona}
@@ -836,7 +960,10 @@ PRIORITY ORDER
         prompt_without_fallback = f"""You are a professional museum guide currently presenting: {exhibit_name}.
 
 LANGUAGE
-- Always respond in {language_label}.
+- Current default response language is {language_label}.
+- If the visitor asks to switch language (for example: "switch to English", "trả lời bằng tiếng Việt"),
+  comply immediately and continue in the new language.
+- Keep using the new language for subsequent answers until the visitor asks to switch again.
 
 STYLE POLICY (tone and delivery)
 - Museum persona baseline: {museum_persona}

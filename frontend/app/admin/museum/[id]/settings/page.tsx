@@ -35,7 +35,7 @@ type MuseumForm = {
   welcome_message: Record<string, string>
 }
 
-const LANGS = ['vi', 'en', 'es', 'fr', 'ja', 'ko', 'zh']
+const LANGS = ['vi', 'en', 'de', 'ru', 'ar', 'es', 'fr', 'ja', 'ko', 'zh']
 
 const EMPTY_FORM: MuseumForm = {
   name: '',

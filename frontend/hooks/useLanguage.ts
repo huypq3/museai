@@ -1,14 +1,18 @@
 import { useState, useEffect } from "react";
 import { LanguageCode } from "@/lib/constants";
 
-const SUPPORTED: LanguageCode[] = ["vi", "en", "es", "fr", "ja", "ko", "zh"];
+const SUPPORTED: LanguageCode[] = ["vi", "en", "de", "ru", "ar", "es", "fr", "ja", "ko", "zh"];
 
 function detectBrowserLanguage(): LanguageCode {
   if (typeof window === "undefined") return "en";
   const navLang = (navigator.language || "").toLowerCase();
   if (navLang.startsWith("vi")) return "vi";
   if (navLang.startsWith("en")) return "en";
+  if (navLang.startsWith("de")) return "de";
+  if (navLang.startsWith("ru")) return "ru";
+  if (navLang.startsWith("ar")) return "ar";
   if (navLang.startsWith("fr")) return "fr";
+  if (navLang.startsWith("es")) return "es";
   if (navLang.startsWith("ja")) return "ja";
   if (navLang.startsWith("ko")) return "ko";
   if (navLang.startsWith("zh")) return "zh";

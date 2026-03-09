@@ -29,6 +29,9 @@ export const metadata: Metadata = {
     languages: {
       en: "/?lang=en",
       vi: "/?lang=vi",
+      de: "/?lang=de",
+      ru: "/?lang=ru",
+      ar: "/?lang=ar",
       es: "/?lang=es",
       fr: "/?lang=fr",
       ja: "/?lang=ja",
@@ -78,7 +81,7 @@ export default function HomePage() {
         "@type": "ContactPoint",
         contactType: "customer support",
         email: "hello@guideqr.ai",
-        availableLanguage: ["vi", "en", "es", "fr", "ja", "ko", "zh"],
+        availableLanguage: ["vi", "en", "de", "ru", "ar", "es", "fr", "ja", "ko", "zh"],
       },
     ],
   };
@@ -88,7 +91,7 @@ export default function HomePage() {
     "@type": "WebSite",
     name: "MuseAI by GuideQR.ai",
     url: SITE_URL,
-    inLanguage: ["vi", "en", "es", "fr", "ja", "ko", "zh"],
+    inLanguage: ["vi", "en", "de", "ru", "ar", "es", "fr", "ja", "ko", "zh"],
   };
 
   const softwareJsonLd = {
@@ -135,7 +138,7 @@ export default function HomePage() {
         name: "Which languages are supported?",
         acceptedAnswer: {
           "@type": "Answer",
-          text: "MuseAI supports Vietnamese, English, Spanish, French, Japanese, Korean, and Chinese.",
+          text: "MuseAI supports Vietnamese, English, German, Russian, Arabic, Spanish, French, Japanese, Korean, and Chinese.",
         },
       },
       {

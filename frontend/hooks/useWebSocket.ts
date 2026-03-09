@@ -110,6 +110,7 @@ export function useWebSocket(exhibitId: string | null, language: string) {
   const isConnectingRef = useRef(false);
   const shouldReconnectRef = useRef(true);
   const shouldAutoReconnectRef = useRef(true);
+  const connectLanguageRef = useRef(language);
   const MAX_RETRY = MAX_RETRY_DEFAULT;
 
   const connect = useCallback(async () => {
@@ -142,7 +143,8 @@ export function useWebSocket(exhibitId: string | null, language: string) {
       return;
     }
 
-    const wsUrl = `${WS_BACKEND_URL}/ws/persona/${exhibitId}?language=${language}&token=${encodeURIComponent(wsToken)}`;
+    const wsLang = connectLanguageRef.current || language;
+    const wsUrl = `${WS_BACKEND_URL}/ws/persona/${exhibitId}?language=${wsLang}&token=${encodeURIComponent(wsToken)}`;
     console.log("🔌 Connecting to:", wsUrl);
 
     const ws = new WebSocket(wsUrl);
@@ -232,6 +234,10 @@ export function useWebSocket(exhibitId: string | null, language: string) {
   }, [exhibitId, language]);
 
   useEffect(() => {
+    connectLanguageRef.current = language;
+  }, [language]);
+
+  useEffect(() => {
     if (!exhibitId) return;
 
     const timer = setTimeout(() => {
@@ -251,7 +257,7 @@ export function useWebSocket(exhibitId: string | null, language: string) {
       wsRef.current = null;
       isConnectingRef.current = false;
     };
-  }, [exhibitId, language, connect]);
+  }, [exhibitId, connect]);
 
   const sendMessage = useCallback((message: WSMessage): boolean => {
     const ws = wsRef.current;

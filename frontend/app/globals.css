@@ -13,7 +13,12 @@
 body {
   background: var(--museum-dark);
   color: var(--museum-white);
-  font-family: 'DM Sans', sans-serif;
+  font-family:
+    'DM Sans',
+    'Noto Sans JP',
+    'Noto Sans KR',
+    'Noto Sans SC',
+    sans-serif;
 }
 
 @layer utilities {
