@@ -24,6 +24,7 @@ export default function CameraTourPage() {
   const { language, changeLanguage } = useLanguage();
   
   const [state, setState] = useState<State>("scanning");
+  const [isLockOnAnimating, setIsLockOnAnimating] = useState(false);
   const [detected, setDetected] = useState<DetectedExhibit | null>(null);
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showLangMenu, setShowLangMenu] = useState(false);
@@ -34,6 +35,7 @@ export default function CameraTourPage() {
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const previousStateRef = useRef<State>("scanning");
   
   useEffect(() => {
     let mounted = true;
@@ -78,6 +80,23 @@ export default function CameraTourPage() {
         : museumData.name || museumData.name_en || museumData.id
     );
   }, [language, museumData]);
+
+  useEffect(() => {
+    const previousState = previousStateRef.current;
+
+    if (previousState === "processing" && state === "detected") {
+      setIsLockOnAnimating(true);
+      const timer = window.setTimeout(() => setIsLockOnAnimating(false), 350);
+      previousStateRef.current = state;
+      return () => window.clearTimeout(timer);
+    }
+
+    if (state !== "detected" && isLockOnAnimating) {
+      setIsLockOnAnimating(false);
+    }
+
+    previousStateRef.current = state;
+  }, [state, isLockOnAnimating]);
 
   const LANGUAGE_FLAGS: Record<LanguageCode, string> = {
     vi: "🇻🇳",
@@ -359,8 +378,8 @@ export default function CameraTourPage() {
             left: 0,
             width: 32,
             height: 32,
-            borderTop: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
-            borderLeft: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
+            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
           }} />
           
           {/* Corner TR */}
@@ -370,8 +389,8 @@ export default function CameraTourPage() {
             right: 0,
             width: 32,
             height: 32,
-            borderTop: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
-            borderRight: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
+            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
           }} />
           
           {/* Corner BL */}
@@ -381,8 +400,8 @@ export default function CameraTourPage() {
             left: 0,
             width: 32,
             height: 32,
-            borderBottom: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
-            borderLeft: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
+            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
           }} />
           
           {/* Corner BR */}
@@ -392,8 +411,8 @@ export default function CameraTourPage() {
             right: 0,
             width: 32,
             height: 32,
-            borderBottom: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
-            borderRight: `2px solid ${state === 'detected' ? '#4ade80' : '#C9A84C'}`,
+            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
           }} />
 
           {/* Scan line — only when scanning */}
@@ -405,6 +424,29 @@ export default function CameraTourPage() {
               height: 1,
               background: 'linear-gradient(to right, transparent, #C9A84C, transparent)',
               animation: 'scanLine 2.5s ease-in-out infinite',
+            }} />
+          )}
+
+          {isLockOnAnimating && (
+            <div style={{
+              position: 'absolute',
+              top: '50%',
+              left: '50%',
+              width: 236,
+              height: 236,
+              border: '3px solid #FFD700',
+              opacity: 1,
+              borderRadius: '50%',
+              background: 'transparent',
+              outline: '1px solid rgba(201, 168, 76, 0.4)',
+              outlineOffset: 4,
+              boxSizing: 'border-box',
+              maxWidth: '100%',
+              maxHeight: '100%',
+              boxShadow: '0 0 0 1px rgba(201, 168, 76, 0.3), 0 0 12px rgba(201, 168, 76, 0.6), 0 0 24px rgba(201, 168, 76, 0.3)',
+              animation: 'lockOn 0.35s ease-out forwards',
+              pointerEvents: 'none',
+              zIndex: 3,
             }} />
           )}
 
@@ -436,7 +478,7 @@ export default function CameraTourPage() {
                   {t(language, 'camera.processing')}
                 </span>
               </>
-            ) : state === 'detected' ? (
+            ) : state === 'detected' && !isLockOnAnimating ? (
               <div style={{ color: '#4ade80', fontSize: 36 }}>✓</div>
             ) : state === 'error' ? (
               <div style={{
@@ -516,7 +558,7 @@ export default function CameraTourPage() {
       </div>
 
       {/* Detected Card */}
-      {state === "detected" && detected && (
+      {state === "detected" && !isLockOnAnimating && detected && (
         <div className="fixed inset-0 z-30 flex items-end animate-slideUp"
              style={{ background: 'rgba(0,0,0,0.7)' }}
              onClick={() => setState("scanning")}>
@@ -578,6 +620,10 @@ export default function CameraTourPage() {
         @keyframes scanLine {
           0%, 100% { top: 0; opacity: 0; }
           50% { top: 50%; opacity: 1; }
+        }
+        @keyframes lockOn {
+          0% { transform: translate(-50%, -50%) scale(1.2); opacity: 0.9; }
+          100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
         }
         @keyframes slideUp {
           from { transform: translateY(100%); }
