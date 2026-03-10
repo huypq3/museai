@@ -10,6 +10,14 @@
   --museum-dark: #0A0A0A;
 }
 
+html {
+  touch-action: manipulation;
+}
+
+* {
+  touch-action: manipulation;
+}
+
 body {
   background: var(--museum-dark);
   color: var(--museum-white);
