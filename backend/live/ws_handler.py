@@ -488,6 +488,16 @@ class GeminiLiveHandler:
                         await session.send(input=text, end_of_turn=True)
                         logger.info("📤 Sent to Gemini: %s", text[:80])
 
+                elif msg_type == "text_input":
+                    if not self._accepting_input:
+                        continue
+                    text = str(message.get("text", "")).strip()
+                    if not text:
+                        continue
+                    await self._inject_language_reminder(session)
+                    await session.send(input=text, end_of_turn=True)
+                    logger.info("📤 Sent text_input to Gemini: %s", text[:80])
+
                 elif msg_type == "set_language":
                     requested = str(message.get("language", "")).strip().lower()
                     switched = await self._switch_language(websocket, requested, source="manual_ui")

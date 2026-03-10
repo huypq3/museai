@@ -8,7 +8,6 @@ import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { t } from "@/lib/i18n";
 import { BACKEND_URL, LanguageCode } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
-import MuseAILogo from "@/components/MuseAILogo";
 
 type Props = {
   exhibitId: string;
@@ -188,10 +187,14 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const pendingUserTextRef = useRef("");
   const previousStateRef = useRef<"ready" | "paused">("ready");
   const hasAiOutputThisTurnRef = useRef(false);
+  const textInputRef = useRef<HTMLInputElement>(null);
   // When user interrupts, skip old-turn messages until next turn_complete.
   const skipOldTurnRef = useRef(false);
+  const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
+  const [textInput, setTextInput] = useState("");
+  const [showTextInput, setShowTextInput] = useState(false);
 
-  const { isConnected, messages: wsMessages, notice: wsNotice, sendMessage, reconnectNow } = useWebSocket(exhibitId, language);
+  const { isConnected, messages: wsMessages, notice: wsNotice, sendMessage, sendTextMessage, reconnectNow } = useWebSocket(exhibitId, language);
   const { start, stop: stopRecording } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
   const sentences = useMemo(
@@ -405,6 +408,27 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const root = document.documentElement;
+    const updateKeyboardHeight = () => {
+      const viewport = window.visualViewport;
+      if (!viewport) return;
+      const keyboardHeight = Math.max(0, window.innerHeight - viewport.height);
+      root.style.setProperty("--keyboard-height", showTextInput ? `${keyboardHeight}px` : "0px");
+    };
+
+    updateKeyboardHeight();
+    window.visualViewport?.addEventListener("resize", updateKeyboardHeight);
+    window.visualViewport?.addEventListener("scroll", updateKeyboardHeight);
+    return () => {
+      window.visualViewport?.removeEventListener("resize", updateKeyboardHeight);
+      window.visualViewport?.removeEventListener("scroll", updateKeyboardHeight);
+      root.style.setProperty("--keyboard-height", "0px");
+    };
+  }, [showTextInput]);
+
   const stopAndSendTurn = useCallback((reason: "manual" | "silence" | "no_speech") => {
     if (stateRef.current !== "recording") return;
     console.log(`⏹️ Stop recording → end_of_turn (${reason})`);
@@ -529,11 +553,33 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setState("ai_speaking");
   }, [sendMessage]);
 
-  const handleAsk = useCallback(async () => {
-    stopPlayback();
-    waitingForAudioRef.current = false;
-    await handleStartRecording();
-  }, [stopPlayback, handleStartRecording]);
+  const toggleInputMode = useCallback(() => {
+    if (stateRef.current === "ai_speaking") return;
+    setInputMode((prev) => (prev === "voice" ? "text" : "voice"));
+  }, []);
+
+  const handleSendText = useCallback(() => {
+    const text = textInput.trim();
+    if (!text) return;
+
+    setShowTextInput(false);
+    setTextInput("");
+    markIntroUsed();
+    hasAiOutputThisTurnRef.current = false;
+    pendingAITextRef.current = "";
+    pendingUserTextRef.current = text;
+    setCurrentUserText(text);
+    setState("processing");
+
+    const sent = sendTextMessage(text);
+    if (!sent) {
+      setState(previousStateRef.current);
+      return;
+    }
+    const museumId =
+      typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
+    trackEvent("question_asked", museumId, exhibitId, { reason: "text" });
+  }, [textInput, markIntroUsed, sendTextMessage, exhibitId]);
 
   const handleCancelRecording = useCallback(() => {
     stopRecording();
@@ -570,6 +616,25 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
     await handleStartRecording();
   }, [showIntroButton, state, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
+
+  const handleAskPress = useCallback(async () => {
+    if (inputMode === "voice") {
+      await handleMicPress();
+      return;
+    }
+    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") {
+      return;
+    }
+    if (stateRef.current === "ai_speaking") {
+      stopPlayback();
+      waitingForAudioRef.current = false;
+      skipOldTurnRef.current = true;
+      sendMessage({ type: "interrupt" });
+      setState("paused");
+    }
+    setShowTextInput(true);
+    window.setTimeout(() => textInputRef.current?.focus(), 100);
+  }, [inputMode, handleMicPress, stopPlayback, sendMessage]);
 
   const isRecordingState = state === "recording";
   const isSpeakingState = state === "ai_speaking";
@@ -626,10 +691,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         >
           ←
         </button>
-
-        <div style={{ flexShrink: 0 }}>
-          <MuseAILogo variant="horizontal-compact" theme="dark" iconSize={28} />
-        </div>
 
         <div style={{ textAlign: "center", flex: 1, minWidth: 0 }}>
           {museumName && (
@@ -938,7 +999,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 ⏹ {t(language, "voice.stop")}
               </button>
               <button
-                onClick={handleAsk}
+                onClick={handleAskPress}
                 style={{
                   flex: 1,
                   height: "56px",
@@ -952,7 +1013,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   cursor: "pointer",
                 }}
               >
-                🎙 {t(language, "voice.ask")}
+                {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
               </button>
             </div>
           ) : state === "paused" ? (
@@ -974,23 +1035,46 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               >
                 ▶ {t(language, "voice.resume")}
               </button>
-              <button
-                onClick={handleStartRecording}
-                style={{
-                  flex: 1,
-                  height: "56px",
-                  background: "#C9A84C",
-                  border: "none",
-                  borderRadius: "12px",
-                  color: "#0A0A0A",
-                  fontSize: "16px",
-                  fontWeight: 600,
-                  fontFamily: "DM Sans, sans-serif",
-                  cursor: "pointer",
-                }}
-              >
-                🎙 {t(language, "voice.ask")}
-              </button>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
+                <button
+                  onClick={handleAskPress}
+                  style={{
+                    flex: 1,
+                    height: "56px",
+                    background: "#C9A84C",
+                    border: "none",
+                    borderRadius: "12px",
+                    color: "#0A0A0A",
+                    fontSize: "16px",
+                    fontWeight: 600,
+                    fontFamily: "DM Sans, sans-serif",
+                    cursor: "pointer",
+                  }}
+                >
+                  {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
+                </button>
+                <button
+                  onClick={toggleInputMode}
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    background: "transparent",
+                    border: `1px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
+                    color: inputMode === "text" ? "#C9A84C" : "#666",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    fontSize: "14px",
+                    transition: "all 0.2s",
+                  }}
+                  aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+                >
+                  {inputMode === "voice" ? "⌨️" : "🎤"}
+                </button>
+              </div>
             </div>
           ) : isRecordingState ? (
             <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 10 }}>
@@ -1031,33 +1115,145 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               </button>
             </div>
           ) : (
-            <button
-              onClick={handleMicPress}
-              disabled={state === "connecting" || isProcessingState}
+            <div style={{ width: "100%", maxWidth: "320px", display: "flex", alignItems: "center", gap: 8 }}>
+              <button
+                onClick={handleAskPress}
+                disabled={state === "connecting" || isProcessingState}
+                style={{
+                  width: "100%",
+                  flex: 1,
+                  padding: "14px",
+                  borderRadius: "12px",
+                  border: "none",
+                  cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
+                  background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
+                  color: "#0A0A0A",
+                  fontFamily: "DM Sans, sans-serif",
+                  fontSize: "15px",
+                  fontWeight: "600",
+                  transition: "all 0.2s ease",
+                  opacity: state === "connecting" || isProcessingState ? 0.7 : 1,
+                  boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
+                }}
+              >
+                {isProcessingState
+                  ? `⏳ ${t(language, "voice.processing")}`
+                  : inputMode === "text"
+                  ? `⌨️ ${t(language, "voice.ask")}`
+                  : showIntroButton && state === "ready"
+                  ? `🎵 ${t(language, "voice.listen_guide")}`
+                  : `🎙 ${t(language, "voice.ask")}`}
+              </button>
+              {state === "ready" && (
+                <button
+                  onClick={toggleInputMode}
+                  style={{
+                    width: "32px",
+                    height: "32px",
+                    borderRadius: "50%",
+                    background: "transparent",
+                    border: `1px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
+                    color: inputMode === "text" ? "#C9A84C" : "#666",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    cursor: "pointer",
+                    flexShrink: 0,
+                    fontSize: "14px",
+                    transition: "all 0.2s",
+                  }}
+                  aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+                >
+                  {inputMode === "voice" ? "⌨️" : "🎤"}
+                </button>
+              )}
+            </div>
+          )}
+        {showTextInput && (
+          <div
+            style={{
+              position: "fixed",
+              bottom: "var(--keyboard-height, 0px)",
+              left: 0,
+              right: 0,
+              background: "#111",
+              borderTop: "1px solid #333",
+              padding: "12px 16px",
+              paddingBottom: "max(12px, env(safe-area-inset-bottom))",
+              display: "flex",
+              alignItems: "center",
+              gap: "10px",
+              animation: "slideUp 0.2s ease-out",
+              zIndex: 100,
+              transition: "bottom 0.2s ease",
+            }}
+          >
+            <input
+              ref={textInputRef}
+              value={textInput}
+              onChange={(e) => setTextInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendText();
+                }
+              }}
+              placeholder={t(language, "voice.type_question")}
+              maxLength={500}
               style={{
-                width: "100%",
-                maxWidth: "320px",
-                padding: "14px",
-                borderRadius: "12px",
-                border: "none",
-                cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
-                background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
-                color: "#0A0A0A",
-                fontFamily: "DM Sans, sans-serif",
+                flex: 1,
+                height: "44px",
+                background: "#1a1a1a",
+                border: "1px solid #444",
+                borderRadius: "22px",
+                padding: "0 16px",
+                color: "#F5F0E8",
                 fontSize: "15px",
-                fontWeight: "600",
-                transition: "all 0.2s ease",
-                opacity: state === "connecting" || isProcessingState ? 0.7 : 1,
-                boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
+                fontFamily: "DM Sans, sans-serif",
+                outline: "none",
+              }}
+            />
+            <button
+              onClick={() => {
+                setShowTextInput(false);
+                setTextInput("");
+              }}
+              style={{
+                color: "#666",
+                fontSize: "13px",
+                background: "none",
+                border: "none",
+                cursor: "pointer",
+                fontFamily: "DM Sans, sans-serif",
+                padding: "4px 8px",
+                flexShrink: 0,
               }}
             >
-              {showIntroButton && state === "ready"
-                ? `🎵 ${t(language, "voice.listen_guide")}`
-                : isProcessingState
-                ? `⏳ ${t(language, "voice.processing")}`
-                : `🎙 ${t(language, "voice.ask")}`}
+              {t(language, "voice.cancel")}
             </button>
-          )}
+            <button
+              onClick={handleSendText}
+              disabled={!textInput.trim()}
+              style={{
+                width: "44px",
+                height: "44px",
+                borderRadius: "50%",
+                background: textInput.trim() ? "#C9A84C" : "#333",
+                border: "none",
+                color: textInput.trim() ? "#0A0A0A" : "#666",
+                fontSize: "18px",
+                cursor: textInput.trim() ? "pointer" : "default",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                transition: "all 0.2s",
+                flexShrink: 0,
+              }}
+            >
+              ➤
+            </button>
+          </div>
+        )}
         {autoStopHint && (
           <p
             style={{
@@ -1072,6 +1268,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             {autoStopHint}
           </p>
         )}
+        <style>{`
+          @keyframes slideUp {
+            from { transform: translateY(100%); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+          }
+        `}</style>
       </div>
     </div>
   );

@@ -274,6 +274,16 @@ export function useWebSocket(exhibitId: string | null, language: string) {
     }
   }, []);
 
+  const sendTextMessage = useCallback((text: string): boolean => {
+    const payload = (text || "").trim();
+    if (!payload) return false;
+    return sendMessage({
+      type: "text_input",
+      text: payload,
+      language: connectLanguageRef.current || language,
+    });
+  }, [sendMessage, language]);
+
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false;
     shouldAutoReconnectRef.current = false;
@@ -288,5 +298,5 @@ export function useWebSocket(exhibitId: string | null, language: string) {
     void connect();
   }, [connect]);
 
-  return { isConnected, messages, notice, sendMessage, disconnect, reconnectNow };
+  return { isConnected, messages, notice, sendMessage, sendTextMessage, disconnect, reconnectNow };
 }
