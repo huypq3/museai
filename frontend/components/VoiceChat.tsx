@@ -194,7 +194,18 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
 
-  const { isConnected, messages: wsMessages, notice: wsNotice, sendMessage, sendTextMessage, reconnectNow } = useWebSocket(exhibitId, language);
+  const { isConnected, messages: wsMessages, sendMessage, disconnect } = useWebSocket(exhibitId, language);
+  // useWebSocket không export sendTextMessage/notice/reconnectNow — shim lại
+  const sendTextMessage = useCallback((text: string): boolean => {
+    try {
+      sendMessage({ type: "text_input", text });
+      return true;
+    } catch {
+      return false;
+    }
+  }, [sendMessage]);
+  const reconnectNow = disconnect;
+  const wsNotice: { reason: string; messageVi: string; messageEn: string; reconnectAllowed: boolean } | null = null;
   const { start, stop: stopRecording } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
   const sentences = messages;
@@ -606,6 +617,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
     setShowTextInput(false);
     setTextInput("");
+    setInputMode("voice"); // reset về voice sau khi gửi để tránh overlap transcript
     markIntroUsed();
     hasAiOutputThisTurnRef.current = false;
     pendingAITextRef.current = "";
@@ -1110,64 +1122,85 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
           {isSpeakingState ? (
             <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 12 }}>
+              {/* Stop — flex:1, text căn giữa */}
               <button
                 onClick={handleStop}
                 style={{
                   flex: 1,
-                  height: "56px",
+                  height: "48px",
+                  minWidth: 0,
                   background: "transparent",
                   border: "1.5px solid #666",
                   borderRadius: "12px",
                   color: "#F5F0E8",
-                  fontSize: "16px",
+                  fontSize: "15px",
                   fontWeight: 600,
                   fontFamily: "DM Sans, sans-serif",
                   cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  padding: "0 12px",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
                 }}
               >
                 ⏹ {t(language, "voice.stop")}
               </button>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                <button
-                  onClick={handleAskPress}
+              {/* Tap to ask — flex:1 bằng Stop, icon ⌨️ nhỏ nằm trong nút */}
+              <button
+                onClick={handleAskPress}
+                style={{
+                  flex: 1,
+                  height: "48px",
+                  minWidth: 0,
+                  position: "relative",
+                  background: "#C9A84C",
+                  border: "none",
+                  borderRadius: "12px",
+                  color: "#0A0A0A",
+                  fontSize: "15px",
+                  fontWeight: 600,
+                  fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "6px",
+                  padding: "0 36px 0 12px",
+                  whiteSpace: "nowrap",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                }}
+              >
+                {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
+                {/* Toggle ⌨️/🎤 nằm trong nút, góc phải */}
+                <span
+                  onClick={(e) => { e.stopPropagation(); handleToggleInputMode(); }}
+                  role="button"
+                  aria-label="Switch input mode"
                   style={{
-                    flex: 1,
-                    height: "56px",
-                    background: "#C9A84C",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#0A0A0A",
-                    fontSize: "16px",
-                    fontWeight: 600,
-                    fontFamily: "DM Sans, sans-serif",
-                    cursor: "pointer",
-                  }}
-                >
-                  {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
-                </button>
-                {/* [FIX 6] Dùng handleToggleInputMode thay handler inline */}
-                <button
-                  onClick={handleToggleInputMode}
-                  style={{
-                    width: "32px",
-                    height: "32px",
+                    position: "absolute",
+                    right: "8px",
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    width: "24px",
+                    height: "24px",
                     borderRadius: "50%",
-                    background: "transparent",
-                    border: `1px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
-                    color: inputMode === "text" ? "#C9A84C" : "#666",
+                    background: "rgba(0,0,0,0.18)",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    cursor: "pointer",
+                    fontSize: "12px",
                     flexShrink: 0,
-                    fontSize: "14px",
-                    transition: "all 0.2s",
+                    cursor: "pointer",
                   }}
-                  aria-label="Switch to text input"
                 >
-                  ⌨️
-                </button>
-              </div>
+                  {inputMode === "voice" ? "⌨️" : "🎤"}
+                </span>
+              </button>
             </div>
           ) : state === "paused" ? (
             // [FIX 7] paused: chỉ Resume + Ask, ẩn toggle mode
@@ -1176,12 +1209,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 onClick={handleResume}
                 style={{
                   flex: 1,
-                  height: "56px",
+                  height: "48px",
                   background: "transparent",
                   border: "1.5px solid #666",
                   borderRadius: "12px",
                   color: "#F5F0E8",
-                  fontSize: "16px",
+                  fontSize: "15px",
                   fontWeight: 600,
                   fontFamily: "DM Sans, sans-serif",
                   cursor: "pointer",
@@ -1193,12 +1226,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 onClick={handleAskPress}
                 style={{
                   flex: 1,
-                  height: "56px",
+                  height: "48px",
                   background: "#C9A84C",
                   border: "none",
                   borderRadius: "12px",
                   color: "#0A0A0A",
-                  fontSize: "16px",
+                  fontSize: "15px",
                   fontWeight: 600,
                   fontFamily: "DM Sans, sans-serif",
                   cursor: "pointer",
@@ -1213,7 +1246,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 onClick={handleMicPress}
                 style={{
                   flex: 1,
-                  padding: "14px",
+                  height: "48px",
                   borderRadius: "12px",
                   border: "none",
                   cursor: "pointer",
@@ -1231,7 +1264,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               <button
                 onClick={handleCancelRecording}
                 style={{
-                  padding: "14px 12px",
+                  height: "48px",
+                  padding: "0 16px",
                   borderRadius: "12px",
                   border: "1px solid rgba(245,240,232,0.28)",
                   background: "transparent",
@@ -1251,9 +1285,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 onClick={handleAskPress}
                 disabled={state === "connecting" || isProcessingState}
                 style={{
-                  width: "100%",
                   flex: 1,
-                  padding: "14px",
+                  height: "48px",
                   borderRadius: "12px",
                   border: "none",
                   cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
@@ -1301,12 +1334,14 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               )}
             </div>
           )}
+        {/* Text input panel — fixed overlay, không đẩy layout */}
         {showTextInput && (
           <div
             style={{
-              position: "relative",
-              width: "100%",
-              maxWidth: "680px",
+              position: "fixed",
+              left: 0,
+              right: 0,
+              bottom: 0,
               background: "#111",
               borderTop: "1px solid #333",
               padding: "12px 16px",
@@ -1314,9 +1349,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               display: "flex",
               alignItems: "center",
               gap: "10px",
-              marginTop: "8px",
               animation: "slideUp 0.2s ease-out",
-              zIndex: 100,
+              zIndex: 200,
             }}
           >
             <input
@@ -1333,6 +1367,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               maxLength={500}
               style={{
                 flex: 1,
+                minWidth: 0,
                 height: "44px",
                 background: "#1a1a1a",
                 border: "1px solid #444",
@@ -1342,6 +1377,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 fontSize: "15px",
                 fontFamily: "DM Sans, sans-serif",
                 outline: "none",
+                boxSizing: "border-box",
               }}
             />
             <button
@@ -1358,6 +1394,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 fontFamily: "DM Sans, sans-serif",
                 padding: "4px 8px",
                 flexShrink: 0,
+                whiteSpace: "nowrap",
               }}
             >
               {t(language, "voice.cancel")}
