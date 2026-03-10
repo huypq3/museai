@@ -212,15 +212,26 @@ class GeminiLiveHandler:
                 },
             }
 
-            # SDK currently installed may not expose this field yet.
-            # Sending an unsupported field causes 1007 invalid frame payload at connect-time.
-            if "output_audio_transcription" in types.LiveConnectConfig.model_fields:
+            # SDK currently installed may not expose these fields yet.
+            # Sending unsupported fields causes 1007 invalid frame payload at connect-time.
+            live_fields = set(getattr(types.LiveConnectConfig, "model_fields", {}).keys())
+
+            if "output_audio_transcription" in live_fields:
                 config["output_audio_transcription"] = {}
                 logger.info("✅ output_audio_transcription enabled in Live config")
             else:
                 logger.warning(
                     "⚠️ SDK does not support output_audio_transcription field; "
                     "upgrade google-genai to enable official transcript stream"
+                )
+
+            if "input_audio_transcription" in live_fields:
+                config["input_audio_transcription"] = {}
+                logger.info("✅ input_audio_transcription enabled in Live config")
+            else:
+                logger.warning(
+                    "⚠️ SDK does not support input_audio_transcription field; "
+                    "user voice transcript may be unavailable in this version"
                 )
 
             logger.info("✅ Live config: model=%s, voice=%s", model_name, voice_name)

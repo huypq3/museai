@@ -300,8 +300,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         msg.type === "input_transcript" ||
         msg.type === "input_text" ||
         (msg.type === "transcript" && msg.role === "user");
-      if (isUserTranscriptMsg && (msg.data || msg.text)) {
-        const txt = msg.data || msg.text || "";
+      if (isUserTranscriptMsg) {
+        const txt = String(msg.data || msg.text || msg.transcript || msg.input_transcript || "").trim();
+        if (!txt) continue;
         pendingUserTextRef.current = mergeTranscript(pendingUserTextRef.current, txt);
         setCurrentUserText(pendingUserTextRef.current);
       }
@@ -322,7 +323,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       }
 
       // ── AI text/transcript ──
-      if ((msg.type === "transcript" || msg.type === "text") && (msg.data || msg.text)) {
+      if (
+        (msg.type === "transcript" || msg.type === "text") &&
+        msg.role !== "user" &&
+        (msg.data || msg.text)
+      ) {
         if (stateRef.current === "recording") continue;
         const txt = msg.data || msg.text || "";
         console.log("📝 Transcript received:", txt);
@@ -650,6 +655,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   return (
     <div
       style={{
+        position: "fixed",
+        inset: 0,
         display: "flex",
         flexDirection: "column",
         height: "100dvh",
@@ -862,7 +869,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 key={index}
                 style={{
                   display: "flex",
-                  justifyContent: msg.role === "assistant" ? "flex-end" : "flex-start",
+                  justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
                   width: "100%",
                   flexShrink: 0,
                   marginBottom: "8px",
@@ -873,16 +880,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   wordBreak: "break-word",
                   overflowWrap: "break-word",
                   padding: "8px 12px",
-                  borderRadius: msg.role === "assistant"
+                  borderRadius: msg.role === "user"
                     ? "12px 12px 2px 12px"
                     : "12px 12px 12px 2px",
-                  background: msg.role === "assistant"
+                  background: msg.role === "user"
                     ? "rgba(201, 168, 76, 0.15)"
                     : "rgba(255, 255, 255, 0.05)",
-                  border: msg.role === "assistant"
+                  border: msg.role === "user"
                     ? "1px solid rgba(201, 168, 76, 0.3)"
                     : "1px solid rgba(255,255,255,0.08)",
-                  color: msg.role === "assistant"
+                  color: msg.role === "user"
                     ? "#C9A84C"
                     : "#F5F0E8",
                   fontFamily: "Cormorant Garamond, serif",
@@ -890,7 +897,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   fontStyle: "italic",
                   lineHeight: 1.7,
                   margin: 0,
-                  textAlign: msg.role === "assistant"
+                  textAlign: msg.role === "user"
                     ? "right"
                     : "left",
                 }}>
@@ -900,35 +907,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             ))}
             {/* User đang nói/gõ — turn hiện tại */}
             {currentUserText && (
-              <div style={{
-                display: "flex",
-                justifyContent: "flex-start",
-                width: "100%",
-                flexShrink: 0,
-                marginBottom: "8px",
-              }}>
-                <p style={{
-                  maxWidth: "82%",
-                  wordBreak: "break-word",
-                  overflowWrap: "break-word",
-                  padding: "8px 12px",
-                  borderRadius: "12px 12px 12px 2px",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "#F5F0E8",
-                  fontFamily: "Cormorant Garamond, serif",
-                  fontSize: "17px",
-                  fontStyle: "italic",
-                  lineHeight: 1.7,
-                  margin: 0,
-                  opacity: 0.85,
-                }}>
-                  {currentUserText}
-                </p>
-              </div>
-            )}
-            {/* AI đang stream — turn hiện tại */}
-            {currentAIText && (
               <div style={{
                 display: "flex",
                 justifyContent: "flex-end",
@@ -945,6 +923,35 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   background: "rgba(201, 168, 76, 0.1)",
                   border: "1px solid rgba(201, 168, 76, 0.2)",
                   color: "#C9A84C",
+                  fontFamily: "Cormorant Garamond, serif",
+                  fontSize: "17px",
+                  fontStyle: "italic",
+                  lineHeight: 1.7,
+                  margin: 0,
+                  opacity: 0.85,
+                }}>
+                  {currentUserText}
+                </p>
+              </div>
+            )}
+            {/* AI đang stream — turn hiện tại */}
+            {currentAIText && (
+              <div style={{
+                display: "flex",
+                justifyContent: "flex-start",
+                width: "100%",
+                flexShrink: 0,
+                marginBottom: "8px",
+              }}>
+                <p style={{
+                  maxWidth: "82%",
+                  wordBreak: "break-word",
+                  overflowWrap: "break-word",
+                  padding: "8px 12px",
+                  borderRadius: "12px 12px 12px 2px",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#F5F0E8",
                   fontFamily: "Cormorant Garamond, serif",
                   fontSize: "17px",
                   fontStyle: "italic",
