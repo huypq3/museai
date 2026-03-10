@@ -491,6 +491,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     // Stop local audio and skip remaining messages from the old turn.
     stopPlayback();
     waitingForAudioRef.current = false;
+    if (currentAIText.trim()) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: currentAIText.trim(), timestamp: new Date() },
+      ]);
+    }
+    pendingAITextRef.current = "";
+    pendingUserTextRef.current = "";
+    setCurrentAIText("");
+    setCurrentUserText("");
 
     if (stateRef.current === "ai_speaking") {
       // AI is speaking: skip all old-turn messages until turn_complete.
@@ -520,7 +530,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         },
       }
     );
-  }, [isConnected, stopPlayback, sendMessage, start, unlockAndFlush, markIntroUsed, stopAndSendTurn]);
+  }, [isConnected, stopPlayback, sendMessage, start, unlockAndFlush, markIntroUsed, stopAndSendTurn, currentAIText]);
 
   const handleStopRecording = useCallback(() => {
     stopAndSendTurn("manual");
@@ -883,13 +893,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   borderRadius: msg.role === "user"
                     ? "12px 12px 2px 12px"
                     : "12px 12px 12px 2px",
-                  background: msg.role === "user"
+                  background: msg.role === "assistant"
                     ? "rgba(201, 168, 76, 0.15)"
                     : "rgba(255, 255, 255, 0.05)",
-                  border: msg.role === "user"
+                  border: msg.role === "assistant"
                     ? "1px solid rgba(201, 168, 76, 0.3)"
                     : "1px solid rgba(255,255,255,0.08)",
-                  color: msg.role === "user"
+                  color: msg.role === "assistant"
                     ? "#C9A84C"
                     : "#F5F0E8",
                   fontFamily: "Cormorant Garamond, serif",
@@ -897,9 +907,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   fontStyle: "italic",
                   lineHeight: 1.7,
                   margin: 0,
-                  textAlign: msg.role === "user"
-                    ? "right"
-                    : "left",
+                  textAlign: "left",
+                  direction: "ltr",
                 }}>
                   {msg.text}
                 </p>
@@ -919,16 +928,18 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   wordBreak: "break-word",
                   overflowWrap: "break-word",
                   padding: "8px 12px",
-                  borderRadius: "12px 12px 2px 12px",
-                  background: "rgba(201, 168, 76, 0.1)",
-                  border: "1px solid rgba(201, 168, 76, 0.2)",
-                  color: "#C9A84C",
+                  borderRadius: "12px 12px 12px 2px",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#F5F0E8",
                   fontFamily: "Cormorant Garamond, serif",
                   fontSize: "17px",
                   fontStyle: "italic",
                   lineHeight: 1.7,
                   margin: 0,
                   opacity: 0.85,
+                  textAlign: "left",
+                  direction: "ltr",
                 }}>
                   {currentUserText}
                 </p>
@@ -948,10 +959,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   wordBreak: "break-word",
                   overflowWrap: "break-word",
                   padding: "8px 12px",
-                  borderRadius: "12px 12px 12px 2px",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "#F5F0E8",
+                  borderRadius: "12px 12px 2px 12px",
+                  background: "rgba(201, 168, 76, 0.1)",
+                  border: "1px solid rgba(201, 168, 76, 0.2)",
+                  color: "#C9A84C",
                   fontFamily: "Cormorant Garamond, serif",
                   fontSize: "17px",
                   fontStyle: "italic",
