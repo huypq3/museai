@@ -436,6 +436,11 @@ class GeminiLiveHandler:
                     # The flag is cleared correctly when turn_complete of the old
                     # turn arrives (see _send_to_client). If suppress is stuck
                     # (e.g. old turn never completed), it will be cleared there too.
+                    
+                    # Inject language reminder BEFORE activity_start for voice turns.
+                    # This prevents the text frame from corrupting the audio buffer.
+                    await self._inject_language_reminder(session)
+
                     await session.send_realtime_input(activity_start=types.ActivityStart())
                     logger.info("📥 start_of_turn from client → activity_start sent")
 
@@ -453,7 +458,6 @@ class GeminiLiveHandler:
                         "📥 end_of_turn from client → signaling Gemini (last_audio=%dms)",
                         since_last_audio,
                     )
-                    await self._inject_language_always(session)
                     await session.send_realtime_input(activity_end=types.ActivityEnd())
                     logger.info("✅ end_of_turn sent (activity_end)")
 
@@ -510,11 +514,13 @@ class GeminiLiveHandler:
                     text = str(message.get("text", "")).strip()
                     if not text:
                         continue
-                    # Always inject language reminder for text input — ensures
-                    # correct language even if user hasn't explicitly switched.
-                    await self._inject_language_always(session)
-                    await session.send(input=text, end_of_turn=True)
-                    logger.info("📤 Sent text_input to Gemini: %s", text[:80])
+                    # Combine language instruction and text into a single send
+                    # to avoid breaking RAG context with multiple consecutive text blocks
+                    lang_name = self._language_label(self.language)
+                    combined_text = f"[Respond in {lang_name}] {text}"
+                    await session.send(input=combined_text, end_of_turn=True)
+                    logger.info("📤 Sent text_input to Gemini: %s", combined_text[:80])
+                    self._pending_language_reminder = False
 
                 elif msg_type == "set_language":
                     requested = str(message.get("language", "")).strip().lower()
