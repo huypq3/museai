@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
@@ -171,7 +171,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const setState = (s: State) => { stateRef.current = s; _setState(s); };
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentAIText, setCurrentAIText] = useState("");
-  const [, setCurrentUserText] = useState("");
+  const [currentUserText, setCurrentUserText] = useState("");
   const [exhibitName, setExhibitName] = useState("");
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showIntroButton, setShowIntroButton] = useState<boolean>(true);
@@ -197,10 +197,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const { isConnected, messages: wsMessages, notice: wsNotice, sendMessage, sendTextMessage, reconnectNow } = useWebSocket(exhibitId, language);
   const { start, stop: stopRecording } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
-  const sentences = useMemo(
-    () => messages.filter((m) => m.role === "assistant").map((m) => m.text),
-    [messages],
-  );
+  const sentences = messages;
 
   const markIntroUsed = useCallback(() => {
     setShowIntroButton(false);
@@ -393,10 +390,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [wsMessages]); // Depend only on wsMessages, not isPlaying/playChunk/etc.
 
   useEffect(() => {
-    if (sentences.length > 0 || currentAIText) {
+    if (sentences.length > 0 || currentAIText || currentUserText) {
       transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [sentences, currentAIText]);
+  }, [sentences, currentAIText, currentUserText]);
 
   // ─── Clear timers on unmount ───────────────────────────────────────────
   useEffect(() => {
@@ -483,10 +480,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     // Stop local audio and skip remaining messages from the old turn.
     stopPlayback();
     waitingForAudioRef.current = false;
-    pendingAITextRef.current = "";
-    setCurrentAIText("");
-    setCurrentUserText("");
-    pendingUserTextRef.current = "";
 
     if (stateRef.current === "ai_speaking") {
       // AI is speaking: skip all old-turn messages until turn_complete.
@@ -583,10 +576,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   const handleCancelRecording = useCallback(() => {
     stopRecording();
-    setCurrentAIText("");
-    setCurrentUserText("");
-    pendingAITextRef.current = "";
-    pendingUserTextRef.current = "";
     hasAiOutputThisTurnRef.current = false;
     setState(previousStateRef.current);
   }, [stopRecording]);
@@ -794,10 +783,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           padding: "20px 16px 12px",
           display: "flex",
           flexDirection: "column",
-          justifyContent: sentences.length === 0 && !currentAIText ? "center" : "flex-start",
+          justifyContent: sentences.length === 0 && !currentAIText && !currentUserText ? "center" : "flex-start",
         }}
       >
-        {sentences.length === 0 && !currentAIText ? (
+        {sentences.length === 0 && !currentAIText && !currentUserText ? (
           <div style={{ textAlign: "center", width: "100%", maxWidth: 420, margin: "0 auto" }}>
             {wsNotice ? (
               <div
@@ -857,45 +846,94 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             )}
           </div>
         ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {sentences.map((s, i) => (
-              <p
-                key={`${i}-${s.slice(0, 12)}`}
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+            {/* Conversation history */}
+            {messages.map((msg, index) => (
+              <div
+                key={index}
                 style={{
-                  color: "#F5F0E8",
-                  fontFamily: "Cormorant Garamond, serif",
-                  fontSize: "17px",
-                  fontStyle: "italic",
-                  lineHeight: 1.7,
-                  margin: 0,
-                  padding: "12px 16px",
-                  backgroundColor: "rgba(201,168,76,0.06)",
-                  borderLeft: "2px solid rgba(201,168,76,0.4)",
-                  borderRadius: "0 8px 8px 0",
-                  animation: "fadeInUp 0.4s ease",
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: msg.role === "user"
+                    ? "flex-end"
+                    : "flex-start",
+                  marginBottom: "8px",
                 }}
               >
-                {s}
-              </p>
+                <p style={{
+                  maxWidth: "85%",
+                  padding: "8px 12px",
+                  borderRadius: msg.role === "user"
+                    ? "12px 12px 2px 12px"
+                    : "12px 12px 12px 2px",
+                  background: msg.role === "user"
+                    ? "rgba(201, 168, 76, 0.15)"
+                    : "rgba(255, 255, 255, 0.05)",
+                  border: msg.role === "user"
+                    ? "1px solid rgba(201, 168, 76, 0.3)"
+                    : "1px solid rgba(255,255,255,0.08)",
+                  color: msg.role === "user"
+                    ? "#C9A84C"
+                    : "#F5F0E8",
+                  fontSize: "14px",
+                  lineHeight: "1.5",
+                  fontFamily: "DM Sans, sans-serif",
+                  margin: 0,
+                  textAlign: msg.role === "user"
+                    ? "right"
+                    : "left",
+                }}>
+                  {msg.text}
+                </p>
+              </div>
             ))}
+            {/* AI đang stream — turn hiện tại */}
             {currentAIText && (
-              <p
-                style={{
+              <div style={{
+                display: "flex",
+                justifyContent: "flex-start",
+                marginBottom: "8px",
+              }}>
+                <p style={{
+                  maxWidth: "85%",
+                  padding: "8px 12px",
+                  borderRadius: "12px 12px 12px 2px",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
                   color: "#F5F0E8",
-                  fontFamily: "Cormorant Garamond, serif",
-                  fontSize: "17px",
-                  fontStyle: "italic",
-                  lineHeight: 1.7,
+                  fontSize: "14px",
+                  lineHeight: "1.5",
+                  fontFamily: "DM Sans, sans-serif",
                   margin: 0,
-                  padding: "12px 16px",
-                  backgroundColor: "rgba(201,168,76,0.06)",
-                  borderLeft: "2px solid rgba(201,168,76,0.4)",
-                  borderRadius: "0 8px 8px 0",
-                  animation: "fadeInUp 0.4s ease",
-                }}
-              >
-                {currentAIText}
-              </p>
+                  opacity: 0.85,
+                }}>
+                  {currentAIText}
+                </p>
+              </div>
+            )}
+            {/* User đang nói/gõ — turn hiện tại */}
+            {currentUserText && (
+              <div style={{
+                display: "flex",
+                justifyContent: "flex-end",
+                marginBottom: "8px",
+              }}>
+                <p style={{
+                  maxWidth: "85%",
+                  padding: "8px 12px",
+                  borderRadius: "12px 12px 2px 12px",
+                  background: "rgba(201, 168, 76, 0.1)",
+                  border: "1px solid rgba(201, 168, 76, 0.2)",
+                  color: "#C9A84C",
+                  fontSize: "14px",
+                  lineHeight: "1.5",
+                  fontFamily: "DM Sans, sans-serif",
+                  margin: 0,
+                  opacity: 0.85,
+                }}>
+                  {currentUserText}
+                </p>
+              </div>
             )}
             <div ref={transcriptEndRef} />
           </div>

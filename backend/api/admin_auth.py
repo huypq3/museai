@@ -1,15 +1,23 @@
 """
 Admin authentication endpoints
 """
+import os
 import re
 import time
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request, Response
 from google.cloud import firestore
 from pydantic import BaseModel, Field, field_validator
 import sys
 sys.path.append('..')
-from auth.admin import authenticate_admin, create_token, get_current_admin, get_db, hash_password
+from auth.admin import (
+    ADMIN_AUTH_COOKIE_NAME,
+    authenticate_admin,
+    create_token,
+    get_current_admin,
+    get_db,
+    hash_password,
+)
 from fastapi import Depends
 from middleware.audit_log import audit_log
 from security.login_protection import (
@@ -22,6 +30,14 @@ from security.login_protection import (
 from security.request_validator import get_real_ip
 
 router = APIRouter(prefix="/admin/auth", tags=["admin"])
+_app_env = os.getenv("APP_ENV", os.getenv("ENV", "development")).lower()
+ADMIN_COOKIE_SECURE = os.getenv(
+    "ADMIN_AUTH_COOKIE_SECURE",
+    "true" if _app_env in {"production", "prod"} else "false",
+).lower() == "true"
+ADMIN_COOKIE_SAMESITE = os.getenv("ADMIN_AUTH_COOKIE_SAMESITE", "lax")
+ADMIN_COOKIE_PATH = os.getenv("ADMIN_AUTH_COOKIE_PATH", "/")
+ADMIN_COOKIE_MAX_AGE = int(os.getenv("ADMIN_AUTH_COOKIE_MAX_AGE", str(24 * 3600)))
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
@@ -48,7 +64,7 @@ class ChangePasswordRequest(BaseModel):
         return v
 
 @router.post("/login")
-async def login(request: Request, body: LoginRequest):
+async def login(request: Request, response: Response, body: LoginRequest):
     """Login with username/password and return JWT token + role."""
     started_at = time.monotonic()
     ip = get_real_ip(request)
@@ -91,6 +107,15 @@ async def login(request: Request, body: LoginRequest):
     )
     await normalize_login_timing(started_at)
     await audit_log("login_success", admin.get("username", body.username), {"ip": ip})
+    response.set_cookie(
+        key=ADMIN_AUTH_COOKIE_NAME,
+        value=token,
+        max_age=ADMIN_COOKIE_MAX_AGE,
+        httponly=True,
+        secure=ADMIN_COOKIE_SECURE,
+        samesite=ADMIN_COOKIE_SAMESITE,
+        path=ADMIN_COOKIE_PATH,
+    )
     return {
         "token": token,
         "username": admin.get("username", body.username),
@@ -103,8 +128,13 @@ async def login(request: Request, body: LoginRequest):
 
 
 @router.post("/logout")
-async def logout(_: dict = Depends(get_current_admin)):
-    # Stateless JWT logout on client-side. Blacklist can be added later.
+async def logout(response: Response, _: dict = Depends(get_current_admin)):
+    response.delete_cookie(
+        key=ADMIN_AUTH_COOKIE_NAME,
+        path=ADMIN_COOKIE_PATH,
+        secure=ADMIN_COOKIE_SECURE,
+        samesite=ADMIN_COOKIE_SAMESITE,
+    )
     return {"success": True}
 
 
@@ -119,3 +149,15 @@ async def change_password(body: ChangePasswordRequest, admin: dict = Depends(get
         merge=True,
     )
     return {"success": True}
+
+
+@router.get("/me")
+async def me(admin: dict = Depends(get_current_admin)):
+    return {
+        "username": admin.get("username") or admin.get("sub"),
+        "uid": admin.get("uid"),
+        "role": admin.get("role"),
+        "museum_id": admin.get("museum_id"),
+        "museum_name": admin.get("museum_name"),
+        "exp": admin.get("exp"),
+    }

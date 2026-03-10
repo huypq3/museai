@@ -7,9 +7,12 @@ import os
 import sys
 from io import BytesIO
 from PIL import Image
+from pathlib import Path
 
 # Add backend to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'backend'))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "backend"))
+
+pytestmark = pytest.mark.integration
 
 from vision.recognizer import recognize_exhibit
 from vision.camera_tour import analyze_frame, generate_commentary

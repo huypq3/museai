@@ -22,6 +22,7 @@ ADMIN_PASSWORD_HASH = os.getenv("ADMIN_PASSWORD_HASH", "")
 JWT_SECRET = os.getenv("JWT_SECRET")
 JWT_EXPIRE_HOURS = int(os.getenv("ADMIN_JWT_EXPIRE_HOURS", "24"))
 DEFAULT_SUPER_ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "")
+ADMIN_AUTH_COOKIE_NAME = os.getenv("ADMIN_AUTH_COOKIE_NAME", "museai_admin_session")
 
 Role = Literal["super_admin", "museum_admin"]
 _db: firestore.AsyncClient | None = None
@@ -152,11 +153,18 @@ async def get_current_admin(request: Request, authorization: str | None = Header
     from middleware.audit_log import audit_log
     from security.rate_limit import check_rate_limit
 
-    if not authorization:
-        raise HTTPException(status_code=401, detail="Missing Authorization header")
-    if not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Invalid Authorization header")
-    token = authorization.replace("Bearer ", "").strip()
+    token = ""
+    if authorization:
+        if not authorization.startswith("Bearer "):
+            raise HTTPException(status_code=401, detail="Invalid Authorization header")
+        token = authorization.replace("Bearer ", "").strip()
+
+    if not token:
+        token = request.cookies.get(ADMIN_AUTH_COOKIE_NAME, "").strip()
+
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     await check_rate_limit(scope="admin_api", key=f"token:{hash(token)}", limit=100, window_seconds=60)
     payload = decode_token(token)
     role = payload.get("role")

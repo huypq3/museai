@@ -14,6 +14,8 @@ import asyncio
 
 logger = logging.getLogger(__name__)
 EMBEDDING_MODEL = os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+CHUNKS_COLLECTION = os.getenv("RAG_CHUNKS_COLLECTION", "exhibit_chunks")
+LEGACY_CHUNKS_COLLECTION = os.getenv("RAG_LEGACY_CHUNKS_COLLECTION", "exhibit_chunks_legacy")
 
 
 def embed_text(text: str) -> List[float]:
@@ -94,7 +96,7 @@ async def embed_and_store_chunks(
     project_id: str = "museai-2026"
 ):
     """
-    Embed each chunk and store it in Firestore "exhibit_chunks" and legacy "exhibit_chunks".
+    Embed each chunk and store it in Firestore chunk collections.
     
     Args:
         chunks: List of chunks from chunker
@@ -107,9 +109,13 @@ async def embed_and_store_chunks(
         # Initialize Firestore client.
         db = firestore.AsyncClient(project=project_id)
         
-        # Target collections for chunk storage.
-        chunks_collection = db.collection("exhibit_chunks")
-        legacy_chunks_collection = db.collection("exhibit_chunks")
+        # Target collections for chunk storage (legacy write is optional).
+        chunks_collection = db.collection(CHUNKS_COLLECTION)
+        legacy_chunks_collection = (
+            db.collection(LEGACY_CHUNKS_COLLECTION)
+            if LEGACY_CHUNKS_COLLECTION and LEGACY_CHUNKS_COLLECTION != CHUNKS_COLLECTION
+            else None
+        )
         
         # Embed and store each chunk.
         for i, chunk in enumerate(chunks):
@@ -121,7 +127,7 @@ async def embed_and_store_chunks(
             # Prepare document payload.
             doc_data = {
                 "exhibit_id": exhibit_id,
-                "exhibit_id": exhibit_id,
+                "chunk_id": chunk["id"],
                 "chunk_index": chunk["chunk_index"],
                 "content": chunk["content"],
                 "word_count": chunk["word_count"],
@@ -132,8 +138,9 @@ async def embed_and_store_chunks(
             # Store in Firestore with ID = chunk["id"].
             doc_ref = chunks_collection.document(chunk["id"])
             await doc_ref.set(doc_data)
-            legacy_doc_ref = legacy_chunks_collection.document(chunk["id"])
-            await legacy_doc_ref.set(doc_data)
+            if legacy_chunks_collection is not None:
+                legacy_doc_ref = legacy_chunks_collection.document(chunk["id"])
+                await legacy_doc_ref.set(doc_data)
             
             logger.debug(f"Stored chunk {chunk['id']} with embedding dim={len(embedding)}")
         

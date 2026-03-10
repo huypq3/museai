@@ -141,8 +141,7 @@ jobs:
           printf 'JWT_SECRET: "%s"\n' "${{ secrets.JWT_SECRET }}" >> /tmp/env-vars.yaml
           printf 'GEMINI_API_KEY: "%s"\n' "${{ secrets.GEMINI_API_KEY }}" >> /tmp/env-vars.yaml
           printf 'REDIS_URL: "%s"\n' "${{ secrets.REDIS_URL }}" >> /tmp/env-vars.yaml
-          echo "=== env-vars.yaml content ==="
-          cat /tmp/env-vars.yaml
+          echo "env-vars.yaml prepared"
 
       - name: Deploy to Cloud Run
         run: |

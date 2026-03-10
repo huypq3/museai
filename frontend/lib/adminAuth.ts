@@ -6,15 +6,22 @@ function getBackendBase(): string {
   return backend
 }
 
+function redirectToLogin() {
+  if (typeof window !== 'undefined') {
+    window.location.href = '/admin/login'
+  }
+}
+
 export type AdminRole = 'super_admin' | 'museum_admin'
 
 export type AdminSession = {
-  token: string
+  token?: string
   username?: string
   uid?: string
   role?: AdminRole
   museum_id?: string | null
   museum_name?: string | null
+  exp?: number
 }
 
 export function getAdminToken(): string | null {
@@ -27,8 +34,12 @@ export function setAdminToken(token: string) {
 }
 
 export function setAdminSession(session: AdminSession) {
-  setAdminToken(session.token)
-  localStorage.setItem('admin_session', JSON.stringify(session))
+  const { token: _ignoredToken, ...safeSession } = session || {}
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('admin_session', JSON.stringify(safeSession))
+    // Do not persist auth token in localStorage; rely on HttpOnly cookie.
+    localStorage.removeItem('admin_token')
+  }
 }
 
 export function getAdminSession(): AdminSession | null {
@@ -42,9 +53,40 @@ export function getAdminSession(): AdminSession | null {
   }
 }
 
+export async function hydrateAdminSessionFromCookie(): Promise<AdminSession | null> {
+  try {
+    const res = await fetch(`${getBackendBase()}/admin/auth/me`, {
+      method: 'GET',
+      credentials: 'include',
+    })
+    if (!res.ok) return null
+    const session = (await res.json()) as AdminSession
+    setAdminSession(session)
+    return session
+  } catch {
+    return null
+  }
+}
+
 export function clearAdminToken() {
-  localStorage.removeItem('admin_token')
-  localStorage.removeItem('admin_session')
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem('admin_token')
+    localStorage.removeItem('admin_session')
+  }
+}
+
+export async function logoutAdmin(): Promise<void> {
+  const legacyToken = getAdminToken()
+  try {
+    await fetch(`${getBackendBase()}/admin/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: legacyToken ? { Authorization: `Bearer ${legacyToken}` } : undefined,
+    })
+  } catch {
+    // Best-effort logout; local state still gets cleared.
+  }
+  clearAdminToken()
 }
 
 export async function adminFetch(
@@ -52,20 +94,29 @@ export async function adminFetch(
   options: RequestInit = {}
 ): Promise<any> {
   const token = getAdminToken()
-  if (!token) throw new Error('Not authenticated')
+  let headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  }
+  if (token) {
+    headers = {
+      ...headers,
+      Authorization: `Bearer ${token}`,
+    }
+  }
+
   const res = await fetch(`${getBackendBase()}${path}`, {
     ...options,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
+    credentials: 'include',
+    headers,
   })
+
   if (res.status === 401 || res.status === 403) {
     clearAdminToken()
-    window.location.href = '/admin/login'
+    redirectToLogin()
     throw new Error('Unauthorized')
   }
+
   if (!res.ok) throw new Error(await res.text())
   return res.json()
 }
@@ -80,27 +131,36 @@ export function getAdminMuseumId(): string | null {
 
 export async function adminUpload(file: File, museumId?: string): Promise<string> {
   const token = getAdminToken()
-  if (!token) throw new Error('Not authenticated')
   const formData = new FormData()
   formData.append('file', file)
   if (museumId) formData.append('museum_id', museumId)
   const res = await fetch(`${getBackendBase()}/admin/upload/image`, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${token}` },
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: formData,
   })
+  if (res.status === 401 || res.status === 403) {
+    clearAdminToken()
+    redirectToLogin()
+    throw new Error('Unauthorized')
+  }
   if (!res.ok) throw new Error('Upload failed')
   const data = await res.json()
   return data.url
 }
 
-
 export async function adminDownload(path: string, filename: string): Promise<void> {
   const token = getAdminToken()
-  if (!token) throw new Error('Not authenticated')
   const res = await fetch(`${getBackendBase()}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   })
+  if (res.status === 401 || res.status === 403) {
+    clearAdminToken()
+    redirectToLogin()
+    throw new Error('Unauthorized')
+  }
   if (!res.ok) throw new Error(await res.text())
   const blob = await res.blob()
   const url = URL.createObjectURL(blob)

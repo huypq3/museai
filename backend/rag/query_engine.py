@@ -12,6 +12,15 @@ from rag.embedder import embed_text, cosine_similarity
 
 
 logger = logging.getLogger(__name__)
+CHUNKS_COLLECTION = os.getenv("RAG_CHUNKS_COLLECTION", "exhibit_chunks")
+LEGACY_CHUNKS_COLLECTION = os.getenv("RAG_LEGACY_CHUNKS_COLLECTION", "exhibit_chunks_legacy")
+
+
+def _chunk_collection_candidates() -> list[str]:
+    names = [CHUNKS_COLLECTION]
+    if LEGACY_CHUNKS_COLLECTION and LEGACY_CHUNKS_COLLECTION not in names:
+        names.append(LEGACY_CHUNKS_COLLECTION)
+    return names
 
 
 async def search_similar_chunks(
@@ -44,12 +53,14 @@ async def search_similar_chunks(
         # Initialize Firestore client.
         db = firestore.AsyncClient(project=project_id)
         
-        # Fetch all chunks for exhibit (fallback to legacy exhibit_chunks).
-        chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", exhibit_id)
-        chunks_docs = await chunks_ref.get()
-        if not chunks_docs:
-            chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", exhibit_id)
+        # Fetch chunks with fallback order: primary collection then optional legacy collection.
+        chunks_docs = []
+        for collection_name in _chunk_collection_candidates():
+            chunks_ref = db.collection(collection_name).where("exhibit_id", "==", exhibit_id)
             chunks_docs = await chunks_ref.get()
+            if chunks_docs:
+                logger.info("Using chunk collection: %s", collection_name)
+                break
         
         if not chunks_docs:
             logger.warning(f"No chunks found for exhibit: {exhibit_id}")

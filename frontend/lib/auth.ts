@@ -2,7 +2,7 @@ import {
   adminFetch,
   clearAdminToken as clearToken,
   getAdminSession,
-  getAdminToken,
+  hydrateAdminSessionFromCookie,
   setAdminSession,
   setAdminToken as saveToken,
 } from './adminAuth'
@@ -16,21 +16,8 @@ export interface AdminUser {
 }
 
 export const getCurrentUser = (): AdminUser | null => {
-  const token = getAdminToken()
-  if (!token) return null
   const session = getAdminSession()
-  if (!session) return null
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]))
-    if (payload?.exp && payload.exp * 1000 < Date.now()) {
-      clearToken()
-      return null
-    }
-  } catch {
-    clearToken()
-    return null
-  }
-  return session
+  return session || null
 }
 
 export const isSuperAdmin = (): boolean => getCurrentUser()?.role === 'super_admin'
@@ -42,4 +29,4 @@ export const canAccessMuseum = (museumId: string): boolean => {
   return user.museum_id === museumId
 }
 
-export { adminFetch, clearToken, saveToken, setAdminSession }
+export { adminFetch, clearToken, saveToken, setAdminSession, hydrateAdminSessionFromCookie }

@@ -2,7 +2,7 @@
 
 import { useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
-import { clearAdminToken, getAdminSession } from '@/lib/adminAuth'
+import { getAdminSession, logoutAdmin } from '@/lib/adminAuth'
 import { AdminI18nProvider, useAdminI18n } from '@/lib/i18n/admin'
 import MuseAILogo from '@/components/MuseAILogo'
 
@@ -146,9 +146,9 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
                   {locale.toUpperCase()}
                 </button>
                 <button
-                  onClick={() => {
-                    clearAdminToken()
-                    router.push('/admin/login')
+                  onClick={async () => {
+                    await logoutAdmin()
+                    router.replace('/admin/login')
                   }}
                   style={{
                     padding: '8px 12px',

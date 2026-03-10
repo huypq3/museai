@@ -13,6 +13,7 @@ from rag.embedder import embed_and_store_chunks
 
 
 logger = logging.getLogger(__name__)
+CHUNKS_COLLECTION = os.getenv("RAG_CHUNKS_COLLECTION", "exhibit_chunks")
 
 
 async def upload_pdf(
@@ -149,7 +150,7 @@ async def get_document_status(
         doc_snapshot = await doc_ref.get()
         
         # Count chunks
-        chunks_ref = db.collection("exhibit_chunks").where("exhibit_id", "==", exhibit_id)
+        chunks_ref = db.collection(CHUNKS_COLLECTION).where("exhibit_id", "==", exhibit_id)
         chunks_docs = await chunks_ref.get()
         chunk_count = len(chunks_docs)
         
