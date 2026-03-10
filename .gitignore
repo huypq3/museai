@@ -77,3 +77,4 @@ PROJECT_CONTEXT.md
 *.md
 !README.md
 !**/README.md
+!docs/VoiceChat_FSM_Migration_v2.md

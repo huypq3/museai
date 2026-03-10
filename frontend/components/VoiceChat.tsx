@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useAudioRecorder } from "@/hooks/useAudioRecorder";
 import { useAudioPlayer } from "@/hooks/useAudioPlayer";
+import { useVoiceFSM } from "@/hooks/useVoiceFSM";
 import { t } from "@/lib/i18n";
 import { BACKEND_URL, LanguageCode } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
@@ -15,8 +16,6 @@ type Props = {
   onLanguageChange?: (lang: LanguageCode) => void;
   museumName?: string;
 };
-
-type State = "connecting" | "ready" | "paused" | "recording" | "processing" | "ai_speaking";
 
 type Message = {
   role: "user" | "assistant";
@@ -166,9 +165,7 @@ const LANGUAGES: Record<LanguageCode, { flag: string }> = {
 
 export default function VoiceChat({ exhibitId, language, onLanguageChange, museumName }: Props) {
   const router = useRouter();
-  const [state, _setState] = useState<State>("connecting");
-  const stateRef = useRef<State>("connecting");
-  const setState = (s: State) => { stateRef.current = s; _setState(s); };
+  const { stateRef, is, can, dispatch } = useVoiceFSM();
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentAIText, setCurrentAIText] = useState("");
   const [currentUserText, setCurrentUserText] = useState("");
@@ -185,16 +182,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const waitingForAudioRef = useRef(false);
   const pendingAITextRef = useRef("");
   const pendingUserTextRef = useRef("");
-  const previousStateRef = useRef<"ready" | "paused">("ready");
   const hasAiOutputThisTurnRef = useRef(false);
   const textInputRef = useRef<HTMLInputElement>(null);
-  // When user interrupts, skip old-turn messages until next turn_complete.
-  const skipOldTurnRef = useRef(false);
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
-  const keyboardResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const keyboardResetRafRef = useRef<number | null>(null);
 
   const {
     isConnected,
@@ -224,31 +216,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setShowIntroButton(true);
   }, [exhibitId]);
 
-  // ─── Connect → ready ──────────────────────────────────────────────────
+  // ─── Sync websocket connectivity → FSM ────────────────────────────────
   useEffect(() => {
-    if (isConnected && state === "connecting") {
-      console.log("✅ WS connected → ready");
-      // New socket session: never keep old-turn skip flag.
-      skipOldTurnRef.current = false;
-      setState("ready");
+    if (isConnected) {
+      if (can("WS_CONNECTED")) dispatch({ type: "WS_CONNECTED" });
+      return;
     }
-    if (!isConnected) {
-      // If user is waiting for response, keep processing UI instead of jumping to ready/ask button.
-      if (stateRef.current === "processing") {
-        console.warn("⚠️ WS disconnected while processing → keep processing state");
-        return;
-      }
-
-      if (stateRef.current !== "connecting") {
-        console.warn("⚠️ WS disconnected → connecting");
-        clearTimeout(processingTimeoutRef.current ?? undefined);
-        // Connection dropped before receiving turn_complete of old turn.
-        // Reset skip so next session can process normally.
-        skipOldTurnRef.current = false;
-        setState("connecting");
-      }
-    }
-  }, [isConnected]); // chỉ depend vào isConnected
+    // Keep processing UI while waiting for turn_complete fallback.
+    if (stateRef.current === "processing") return;
+    if (can("WS_DISCONNECTED")) dispatch({ type: "WS_DISCONNECTED" });
+  }, [isConnected, can, dispatch, stateRef]);
 
   // Auto-greeting is handled by backend immediately after connect.
 
@@ -267,11 +244,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       }
       console.log("🔇 Audio finished → ready");
       waitingForAudioRef.current = false;
-      setState("ready");
+      if (can("TURN_COMPLETE")) dispatch({ type: "TURN_COMPLETE" });
     }
-  }, [isPlaying]);
+  }, [isPlaying, can, dispatch, stateRef]);
 
-  // ─── Process WS messages (depends only on wsMessages) ─────────────────
+  // ─── Process WS messages with FSM ──────────────────────────────────────
   useEffect(() => {
     if (wsMessages.length === 0) return;
 
@@ -280,33 +257,20 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
     for (let i = startIndex; i < wsMessages.length; i++) {
       const msg = wsMessages[i];
-      console.log(`[WS] type=${msg.type}`, msg.type === "audio_chunk" ? "(audio)" : "", `skip=${skipOldTurnRef.current}`);
 
-      // ── Backend ready ──
-      if (msg.type === "ready" || msg.type === "session_ready") {
+      if (msg.type === "ready" || msg.type === "session_ready") continue;
+      if (msg.type === "session_end") {
+        if (can("SESSION_ENDED")) dispatch({ type: "SESSION_ENDED" });
         continue;
       }
 
-      // ── Skipping old turn after user interrupt ──
-      if (skipOldTurnRef.current) {
+      if (is.draining) {
         if (msg.type === "turn_complete") {
-          // Old turn ended: clear skip flag and resume normal processing.
-          console.log("⏭️ Old turn_complete skipped, resuming normal processing");
-          skipOldTurnRef.current = false;
-          continue;
+          if (can("TURN_COMPLETE")) dispatch({ type: "TURN_COMPLETE" });
         }
-        const isUserTranscriptDuringSkip =
-          msg.type === "user_transcript" ||
-          msg.type === "user_text" ||
-          msg.type === "input_transcript" ||
-          msg.type === "input_text" ||
-          (msg.type === "transcript" && msg.role === "user");
-        if (!isUserTranscriptDuringSkip) {
-          continue;
-        }
+        continue;
       }
 
-      // ── User transcript ──
       const isUserTranscriptMsg =
         msg.type === "user_transcript" ||
         msg.type === "user_text" ||
@@ -320,94 +284,87 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         setCurrentUserText(pendingUserTextRef.current);
       }
 
-      // ── AI audio chunk ──
       if ((msg.type === "audio_chunk" || msg.type === "audio") && (msg.data || msg.audio)) {
         const audioData = msg.data || msg.audio || "";
-        // While recording, do not play AI audio.
         if (stateRef.current === "recording") continue;
 
         hasAiOutputThisTurnRef.current = true;
+        waitingForAudioRef.current = true;
+        if (stateRef.current === "processing" && can("FIRST_AI_CHUNK")) {
+          dispatch({ type: "FIRST_AI_CHUNK" });
+        }
         playChunk(audioData);
-        if (stateRef.current !== "ai_speaking") setState("ai_speaking");
         if (processingTimeoutRef.current) {
           clearTimeout(processingTimeoutRef.current);
           processingTimeoutRef.current = null;
         }
       }
 
-      // ── AI text/transcript ──
       if (
         (msg.type === "transcript" || msg.type === "text") &&
         msg.role !== "user" &&
         (msg.data || msg.text)
       ) {
         if (stateRef.current === "recording") continue;
-        const txt = msg.data || msg.text || "";
-        console.log("📝 Transcript received:", txt);
+        const txt = String(msg.data || msg.text || "").trim();
+        if (!txt) continue;
+        if (stateRef.current === "processing" && can("FIRST_AI_CHUNK")) {
+          dispatch({ type: "FIRST_AI_CHUNK" });
+        }
         hasAiOutputThisTurnRef.current = true;
         pendingAITextRef.current = mergeTranscript(pendingAITextRef.current, txt);
         setCurrentAIText(pendingAITextRef.current);
       }
 
-      // ── AI bị interrupted (barge-in) ──
       if (msg.type === "interrupted") {
-        if (stateRef.current === "recording") continue;
-        // Do not break processing flow due to stale/late interrupted events.
-        if (stateRef.current === "processing") {
-          console.log("ℹ️ interrupted during processing ignored");
-          continue;
-        }
+        if (stateRef.current === "processing" || stateRef.current === "recording") continue;
         stopPlayback();
         waitingForAudioRef.current = false;
-        if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
-        setState("ready");
       }
 
-      // ── Turn complete: Gemini xong generate ──
       if (msg.type === "turn_complete") {
-        console.log(`✅ turn_complete — state=${stateRef.current} isPlaying=${isPlaying}`);
         if (processingTimeoutRef.current) {
           clearTimeout(processingTimeoutRef.current);
           processingTimeoutRef.current = null;
         }
 
-        const aiText = pendingAITextRef.current;
-        const userText = pendingUserTextRef.current;
+        const aiText = pendingAITextRef.current.trim();
+        const userText = pendingUserTextRef.current.trim();
+
+        if (userText) {
+          setMessages((prev) => [...prev, { role: "user", text: userText, timestamp: new Date() }]);
+        }
+        if (aiText) {
+          setMessages((prev) => [...prev, { role: "assistant", text: aiText, timestamp: new Date() }]);
+        }
+
         pendingAITextRef.current = "";
         pendingUserTextRef.current = "";
         setCurrentAIText("");
         setCurrentUserText("");
-        hasAiOutputThisTurnRef.current = false;
+        waitingForAudioRef.current = false;
 
-        if (aiText || userText) {
-          setMessages((prev) => {
-            const next = [...prev];
-            if (userText) next.push({ role: "user", text: userText, timestamp: new Date() });
-            if (aiText) next.push({ role: "assistant", text: aiText, timestamp: new Date() });
-            return next;
-          });
+        if (!hasAiOutputThisTurnRef.current) {
+          if (can("TURN_COMPLETE_EMPTY")) dispatch({ type: "TURN_COMPLETE_EMPTY" });
+        } else if (can("TURN_COMPLETE")) {
+          dispatch({ type: "TURN_COMPLETE" });
         }
-
-        // If user is recording, skip state transition.
-        if (stateRef.current === "recording") continue;
-
-        waitingForAudioRef.current = true;
-        setTimeout(() => {
-          if (waitingForAudioRef.current && !isPlaying) {
-            if (stateRef.current !== "recording") {
-              console.log("✅ turn_complete → ready");
-              waitingForAudioRef.current = false;
-              setState("ready");
-            } else {
-              waitingForAudioRef.current = false;
-            }
-          }
-        }, 300);
+        hasAiOutputThisTurnRef.current = false;
       }
     }
 
     lastProcessedIndexRef.current = wsMessages.length - 1;
-  }, [wsMessages]); // Depend only on wsMessages, not isPlaying/playChunk/etc.
+  }, [wsMessages, is.draining, can, dispatch, stateRef, playChunk, stopPlayback]);
+
+  useEffect(() => {
+    if (!is.draining) return;
+    const t = setTimeout(() => {
+      if (stateRef.current === "draining" && can("DRAINING_TIMEOUT")) {
+        dispatch({ type: "DRAINING_TIMEOUT" });
+      }
+    }, 5000);
+    return () => clearTimeout(t);
+  }, [is.draining, can, dispatch, stateRef]);
 
   useEffect(() => {
     if (messages.length > 0 || currentAIText || currentUserText) {
@@ -423,117 +380,14 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       stopRecording();
       stopAudio();
     };
-  }, []);
-
-  const clearKeyboardLayoutState = useCallback(() => {
-    if (typeof window === "undefined") return;
-
-    const root = document.documentElement;
-    const body = document.body;
-    root.style.removeProperty("--keyboard-height");
-
-    // Defensive cleanup: if iOS Safari left stale body lock styles, clear them.
-    body.style.removeProperty("top");
-    body.style.removeProperty("left");
-    body.style.removeProperty("right");
-    body.style.removeProperty("position");
-    body.style.removeProperty("width");
-    body.style.removeProperty("overflow");
-
-    const resetScroll = () => {
-      window.scrollTo(0, 0);
-      document.documentElement.scrollTop = 0;
-      document.body.scrollTop = 0;
-    };
-
-    // iOS keyboard close animation can race with JS; reset across frames.
-    resetScroll();
-    if (keyboardResetRafRef.current !== null) {
-      cancelAnimationFrame(keyboardResetRafRef.current);
-      keyboardResetRafRef.current = null;
-    }
-    keyboardResetRafRef.current = requestAnimationFrame(() => {
-      resetScroll();
-      keyboardResetRafRef.current = requestAnimationFrame(() => {
-        resetScroll();
-        keyboardResetRafRef.current = null;
-      });
-    });
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const root = document.documentElement;
-
-    const clearPendingKeyboardReset = () => {
-      if (keyboardResetTimerRef.current) {
-        clearTimeout(keyboardResetTimerRef.current);
-        keyboardResetTimerRef.current = null;
-      }
-      if (keyboardResetRafRef.current !== null) {
-        cancelAnimationFrame(keyboardResetRafRef.current);
-        keyboardResetRafRef.current = null;
-      }
-    };
-
-    if (!showTextInput) {
-      clearPendingKeyboardReset();
-      keyboardResetTimerRef.current = setTimeout(() => {
-        clearKeyboardLayoutState();
-      }, 350);
-      return () => clearPendingKeyboardReset();
-    }
-
-    clearPendingKeyboardReset();
-    const updateKeyboardHeight = () => {
-      const viewport = window.visualViewport;
-      if (!viewport) return;
-      const kh = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
-      root.style.setProperty("--keyboard-height", `${kh}px`);
-    };
-
-    updateKeyboardHeight();
-    window.visualViewport?.addEventListener("resize", updateKeyboardHeight);
-    window.visualViewport?.addEventListener("scroll", updateKeyboardHeight);
-    return () => {
-      window.visualViewport?.removeEventListener("resize", updateKeyboardHeight);
-      window.visualViewport?.removeEventListener("scroll", updateKeyboardHeight);
-      root.style.removeProperty("--keyboard-height");
-      clearPendingKeyboardReset();
-    };
-  }, [showTextInput, clearKeyboardLayoutState]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const handlePageShow = (event: PageTransitionEvent) => {
-      if (event.persisted || !showTextInput) {
-        clearKeyboardLayoutState();
-      }
-    };
-    const handlePageHide = () => {
-      clearKeyboardLayoutState();
-    };
-
-    // Reduce Safari scroll restoration side effects after keyboard interactions.
-    const previousRestoration = window.history.scrollRestoration;
-    window.history.scrollRestoration = "manual";
-    window.addEventListener("pageshow", handlePageShow);
-    window.addEventListener("pagehide", handlePageHide);
-
-    return () => {
-      window.removeEventListener("pageshow", handlePageShow);
-      window.removeEventListener("pagehide", handlePageHide);
-      window.history.scrollRestoration = previousRestoration;
-    };
-  }, [showTextInput, clearKeyboardLayoutState]);
+  }, [stopRecording, stopAudio]);
 
   const stopAndSendTurn = useCallback((reason: "manual" | "silence" | "no_speech") => {
     if (stateRef.current !== "recording") return;
     console.log(`⏹️ Stop recording → end_of_turn (${reason})`);
     stopRecording();
     if (reason === "no_speech") {
-      setState("ready");
+      if (can("NO_SPEECH")) dispatch({ type: "NO_SPEECH" });
       setAutoStopHint("No speech detected clearly. Please try again.");
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 2200);
@@ -544,9 +398,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     const museumId = typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
     trackEvent("question_asked", museumId, exhibitId, { reason });
 
-    // Luôn chuyển sang processing — không phụ thuộc return value của sendMessage
+    if (can("END_OF_TURN")) dispatch({ type: "END_OF_TURN" });
     hasAiOutputThisTurnRef.current = false;
-    setState("processing");
 
     if (reason === "silence") {
       setAutoStopHint("Auto-sent because you stopped speaking.");
@@ -560,10 +413,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       if (stateRef.current === "processing") {
         console.warn("⚠️ 15s timeout → force ready");
         hasAiOutputThisTurnRef.current = false;
-        setState("ready");
+        if (can("PROCESSING_TIMEOUT")) dispatch({ type: "PROCESSING_TIMEOUT" });
       }
     }, 15000);
-  }, [stopRecording, sendMessage, exhibitId]);
+  }, [stopRecording, sendMessage, exhibitId, can, dispatch, stateRef]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────
   const handleStartRecording = useCallback(async () => {
@@ -573,14 +426,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       console.warn("⚠️ Not connected");
       return;
     }
+    if (!can("ASK_VOICE")) return;
 
     // Unlock audio explicitly from the voice button click only.
     await unlockAndFlush();
 
     // From now on, keep using the single ask/stop/processing button flow.
     markIntroUsed();
-
-    const interruptFlagWasSet = skipOldTurnRef.current;
 
     // Stop local audio and skip remaining messages from the old turn.
     stopPlayback();
@@ -596,21 +448,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setCurrentAIText("");
     setCurrentUserText("");
 
-    if (stateRef.current === "ai_speaking") {
-      // AI is speaking: skip all old-turn messages until turn_complete.
-      skipOldTurnRef.current = true;
+    if (stateRef.current === "ai_speaking" && can("INTERRUPT")) {
       sendMessage({ type: "interrupt" });
-    } else if (interruptFlagWasSet) {
-      // Keep skip flag when an interrupt was already issued recently.
-      skipOldTurnRef.current = true;
-    } else {
-      // No in-flight interrupt: clear stale skip flag before the new turn.
-      skipOldTurnRef.current = false;
+      dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
     }
 
-    // Set recording state before awaiting so stateRef can block incoming audio.
-    previousStateRef.current = stateRef.current === "paused" ? "paused" : "ready";
-    setState("recording");
+    if (can("ASK_VOICE")) dispatch({ type: "ASK_VOICE" });
     sendMessage({ type: "set_language", language });
     const started = sendMessage({ type: "start_of_turn" });
     if (!started) {
@@ -631,7 +474,20 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         },
       }
     );
-  }, [isConnected, stopPlayback, sendMessage, start, unlockAndFlush, markIntroUsed, stopAndSendTurn, currentAIText, language]);
+  }, [
+    isConnected,
+    can,
+    dispatch,
+    stopPlayback,
+    sendMessage,
+    start,
+    unlockAndFlush,
+    markIntroUsed,
+    stopAndSendTurn,
+    currentAIText,
+    language,
+    stateRef,
+  ]);
 
   const handleStopRecording = useCallback(() => {
     stopAndSendTurn("manual");
@@ -643,54 +499,74 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     router.push("/camera-tour");
   }, [stopRecording, stopAudio, router]);
 
-  const handleInterrupt = useCallback(() => {
+  const handleInterrupt = useCallback(async () => {
+    if (!can("INTERRUPT")) return;
     stopPlayback();
     waitingForAudioRef.current = false;
-    skipOldTurnRef.current = true;
     sendMessage({ type: "interrupt" });
-    setState("ready");
-  }, [stopPlayback, sendMessage]);
+    dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
+
+    if (currentAIText.trim()) {
+      setMessages((prev) => [...prev, { role: "assistant", text: currentAIText.trim(), timestamp: new Date() }]);
+      pendingAITextRef.current = "";
+      setCurrentAIText("");
+    }
+    pendingUserTextRef.current = "";
+    setCurrentUserText("");
+
+    sendMessage({ type: "set_language", language });
+    sendMessage({ type: "start_of_turn" });
+    await start(
+      (base64) => sendMessage({ type: "audio", data: base64 }),
+      {
+        silenceMs: 1600,
+        maxNoSpeechMs: 4500,
+        voiceThreshold: 0.008,
+        onAutoStop: (reason) => stopAndSendTurn(reason),
+      }
+    );
+  }, [can, stopPlayback, sendMessage, dispatch, currentAIText, language, start, stopAndSendTurn]);
 
   const handleStop = useCallback(() => {
+    if (!can("STOP_PRESSED")) return;
     stopPlayback();
     waitingForAudioRef.current = false;
-    // Stop current AI turn immediately and ignore remaining old-turn chunks.
-    skipOldTurnRef.current = true;
     sendMessage({ type: "interrupt" });
-    setState("paused");
-  }, [stopPlayback, sendMessage]);
+    dispatch({ type: "STOP_PRESSED", drainingIntent: "stop" });
+  }, [can, stopPlayback, sendMessage, dispatch]);
 
   const handleResume = useCallback(() => {
-    // Resume from paused mode by requesting continuation.
-    skipOldTurnRef.current = false;
+    if (!can("RESUME_PRESSED")) return;
     waitingForAudioRef.current = false;
+    dispatch({ type: "RESUME_PRESSED" });
     sendMessage({ type: "resume_greeting" });
-    setState("ai_speaking");
-  }, [sendMessage]);
+  }, [can, dispatch, sendMessage]);
 
   // Chuyển sang TEXT — mọi state
   const switchToText = useCallback(() => {
-    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") return;
-    if (stateRef.current === "ai_speaking") {
+    if (is.inputBlocked || stateRef.current === "recording") return;
+    if (!can("ASK_TEXT")) return;
+    if (stateRef.current === "ai_speaking" && can("STOP_PRESSED")) {
       stopPlayback();
       waitingForAudioRef.current = false;
-      skipOldTurnRef.current = true;
       sendMessage({ type: "interrupt" });
-      setState("paused");
+      dispatch({ type: "STOP_PRESSED", drainingIntent: "ask_text" });
+    } else {
+      dispatch({ type: "ASK_TEXT" });
     }
     setInputMode("text");
     setShowTextInput(true);
     window.setTimeout(() => textInputRef.current?.focus(), 100);
-  }, [stopPlayback, sendMessage]);
+  }, [is.inputBlocked, can, stateRef, stopPlayback, sendMessage, dispatch]);
 
   // Chuyển sang VOICE — đóng textbox, bắt đầu record ngay
   const switchToVoice = useCallback(async () => {
     setShowTextInput(false);
     setTextInput("");
     setInputMode("voice");
-    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") return;
+    if (is.inputBlocked || stateRef.current === "recording") return;
     await handleStartRecording();
-  }, [handleStartRecording]);
+  }, [is.inputBlocked, stateRef, handleStartRecording]);
 
   const handleSendText = useCallback(() => {
     const text = textInput.trim();
@@ -721,79 +597,68 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     pendingUserTextRef.current = text;
     setCurrentAIText("");
     setCurrentUserText(text);
-    setState("processing");
+    if (can("TEXT_SENT")) dispatch({ type: "TEXT_SENT" });
     sendMessage({ type: "set_language", language });
 
     const sent = sendTextMessage(text);
     if (!sent) {
-      // sendTextMessage thất bại → về ready (không dùng previousStateRef vì nó là state từ lần record trước)
-      setState("ready");
+      if (can("PROCESSING_TIMEOUT")) dispatch({ type: "PROCESSING_TIMEOUT" });
       return;
     }
     const museumId =
       typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
     trackEvent("question_asked", museumId, exhibitId, { reason: "text" });
-  }, [textInput, markIntroUsed, sendTextMessage, sendMessage, language, exhibitId]);
+  }, [textInput, markIntroUsed, sendTextMessage, sendMessage, language, exhibitId, can, dispatch]);
 
   const handleCancelRecording = useCallback(() => {
     stopRecording();
     hasAiOutputThisTurnRef.current = false;
-    setState(previousStateRef.current);
-  }, [stopRecording]);
+    if (can("CANCEL_RECORDING")) dispatch({ type: "CANCEL_RECORDING" });
+  }, [stopRecording, can, dispatch]);
 
   const handleIntro = useCallback(async () => {
+    if (!can("GREETING_REQUESTED")) return;
     markIntroUsed();
     await unlockAndFlush();
     sendMessage({ type: "request_greeting" });
-    setState("ai_speaking");
-  }, [markIntroUsed, unlockAndFlush, sendMessage]);
+    dispatch({ type: "GREETING_REQUESTED" });
+  }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch]);
 
   const handleMicPress = useCallback(async () => {
-    if (showIntroButton && state === "ready") {
+    if (showIntroButton && is.ready) {
       await handleIntro();
       return;
     }
-    if (state === "recording") {
+    if (is.recording) {
       handleStopRecording();
       return;
     }
-    if (state === "ai_speaking") {
+    if (is.aiSpeaking) {
       handleInterrupt();
       return;
     }
-    if (state === "connecting" || state === "processing") {
+    if (is.inputBlocked) {
       return;
     }
     await handleStartRecording();
-  }, [showIntroButton, state, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
+  }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
 
   const handleAskPress = useCallback(async () => {
     if (inputMode === "text") {
-      if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") return;
-      if (stateRef.current === "ai_speaking") {
-        stopPlayback();
-        waitingForAudioRef.current = false;
-        skipOldTurnRef.current = true;
-        sendMessage({ type: "interrupt" });
-        setState("paused");
-      }
+      if (is.inputBlocked || stateRef.current === "recording") return;
+      if (!can("ASK_TEXT")) return;
+      dispatch({ type: "ASK_TEXT" });
       setShowTextInput(true);
       window.setTimeout(() => textInputRef.current?.focus(), 100);
       return;
     }
-    // inputMode === "voice"
-    if (stateRef.current === "ai_speaking") {
-      // Let handleStartRecording own interrupt+start_of_turn ordering to avoid race.
-      await handleStartRecording();
-      return;
-    }
     await handleMicPress();
-  }, [inputMode, handleMicPress, handleStartRecording, stopPlayback, sendMessage]);
+  }, [inputMode, is.inputBlocked, stateRef, can, dispatch, handleMicPress]);
 
-  const isRecordingState = state === "recording";
-  const isSpeakingState = state === "ai_speaking";
-  const isProcessingState = state === "processing";
-  const isDisabledMic = isSpeakingState || state === "connecting" || isProcessingState;
+  const isRecordingState = is.recording;
+  const isSpeakingState = is.aiSpeaking;
+  const isProcessingState = is.processing;
+  const isDisabledMic = is.aiSpeaking || is.connecting || is.processing || is.draining;
   const goldBright = "#F6C453";
   const goldLight = "#FFE08A";
   const goldRing = "rgba(246,196,83,0.72)";
@@ -814,6 +679,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         display: "flex",
         flexDirection: "column",
         height: "100dvh",
+        minHeight: "100dvh",
         width: "100vw",
         maxWidth: "100vw",
         overflow: "hidden",
@@ -1014,7 +880,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   margin: 0,
                 }}
               >
-                {state === "connecting" ? t(language, "voice.connecting") : t(language, "voice.listening")}
+                {is.connecting || is.reconnecting ? t(language, "voice.connecting") : t(language, "voice.listening")}
               </p>
             )}
           </div>
@@ -1191,7 +1057,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           <button
             onClick={handleMicPress}
             disabled={isDisabledMic}
-            title={isDisabledMic ? (state === "connecting" ? "Đang kết nối..." : "Đang xử lý...") : undefined}
+            title={isDisabledMic ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
               width: "64px",
               height: "64px",
@@ -1298,7 +1164,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               {inputMode === "voice" ? "⌨️" : "🎤"}
             </button>
           </div>
-        ) : state === "paused" ? (
+        ) : is.draining ? (
+          <div style={{ width: "100%", maxWidth: "320px", textAlign: "center", color: "#C9A84C", fontSize: 14 }}>
+            ⏳ {language === "vi" ? "Đang chờ AI dừng lượt cũ..." : "Waiting old AI turn to stop..."}
+          </div>
+        ) : is.paused ? (
           // [FIX 7] paused: chỉ Resume + Ask, ẩn toggle mode
           <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
             <button
@@ -1373,16 +1243,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
             <button
               onClick={handleAskPress}
-              disabled={state === "connecting" || isProcessingState}
+              disabled={is.inputBlocked}
               style={{
                 flex: 1, height: "48px", minWidth: 0,
                 borderRadius: "12px", border: "none",
-                cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
+                cursor: is.inputBlocked ? "not-allowed" : "pointer",
                 background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
                 color: "#0A0A0A", fontFamily: "DM Sans, sans-serif",
                 fontSize: "15px", fontWeight: "600",
                 transition: "all 0.2s ease",
-                opacity: state === "connecting" || isProcessingState ? 0.7 : 1,
+                opacity: is.inputBlocked ? 0.7 : 1,
                 boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 gap: "6px", padding: "0 10px",
@@ -1393,12 +1263,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 ? `⏳ ${t(language, "voice.processing")}`
                 : inputMode === "text"
                   ? `⌨️ ${t(language, "voice.ask")}`
-                  : showIntroButton && state === "ready"
+                  : showIntroButton && is.ready
                     ? `🎵 ${t(language, "voice.listen_guide")}`
                     : `🎙 ${t(language, "voice.ask")}`}
             </button>
             {/* Toggle ⌨️/🎤 — hiện khi ready và đã qua intro */}
-            {state === "ready" && !showIntroButton && !isProcessingState && (
+            {is.ready && !showIntroButton && !isProcessingState && (
               <button
                 onClick={() => inputMode === "voice" ? switchToText() : switchToVoice()}
                 style={{
@@ -1416,14 +1286,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             )}
           </div>
         )}
-        {/* Text input panel — fixed overlay */}
+        {/* Text input panel — in-flow */}
         {showTextInput && (
           <div
             style={{
-              position: "fixed",
-              left: 0,
-              right: 0,
-              bottom: 0,
               width: "100%",
               boxSizing: "border-box",
               background: "#111",
