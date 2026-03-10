@@ -61,6 +61,7 @@ from api import (
     admin_users,
     public_analytics,
     admin_settings,
+    session,
 )
 
 
@@ -240,6 +241,7 @@ app.include_router(admin_analytics.router)
 app.include_router(admin_users.router)
 app.include_router(public_analytics.router)
 app.include_router(admin_settings.router)
+app.include_router(session.router)
 
 # Firestore client (lazy init)
 _db: Optional[firestore.AsyncClient] = None

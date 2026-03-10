@@ -70,7 +70,7 @@ export default function WelcomePage() {
         localStorage.setItem("museum_id", museumData.id);
 
         if (exhibitFromQr) {
-          router.replace(`/exhibit/${encodeURIComponent(exhibitFromQr)}?museum=${encodeURIComponent(museumData.id)}`);
+          router.replace(`/enter?exhibit=${encodeURIComponent(exhibitFromQr)}&museum=${encodeURIComponent(museumData.id)}`);
           return;
         }
       } catch {

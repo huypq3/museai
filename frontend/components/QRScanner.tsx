@@ -66,7 +66,7 @@ export default function QRScanner({ onScan, onClose, language }: Props) {
         return { error: "non_system" };
       }
 
-      const isSupportedPath = /^\/(welcome|exhibit)(\/|$)/i.test(url.pathname);
+      const isSupportedPath = /^\/(welcome|enter|exhibit)(\/|$)/i.test(url.pathname);
       const museumId = url.searchParams.get("museum") || undefined;
       const exhibitId =
         url.searchParams.get("exhibit") ||

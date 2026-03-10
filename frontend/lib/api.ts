@@ -44,3 +44,36 @@ export async function recognizeExhibit(museumId: string, imageFile: File) {
   if (!res.ok) throw new Error("Failed to recognize exhibit");
   return res.json();
 }
+
+export type SessionCreateResponse = {
+  token: string;
+  expires_in: number;
+  redirect_url: string;
+};
+
+export type SessionValidateResponse = {
+  valid: boolean;
+  exhibit_id: string;
+  museum_id: string;
+  expires_in: number;
+};
+
+export async function createExhibitSession(exhibitId: string, museumId: string): Promise<SessionCreateResponse> {
+  const res = await fetch(`${BACKEND_URL}/api/session/create`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      exhibit_id: exhibitId,
+      museum_id: museumId,
+    }),
+  });
+  if (!res.ok) throw new Error("Failed to create session");
+  return res.json();
+}
+
+export async function validateExhibitSession(token: string, exhibitId: string): Promise<SessionValidateResponse> {
+  const url = `${BACKEND_URL}/api/session/validate?token=${encodeURIComponent(token)}&exhibit_id=${encodeURIComponent(exhibitId)}`;
+  const res = await fetch(url, { method: "POST" });
+  if (!res.ok) throw new Error("Invalid session token");
+  return res.json();
+}

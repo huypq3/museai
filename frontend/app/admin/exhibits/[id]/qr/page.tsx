@@ -29,7 +29,7 @@ export default function ExhibitQRPage() {
       setMuseumId(data.museum_id)
       
       // Generate URL
-      const qrUrl = `${window.location.origin}/welcome?museum=${data.museum_id}&exhibit=${exhibitId}`
+      const qrUrl = `${window.location.origin}/enter?museum=${data.museum_id}&exhibit=${exhibitId}`
       setUrl(qrUrl)
       
       // Generate QR code

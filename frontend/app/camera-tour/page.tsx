@@ -7,7 +7,7 @@ import { t } from "@/lib/i18n";
 import { BACKEND_URL, LanguageCode } from "@/lib/constants";
 import QRScanner, { QRScanPayload } from "@/components/QRScanner";
 import { trackEvent } from "@/lib/analytics";
-import { validateMuseum } from "@/lib/api";
+import { createExhibitSession, validateMuseum } from "@/lib/api";
 
 type State = "scanning" | "processing" | "detected" | "error";
 
@@ -215,9 +215,14 @@ export default function CameraTourPage() {
     }
   };
 
-  const handleExplore = () => {
+  const handleExplore = async () => {
     if (!detected) return;
-    router.push(`/exhibit/${detected.exhibit_id}?museum=${encodeURIComponent(museumId)}`);
+    try {
+      const data = await createExhibitSession(detected.exhibit_id, museumId);
+      router.push(data.redirect_url);
+    } catch {
+      alert("Unable to start session. Please try again.");
+    }
   };
 
   const handleQRScan = async (data: QRScanPayload) => {
@@ -247,7 +252,12 @@ export default function CameraTourPage() {
         localStorage.setItem("museum_id", targetMuseumId);
         setMuseumId(targetMuseumId);
       }
-      router.push(`/exhibit/${exhibitId}?museum=${encodeURIComponent(targetMuseumId)}`);
+      try {
+        const session = await createExhibitSession(exhibitId, targetMuseumId);
+        router.push(session.redirect_url);
+      } catch {
+        alert("Unable to start session. Please try again.");
+      }
       return;
     }
 

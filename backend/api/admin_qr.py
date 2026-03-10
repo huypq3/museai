@@ -92,12 +92,13 @@ async def generate_qr(body: GenerateQRBody, admin=Depends(get_current_admin)):
     ensure_museum_scope(admin, body.museum_id)
     db = get_db()
     public_base = await _museum_public_base(body.museum_id)
-    base_url = f"{public_base}/welcome"
-
     exhibit_id = body.exhibit_id
     params = {"museum": body.museum_id}
     if exhibit_id:
         params["exhibit"] = exhibit_id
+        base_url = f"{public_base}/enter"
+    else:
+        base_url = f"{public_base}/welcome"
     qr_url = f"{base_url}?{urlencode(params)}"
     qr_data_url = _to_data_url(qr_url)
 
@@ -139,7 +140,7 @@ async def get_museum_qrs(museum_id: str, admin=Depends(get_current_admin)):
     query = db.collection("exhibits").where("museum_id", "==", museum_id)
     async for doc in query.stream():
         data = doc.to_dict() or {}
-        url = data.get("qr_url") or f"{public_base}/welcome?museum={museum_id}&exhibit={doc.id}"
+        url = data.get("qr_url") or f"{public_base}/enter?museum={museum_id}&exhibit={doc.id}"
         exhibits.append(
             {
                 "exhibit_id": doc.id,

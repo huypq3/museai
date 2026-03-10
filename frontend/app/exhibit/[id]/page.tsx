@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { getExhibit, validateExhibitMuseum, validateMuseum } from "@/lib/api";
+import { getExhibit, validateExhibitMuseum, validateExhibitSession, validateMuseum } from "@/lib/api";
 import { useLanguage } from "@/hooks/useLanguage";
 import { t } from "@/lib/i18n";
 import VoiceChat from "@/components/VoiceChat";
@@ -22,21 +22,56 @@ export default function ExhibitPage() {
   const [museumId, setMuseumId] = useState<string>("demo_museum");
   const [museumName, setMuseumName] = useState<string>("demo_museum");
   const [museumData, setMuseumData] = useState<{ id: string; name?: string; name_en?: string } | null>(null);
+  const [tokenValid, setTokenValid] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function checkToken() {
+      const query = new URLSearchParams(window.location.search);
+      const token = query.get("token");
+      if (!exhibitId || !token) {
+        if (mounted) setTokenValid(false);
+        return;
+      }
+      try {
+        const session = await validateExhibitSession(token, exhibitId);
+        if (!mounted) return;
+        localStorage.setItem("museum_id", session.museum_id);
+        setTokenValid(true);
+      } catch {
+        if (!mounted) return;
+        setTokenValid(false);
+      }
+    }
+
+    checkToken();
+    return () => {
+      mounted = false;
+    };
+  }, [exhibitId]);
+
+  useEffect(() => {
+    if (tokenValid === false) {
+      router.replace("/?error=session_expired");
+    }
+  }, [tokenValid, router]);
 
   useEffect(() => {
     let mounted = true;
 
     async function loadExhibit() {
+      if (tokenValid !== true) return;
       if (!exhibitId) {
         setError("Exhibit not found");
         setLoading(false);
         return;
       }
       try {
-        const queryParams = new URLSearchParams(window.location.search);
-        const museumFromQuery = queryParams.get("museum");
+        const query = new URLSearchParams(window.location.search);
+        const museumQuery = query.get("museum");
         const museumFromLocal = localStorage.getItem("museum_id");
-        const resolvedMuseumId = museumFromQuery || museumFromLocal;
+        const resolvedMuseumId = museumQuery || museumFromLocal;
 
         if (!resolvedMuseumId) {
           router.replace("/error?code=MUSEUM_REQUIRED");
@@ -72,7 +107,7 @@ export default function ExhibitPage() {
     return () => {
       mounted = false;
     };
-  }, [exhibitId, router]);
+  }, [exhibitId, router, tokenValid]);
 
   useEffect(() => {
     if (!museumData) return;
@@ -83,6 +118,16 @@ export default function ExhibitPage() {
     );
   }, [language, museumData]);
 
+  if (tokenValid === null) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-[var(--gold)] border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+  if (tokenValid === false) {
+    return null;
+  }
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">

@@ -45,6 +45,8 @@ RATE_LIMITS: dict[tuple[str, str], tuple[int, int]] = {
     ("POST", r"^/vision/recognize/[^/]+$"): (10, 60),
     ("POST", r"^/vision/camera-tour/[^/]+$"): (10, 60),
     ("POST", r"^/api/session/token/[^/]+$"): (20, 60),
+    ("POST", r"^/api/session/create$"): (20, 60),
+    ("POST", r"^/api/session/validate$"): (120, 60),
     ("POST", r"^/admin/auth/login$"): (5, 900),
     ("POST", r"^/admin/auth/refresh$"): (10, 60),
     ("POST", r"^/admin/exhibits/?$"): (30, 60),
