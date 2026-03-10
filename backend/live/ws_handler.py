@@ -430,6 +430,9 @@ class GeminiLiveHandler:
                     if not self._accepting_input:
                         continue
                     self._turn_started_at = time.monotonic()
+                    # New user turn starts: always clear suppress flag so the
+                    # upcoming AI response audio is not accidentally blocked.
+                    self._suppress_audio_until_turn_complete = False
                     # Manual turn mode with realtime input boundaries.
                     await session.send_realtime_input(activity_start=types.ActivityStart())
                     logger.info("📥 start_of_turn from client → activity_start sent")
@@ -505,7 +508,9 @@ class GeminiLiveHandler:
                     text = str(message.get("text", "")).strip()
                     if not text:
                         continue
-                    await self._inject_language_reminder(session)
+                    # Always inject language reminder for text input — ensures
+                    # correct language even if user hasn't explicitly switched.
+                    await self._inject_language_always(session)
                     await session.send(input=text, end_of_turn=True)
                     logger.info("📤 Sent text_input to Gemini: %s", text[:80])
 
@@ -914,6 +919,21 @@ class GeminiLiveHandler:
             logger.info("✅ Injected language reminder: %s", lang_name)
         except Exception as e:
             logger.warning("Failed to inject language reminder: %s", e)
+        finally:
+            self._pending_language_reminder = False
+
+    async def _inject_language_always(self, session) -> None:
+        """Always inject language instruction regardless of pending flag.
+        Used for text_input to guarantee correct language even on first question."""
+        lang_name = self._language_label(self.language)
+        reminder = (
+            f"[Respond in {lang_name}. Keep the same persona and factual constraints.]"
+        )
+        try:
+            await session.send(input=reminder, end_of_turn=False)
+            logger.info("✅ Language always-inject: %s", lang_name)
+        except Exception as e:
+            logger.warning("Failed to inject language (always): %s", e)
         finally:
             self._pending_language_reminder = False
 

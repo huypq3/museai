@@ -636,7 +636,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
     const sent = sendTextMessage(text);
     if (!sent) {
-      setState(previousStateRef.current);
+      // sendTextMessage thất bại → về ready (không dùng previousStateRef vì nó là state từ lần record trước)
+      setState("ready");
       return;
     }
     const museumId =

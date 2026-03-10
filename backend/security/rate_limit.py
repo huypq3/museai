@@ -74,7 +74,9 @@ def get_real_ip(request: Request) -> str:
 async def _incr_with_window(key: str, window_seconds: int) -> int:
     if _redis_client:
         val = await _redis_client.incr(key)
-        await _redis_client.expire(key, window_seconds)
+        if val == 1:
+            # Chỉ set expire khi key mới tạo — tránh reset TTL liên tục
+            await _redis_client.expire(key, window_seconds)
         return int(val)
 
     now = time.time()
@@ -117,12 +119,28 @@ async def _ttl_seconds(key: str, window_seconds: int) -> int:
 
 async def _add_unique_with_window(key: str, value: str, window_seconds: int) -> int:
     """
-    Returns cardinality in window after adding value.
+    Returns cardinality of unique values seen within the sliding window.
+    Uses Redis hash (field=value, value=timestamp) for proper per-member expiry.
     """
     if _redis_client:
-        await _redis_client.sadd(key, value)
-        await _redis_client.expire(key, window_seconds)
-        return int(await _redis_client.scard(key))
+        now = time.time()
+        cutoff = now - window_seconds
+        pipe = _redis_client.pipeline()
+        # Store member with its timestamp
+        pipe.hset(key, value, now)
+        # Remove stale members (older than window)
+        # We do this lazily: fetch all, filter, remove expired
+        pipe.hgetall(key)
+        pipe.expire(key, window_seconds * 2)  # generous TTL on the whole key
+        results = await pipe.execute()
+        all_members: dict = results[1] or {}
+        # Count only members within the window
+        active = [k for k, ts in all_members.items() if float(ts) > cutoff]
+        # Remove expired members
+        expired = [k for k, ts in all_members.items() if float(ts) <= cutoff]
+        if expired:
+            await _redis_client.hdel(key, *expired)
+        return len(active)
 
     now = time.time()
     values = _memory_sets[key]
@@ -297,3 +315,20 @@ async def enforce_qr_block_state(ip: str) -> None:
     soft = await _get_count(f"qr_soft_block:{ip}", 300)
     if soft > 0:
         raise HTTPException(status_code=429, detail="Too many requests")
+
+
+async def clear_qr_state(ip: str) -> None:
+    """Xóa toàn bộ QR rate limit state cho IP — dùng khi dev/test hoặc admin unblock."""
+    keys = [
+        f"qr_unique_museum:{ip}",
+        f"qr_enum_strikes:{ip}",
+        f"qr_hard_block:{ip}",
+        f"qr_soft_block:{ip}",
+        f"rl:qr_scan:ip:{ip}",
+    ]
+    if _redis_client:
+        await _redis_client.delete(*keys)
+        return
+    for k in keys:
+        _memory_windows.pop(k, None)
+        _memory_sets.pop(k, None)
