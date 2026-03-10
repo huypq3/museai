@@ -35,7 +35,15 @@ ADMIN_COOKIE_SECURE = os.getenv(
     "ADMIN_AUTH_COOKIE_SECURE",
     "true" if _app_env in {"production", "prod"} else "false",
 ).lower() == "true"
-ADMIN_COOKIE_SAMESITE = os.getenv("ADMIN_AUTH_COOKIE_SAMESITE", "lax")
+ADMIN_COOKIE_SAMESITE = os.getenv(
+    "ADMIN_AUTH_COOKIE_SAMESITE",
+    "none" if _app_env in {"production", "prod"} else "lax",
+).lower()
+if ADMIN_COOKIE_SAMESITE not in {"lax", "strict", "none"}:
+    ADMIN_COOKIE_SAMESITE = "none" if _app_env in {"production", "prod"} else "lax"
+# Browsers require Secure when SameSite=None.
+if ADMIN_COOKIE_SAMESITE == "none":
+    ADMIN_COOKIE_SECURE = True
 ADMIN_COOKIE_PATH = os.getenv("ADMIN_AUTH_COOKIE_PATH", "/")
 ADMIN_COOKIE_MAX_AGE = int(os.getenv("ADMIN_AUTH_COOKIE_MAX_AGE", str(24 * 3600)))
 

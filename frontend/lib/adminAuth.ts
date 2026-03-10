@@ -34,11 +34,16 @@ export function setAdminToken(token: string) {
 }
 
 export function setAdminSession(session: AdminSession) {
-  const { token: _ignoredToken, ...safeSession } = session || {}
+  const { token, ...safeSession } = session || {}
   if (typeof window !== 'undefined') {
     localStorage.setItem('admin_session', JSON.stringify(safeSession))
-    // Do not persist auth token in localStorage; rely on HttpOnly cookie.
-    localStorage.removeItem('admin_token')
+    // Dual-mode auth: keep HttpOnly cookie as primary and Bearer token fallback
+    // for deployments where cross-site cookies may be blocked.
+    if (token) {
+      localStorage.setItem('admin_token', token)
+    } else {
+      localStorage.removeItem('admin_token')
+    }
   }
 }
 
