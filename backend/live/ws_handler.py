@@ -430,10 +430,12 @@ class GeminiLiveHandler:
                     if not self._accepting_input:
                         continue
                     self._turn_started_at = time.monotonic()
-                    # New user turn starts: always clear suppress flag so the
-                    # upcoming AI response audio is not accidentally blocked.
-                    self._suppress_audio_until_turn_complete = False
-                    # Manual turn mode with realtime input boundaries.
+                    # Do NOT reset _suppress_audio_until_turn_complete here.
+                    # The old Gemini turn may still be generating audio in-flight;
+                    # resetting suppress early lets old audio leak to the client.
+                    # The flag is cleared correctly when turn_complete of the old
+                    # turn arrives (see _send_to_client). If suppress is stuck
+                    # (e.g. old turn never completed), it will be cleared there too.
                     await session.send_realtime_input(activity_start=types.ActivityStart())
                     logger.info("📥 start_of_turn from client → activity_start sent")
 
@@ -451,7 +453,7 @@ class GeminiLiveHandler:
                         "📥 end_of_turn from client → signaling Gemini (last_audio=%dms)",
                         since_last_audio,
                     )
-                    await self._inject_language_reminder(session)
+                    await self._inject_language_always(session)
                     await session.send_realtime_input(activity_end=types.ActivityEnd())
                     logger.info("✅ end_of_turn sent (activity_end)")
 

@@ -419,9 +419,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     const root = document.documentElement;
 
     if (!showTextInput) {
-      root.style.setProperty("--keyboard-height", "0px");
-      window.scrollTo(0, 0);
-      return;
+      const timer = setTimeout(() => {
+        root.style.setProperty("--keyboard-height", "0px");
+        window.scrollTo(0, 0);
+      }, 350);
+      return () => clearTimeout(timer);
     }
 
     // Chỉ track keyboard height — KHÔNG lock body.position
@@ -496,6 +498,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     markIntroUsed();
 
     // Starting a fresh user turn => clear stale skip flag first.
+    // But if the caller (handleAskPress) already sent interrupt and set skip=true,
+    // we must restore it — otherwise old-turn WS messages won't be filtered
+    // and turn_complete of the old turn can corrupt state mid-recording.
+    const interruptFlagWasSet = skipOldTurnRef.current;
     skipOldTurnRef.current = false;
 
     // Stop local audio and skip remaining messages from the old turn.
@@ -516,6 +522,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       // AI is speaking: skip all old-turn messages until turn_complete.
       skipOldTurnRef.current = true;
       sendMessage({ type: "interrupt" });
+    } else if (interruptFlagWasSet) {
+      // Interrupt was already sent by caller (e.g. handleAskPress sent it then
+      // set state=ready before invoking us). Restore skip without double-sending
+      // interrupt — old-turn messages will still be filtered until turn_complete.
+      skipOldTurnRef.current = true;
     }
 
     // Set recording state before awaiting so stateRef can block incoming audio.
@@ -717,8 +728,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const wsNoticeText =
     wsNotice
       ? WS_NOTICE_I18N[language]?.[wsNotice.reason] ||
-        WS_NOTICE_I18N.en[wsNotice.reason] ||
-        (language === "vi" ? wsNotice.messageVi : wsNotice.messageEn)
+      WS_NOTICE_I18N.en[wsNotice.reason] ||
+      (language === "vi" ? wsNotice.messageVi : wsNotice.messageEn)
       : "";
 
   // ─── Render ───────────────────────────────────────────────────────────
@@ -948,38 +959,37 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   marginBottom: "8px",
                 }}
               >
-                {/* [FIX 2] Font style đảo ngược: user → DM Sans/normal, AI → Cormorant/italic */}
                 <p
-                  dir={msg.role === "user" ? "ltr" : undefined}
+                  dir="ltr"
                   style={{
-                  maxWidth: "82%",
-                  wordBreak: "break-word",
-                  overflowWrap: "anywhere",
-                  padding: "8px 12px",
-                  borderRadius: msg.role === "user"
-                    ? "12px 12px 2px 12px"
-                    : "12px 12px 12px 2px",
-                  background: msg.role === "assistant"
-                    ? "rgba(201, 168, 76, 0.15)"
-                    : "rgba(255, 255, 255, 0.05)",
-                  border: msg.role === "assistant"
-                    ? "1px solid rgba(201, 168, 76, 0.3)"
-                    : "1px solid rgba(255,255,255,0.08)",
-                  color: msg.role === "assistant"
-                    ? "#C9A84C"
-                    : "#F5F0E8",
-                  fontFamily: msg.role === "assistant"
-                    ? "Cormorant Garamond, serif"
-                    : "DM Sans, sans-serif",
-                  fontSize: msg.role === "assistant" ? "17px" : "15px",
-                  fontStyle: msg.role === "assistant" ? "italic" : "normal",
-                  fontWeight: msg.role === "assistant" ? 400 : 400,
-                  lineHeight: msg.role === "assistant" ? 1.7 : 1.55,
-                  margin: 0,
-                  textAlign: "left",
-                  direction: "ltr",
-                  unicodeBidi: "plaintext",
-                }}>
+                    maxWidth: "82%",
+                    wordBreak: "break-word",
+                    overflowWrap: "anywhere",
+                    padding: "8px 12px",
+                    borderRadius: msg.role === "user"
+                      ? "12px 12px 2px 12px"
+                      : "12px 12px 12px 2px",
+                    background: msg.role === "user"
+                      ? "rgba(255, 255, 255, 0.05)"
+                      : "rgba(201, 168, 76, 0.15)",
+                    border: msg.role === "user"
+                      ? "1px solid rgba(255,255,255,0.08)"
+                      : "1px solid rgba(201, 168, 76, 0.3)",
+                    color: msg.role === "user"
+                      ? "#F5F0E8"
+                      : "#C9A84C",
+                    fontFamily: msg.role === "user"
+                      ? "DM Sans, sans-serif"
+                      : "Cormorant Garamond, serif",
+                    fontSize: msg.role === "user" ? "15px" : "17px",
+                    fontStyle: msg.role === "user" ? "normal" : "italic",
+                    fontWeight: 400,
+                    lineHeight: msg.role === "user" ? 1.55 : 1.7,
+                    margin: 0,
+                    textAlign: "left",
+                    direction: "ltr",
+                    unicodeBidi: "plaintext",
+                  }}>
                   {msg.text}
                 </p>
               </div>
@@ -997,25 +1007,25 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 <p
                   dir="ltr"
                   style={{
-                  maxWidth: "82%",
-                  wordBreak: "break-word",
-                  overflowWrap: "anywhere",
-                  padding: "8px 12px",
-                  borderRadius: "12px 12px 2px 12px",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "#F5F0E8",
-                  fontFamily: "DM Sans, sans-serif",
-                  fontSize: "15px",
-                  fontStyle: "normal",
-                  fontWeight: 400,
-                  lineHeight: 1.55,
-                  margin: 0,
-                  opacity: 0.85,
-                  textAlign: "left",
-                  direction: "ltr",
-                  unicodeBidi: "plaintext",
-                }}>
+                    maxWidth: "82%",
+                    wordBreak: "break-word",
+                    overflowWrap: "anywhere",
+                    padding: "8px 12px",
+                    borderRadius: "12px 12px 2px 12px",
+                    background: "rgba(255, 255, 255, 0.05)",
+                    border: "1px solid rgba(255,255,255,0.08)",
+                    color: "#F5F0E8",
+                    fontFamily: "DM Sans, sans-serif",
+                    fontSize: "15px",
+                    fontStyle: "normal",
+                    fontWeight: 400,
+                    lineHeight: 1.55,
+                    margin: 0,
+                    opacity: 0.85,
+                    textAlign: "left",
+                    direction: "ltr",
+                    unicodeBidi: "plaintext",
+                  }}>
                   {currentUserText}
                 </p>
               </div>
@@ -1136,203 +1146,203 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           </button>
         </div>
 
-          {isSpeakingState ? (
-            <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
-              {/* Stop — flex:1 */}
+        {isSpeakingState ? (
+          <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Stop — flex:1 */}
+            <button
+              onClick={handleStop}
+              style={{
+                flex: 1,
+                height: "48px",
+                minWidth: 0,
+                background: "transparent",
+                border: "1.5px solid #666",
+                borderRadius: "12px",
+                color: "#F5F0E8",
+                fontSize: "15px",
+                fontWeight: 600,
+                fontFamily: "DM Sans, sans-serif",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "0 10px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              ⏹ {t(language, "voice.stop")}
+            </button>
+            {/* Tap to ask — flex:1 bằng Stop */}
+            <button
+              onClick={handleAskPress}
+              style={{
+                flex: 1,
+                height: "48px",
+                minWidth: 0,
+                background: "#C9A84C",
+                border: "none",
+                borderRadius: "12px",
+                color: "#0A0A0A",
+                fontSize: "15px",
+                fontWeight: 600,
+                fontFamily: "DM Sans, sans-serif",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "6px",
+                padding: "0 10px",
+                whiteSpace: "nowrap",
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }}
+            >
+              {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
+            </button>
+            {/* Icon chuyển mode — tách riêng, click thẳng vào mode đích */}
+            <button
+              onClick={inputMode === "voice" ? switchToText : switchToVoice}
+              aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+              style={{
+                width: "44px",
+                height: "44px",
+                flexShrink: 0,
+                borderRadius: "50%",
+                background: "rgba(255,255,255,0.06)",
+                border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
+                color: inputMode === "text" ? "#C9A84C" : "#888",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "18px",
+                cursor: "pointer",
+                transition: "all 0.2s",
+              }}
+            >
+              {inputMode === "voice" ? "⌨️" : "🎤"}
+            </button>
+          </div>
+        ) : state === "paused" ? (
+          // [FIX 7] paused: chỉ Resume + Ask, ẩn toggle mode
+          <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={handleResume}
+              style={{
+                flex: 1, height: "48px", minWidth: 0,
+                background: "transparent", border: "1.5px solid #666",
+                borderRadius: "12px", color: "#F5F0E8",
+                fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
+                cursor: "pointer", display: "flex", alignItems: "center",
+                justifyContent: "center", gap: "6px", padding: "0 10px",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
+              ▶ {t(language, "voice.resume")}
+            </button>
+            <button
+              onClick={handleAskPress}
+              style={{
+                flex: 1, height: "48px", minWidth: 0,
+                background: "#C9A84C", border: "none",
+                borderRadius: "12px", color: "#0A0A0A",
+                fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
+                cursor: "pointer", display: "flex", alignItems: "center",
+                justifyContent: "center", gap: "6px", padding: "0 10px",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
+              {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
+            </button>
+          </div>
+        ) : isRecordingState ? (
+          <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 10 }}>
+            <button
+              onClick={handleMicPress}
+              style={{
+                flex: 1,
+                height: "48px",
+                borderRadius: "12px",
+                border: "none",
+                cursor: "pointer",
+                background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
+                color: "#0A0A0A",
+                fontFamily: "DM Sans, sans-serif",
+                fontSize: "15px",
+                fontWeight: "600",
+                transition: "all 0.2s ease",
+                boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
+              }}
+            >
+              🔴 {t(language, "voice.recording")}
+            </button>
+            <button
+              onClick={handleCancelRecording}
+              style={{
+                height: "48px",
+                padding: "0 16px",
+                borderRadius: "12px",
+                border: "1px solid rgba(245,240,232,0.28)",
+                background: "transparent",
+                color: "#F5F0E8",
+                fontFamily: "DM Sans, sans-serif",
+                fontSize: "14px",
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              ✕ {t(language, "voice.cancel")}
+            </button>
+          </div>
+        ) : (
+          <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
+            <button
+              onClick={handleAskPress}
+              disabled={state === "connecting" || isProcessingState}
+              style={{
+                flex: 1, height: "48px", minWidth: 0,
+                borderRadius: "12px", border: "none",
+                cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
+                background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
+                color: "#0A0A0A", fontFamily: "DM Sans, sans-serif",
+                fontSize: "15px", fontWeight: "600",
+                transition: "all 0.2s ease",
+                opacity: state === "connecting" || isProcessingState ? 0.7 : 1,
+                boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                gap: "6px", padding: "0 10px",
+                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
+              {isProcessingState
+                ? `⏳ ${t(language, "voice.processing")}`
+                : inputMode === "text"
+                  ? `⌨️ ${t(language, "voice.ask")}`
+                  : showIntroButton && state === "ready"
+                    ? `🎵 ${t(language, "voice.listen_guide")}`
+                    : `🎙 ${t(language, "voice.ask")}`}
+            </button>
+            {/* Toggle ⌨️/🎤 — hiện khi ready và đã qua intro */}
+            {state === "ready" && !showIntroButton && !isProcessingState && (
               <button
-                onClick={handleStop}
+                onClick={() => inputMode === "voice" ? switchToText() : switchToVoice()}
                 style={{
-                  flex: 1,
-                  height: "48px",
-                  minWidth: 0,
-                  background: "transparent",
-                  border: "1.5px solid #666",
-                  borderRadius: "12px",
-                  color: "#F5F0E8",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  fontFamily: "DM Sans, sans-serif",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  padding: "0 10px",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
+                  width: "40px", height: "48px", flexShrink: 0,
+                  borderRadius: "12px", border: "1px solid rgba(255,255,255,0.15)",
+                  background: inputMode === "text" ? "rgba(201,168,76,0.15)" : "transparent",
+                  color: inputMode === "text" ? "#C9A84C" : "#666",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer", fontSize: "16px", transition: "all 0.2s",
                 }}
-              >
-                ⏹ {t(language, "voice.stop")}
-              </button>
-              {/* Tap to ask — flex:1 bằng Stop */}
-              <button
-                onClick={handleAskPress}
-                style={{
-                  flex: 1,
-                  height: "48px",
-                  minWidth: 0,
-                  background: "#C9A84C",
-                  border: "none",
-                  borderRadius: "12px",
-                  color: "#0A0A0A",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  fontFamily: "DM Sans, sans-serif",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "6px",
-                  padding: "0 10px",
-                  whiteSpace: "nowrap",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                }}
-              >
-                {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
-              </button>
-              {/* Icon chuyển mode — tách riêng, click thẳng vào mode đích */}
-              <button
-                onClick={inputMode === "voice" ? switchToText : switchToVoice}
                 aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
-                style={{
-                  width: "44px",
-                  height: "44px",
-                  flexShrink: 0,
-                  borderRadius: "50%",
-                  background: "rgba(255,255,255,0.06)",
-                  border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
-                  color: inputMode === "text" ? "#C9A84C" : "#888",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "18px",
-                  cursor: "pointer",
-                  transition: "all 0.2s",
-                }}
               >
                 {inputMode === "voice" ? "⌨️" : "🎤"}
               </button>
-            </div>
-          ) : state === "paused" ? (
-            // [FIX 7] paused: chỉ Resume + Ask, ẩn toggle mode
-            <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                onClick={handleResume}
-                style={{
-                  flex: 1, height: "48px", minWidth: 0,
-                  background: "transparent", border: "1.5px solid #666",
-                  borderRadius: "12px", color: "#F5F0E8",
-                  fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
-                  cursor: "pointer", display: "flex", alignItems: "center",
-                  justifyContent: "center", gap: "6px", padding: "0 10px",
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                }}
-              >
-                ▶ {t(language, "voice.resume")}
-              </button>
-              <button
-                onClick={handleAskPress}
-                style={{
-                  flex: 1, height: "48px", minWidth: 0,
-                  background: "#C9A84C", border: "none",
-                  borderRadius: "12px", color: "#0A0A0A",
-                  fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
-                  cursor: "pointer", display: "flex", alignItems: "center",
-                  justifyContent: "center", gap: "6px", padding: "0 10px",
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                }}
-              >
-                {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
-              </button>
-            </div>
-          ) : isRecordingState ? (
-            <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 10 }}>
-              <button
-                onClick={handleMicPress}
-                style={{
-                  flex: 1,
-                  height: "48px",
-                  borderRadius: "12px",
-                  border: "none",
-                  cursor: "pointer",
-                  background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
-                  color: "#0A0A0A",
-                  fontFamily: "DM Sans, sans-serif",
-                  fontSize: "15px",
-                  fontWeight: "600",
-                  transition: "all 0.2s ease",
-                  boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
-                }}
-              >
-                🔴 {t(language, "voice.recording")}
-              </button>
-              <button
-                onClick={handleCancelRecording}
-                style={{
-                  height: "48px",
-                  padding: "0 16px",
-                  borderRadius: "12px",
-                  border: "1px solid rgba(245,240,232,0.28)",
-                  background: "transparent",
-                  color: "#F5F0E8",
-                  fontFamily: "DM Sans, sans-serif",
-                  fontSize: "14px",
-                  fontWeight: 600,
-                  cursor: "pointer",
-                }}
-              >
-                ✕ {t(language, "voice.cancel")}
-              </button>
-            </div>
-          ) : (
-            <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
-              <button
-                onClick={handleAskPress}
-                disabled={state === "connecting" || isProcessingState}
-                style={{
-                  flex: 1, height: "48px", minWidth: 0,
-                  borderRadius: "12px", border: "none",
-                  cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
-                  background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
-                  color: "#0A0A0A", fontFamily: "DM Sans, sans-serif",
-                  fontSize: "15px", fontWeight: "600",
-                  transition: "all 0.2s ease",
-                  opacity: state === "connecting" || isProcessingState ? 0.7 : 1,
-                  boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  gap: "6px", padding: "0 10px",
-                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-                }}
-              >
-                {isProcessingState
-                  ? `⏳ ${t(language, "voice.processing")}`
-                  : inputMode === "text"
-                  ? `⌨️ ${t(language, "voice.ask")}`
-                  : showIntroButton && state === "ready"
-                  ? `🎵 ${t(language, "voice.listen_guide")}`
-                  : `🎙 ${t(language, "voice.ask")}`}
-              </button>
-              {/* Toggle ⌨️/🎤 — hiện khi ready và đã qua intro */}
-              {state === "ready" && !showIntroButton && !isProcessingState && (
-                <button
-                  onClick={() => inputMode === "voice" ? switchToText() : switchToVoice()}
-                  style={{
-                    width: "40px", height: "48px", flexShrink: 0,
-                    borderRadius: "12px", border: "1px solid rgba(255,255,255,0.15)",
-                    background: inputMode === "text" ? "rgba(201,168,76,0.15)" : "transparent",
-                    color: inputMode === "text" ? "#C9A84C" : "#666",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    cursor: "pointer", fontSize: "16px", transition: "all 0.2s",
-                  }}
-                  aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
-                >
-                  {inputMode === "voice" ? "⌨️" : "🎤"}
-                </button>
-              )}
-            </div>
-          )}
+            )}
+          </div>
+        )}
         {/* Text input panel — fixed overlay */}
         {showTextInput && (
           <div

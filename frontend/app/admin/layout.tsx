@@ -37,6 +37,7 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
             { icon: '🏛️', label: t('nav_museums'), href: '/admin/museums', activePrefixes: ['/admin/museums'] },
             { icon: '👥', label: t('nav_users'), href: '/admin/users', activePrefixes: ['/admin/users'] },
             { icon: '📊', label: t('nav_analytics'), href: '/admin/analytics', activePrefixes: ['/admin/analytics'] },
+            { icon: '📋', label: t('nav_logs'), href: '/admin/logs', activePrefixes: ['/admin/logs'] },
             { icon: '⚙️', label: t('nav_settings'), href: '/admin/settings', activePrefixes: ['/admin/settings'] },
           ]
         : [

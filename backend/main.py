@@ -47,6 +47,7 @@ from security.request_validator import (
     SecurityHeadersMiddleware,
     is_suspicious_request,
 )
+from middleware.request_log import RequestLogMiddleware
 from security.budget_guard import budget_guard
 from auth.ephemeral import create_ephemeral_token, verify_ephemeral_token
 
@@ -58,6 +59,7 @@ from api import (
     admin_upload,
     admin_qr,
     admin_analytics,
+    admin_logs,
     admin_users,
     public_analytics,
     admin_settings,
@@ -148,6 +150,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Request log middleware should wrap full stack to capture final status codes.
+app.add_middleware(RequestLogMiddleware)
 
 APP_ENV = os.getenv("APP_ENV", os.getenv("ENV", "development")).lower()
 ENFORCE_HTTPS = os.getenv("ENFORCE_HTTPS", "false").lower() == "true" or APP_ENV in {"production", "prod"}
@@ -238,6 +242,7 @@ app.include_router(admin_exhibits.router)
 app.include_router(admin_upload.router)
 app.include_router(admin_qr.router)
 app.include_router(admin_analytics.router)
+app.include_router(admin_logs.router)
 app.include_router(admin_users.router)
 app.include_router(public_analytics.router)
 app.include_router(admin_settings.router)
