@@ -581,6 +581,25 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     });
   }, []);
 
+  // [FIX 5] Handler duy nhất cho icon ⌨️/🎤 mọi state
+  const handleToggleInputMode = useCallback(() => {
+    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") {
+      return;
+    }
+    if (stateRef.current === "ai_speaking") {
+      stopPlayback();
+      waitingForAudioRef.current = false;
+      skipOldTurnRef.current = true;
+      sendMessage({ type: "interrupt" });
+      setState("paused");
+      setInputMode("text");
+      setShowTextInput(true);
+      window.setTimeout(() => textInputRef.current?.focus(), 100);
+      return;
+    }
+    toggleInputMode();
+  }, [toggleInputMode, stopPlayback, sendMessage]);
+
   const handleSendText = useCallback(() => {
     const text = textInput.trim();
     if (!text) return;
@@ -636,24 +655,31 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     await handleStartRecording();
   }, [showIntroButton, state, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
 
+  // [FIX 4] Ask khi ai_speaking → interrupt + auto-record ngay, không dừng ở ready
   const handleAskPress = useCallback(async () => {
-    if (inputMode === "voice") {
-      await handleMicPress();
+    if (inputMode === "text") {
+      if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") {
+        return;
+      }
+      if (stateRef.current === "ai_speaking") {
+        stopPlayback();
+        waitingForAudioRef.current = false;
+        skipOldTurnRef.current = true;
+        sendMessage({ type: "interrupt" });
+        setState("paused");
+      }
+      setShowTextInput(true);
+      window.setTimeout(() => textInputRef.current?.focus(), 100);
       return;
     }
-    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") {
-      return;
-    }
+    // inputMode === "voice": Ask = interrupt nếu đang ai_speaking rồi record ngay
     if (stateRef.current === "ai_speaking") {
-      stopPlayback();
-      waitingForAudioRef.current = false;
-      skipOldTurnRef.current = true;
-      sendMessage({ type: "interrupt" });
-      setState("paused");
+      // handleStartRecording đã xử lý interrupt + start_of_turn nội bộ
+      await handleStartRecording();
+      return;
     }
-    setShowTextInput(true);
-    window.setTimeout(() => textInputRef.current?.focus(), 100);
-  }, [inputMode, handleMicPress, stopPlayback, sendMessage]);
+    await handleMicPress();
+  }, [inputMode, handleMicPress, handleStartRecording, stopPlayback, sendMessage]);
 
   const isRecordingState = state === "recording";
   const isSpeakingState = state === "ai_speaking";
@@ -894,12 +920,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   marginBottom: "8px",
                 }}
               >
+                {/* [FIX 2] Font style đảo ngược: user → DM Sans/normal, AI → Cormorant/italic */}
                 <p
                   dir={msg.role === "user" ? "ltr" : undefined}
                   style={{
                   maxWidth: "82%",
                   wordBreak: "break-word",
-                  overflowWrap: "break-word",
+                  overflowWrap: "anywhere",
                   padding: "8px 12px",
                   borderRadius: msg.role === "user"
                     ? "12px 12px 2px 12px"
@@ -913,10 +940,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   color: msg.role === "assistant"
                     ? "#C9A84C"
                     : "#F5F0E8",
-                  fontFamily: "Cormorant Garamond, serif",
-                  fontSize: "17px",
-                  fontStyle: "italic",
-                  lineHeight: 1.7,
+                  fontFamily: msg.role === "assistant"
+                    ? "Cormorant Garamond, serif"
+                    : "DM Sans, sans-serif",
+                  fontSize: msg.role === "assistant" ? "17px" : "15px",
+                  fontStyle: msg.role === "assistant" ? "italic" : "normal",
+                  fontWeight: msg.role === "assistant" ? 400 : 400,
+                  lineHeight: msg.role === "assistant" ? 1.7 : 1.55,
                   margin: 0,
                   textAlign: "left",
                   direction: "ltr",
@@ -927,10 +957,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               </div>
             ))}
             {/* User đang nói/gõ — turn hiện tại */}
+            {/* [FIX 1] justifyContent đồng bộ flex-end, style khớp history user bubble */}
             {currentUserText && (
               <div style={{
                 display: "flex",
-                justifyContent: "flex-start",
+                justifyContent: "flex-end",
                 width: "100%",
                 flexShrink: 0,
                 marginBottom: "8px",
@@ -940,16 +971,17 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   style={{
                   maxWidth: "82%",
                   wordBreak: "break-word",
-                  overflowWrap: "break-word",
+                  overflowWrap: "anywhere",
                   padding: "8px 12px",
                   borderRadius: "12px 12px 2px 12px",
-                  background: "rgba(201, 168, 76, 0.1)",
-                  border: "1px solid rgba(201, 168, 76, 0.2)",
-                  color: "#C9A84C",
-                  fontFamily: "Cormorant Garamond, serif",
-                  fontSize: "17px",
-                  fontStyle: "italic",
-                  lineHeight: 1.7,
+                  background: "rgba(255, 255, 255, 0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#F5F0E8",
+                  fontFamily: "DM Sans, sans-serif",
+                  fontSize: "15px",
+                  fontStyle: "normal",
+                  fontWeight: 400,
+                  lineHeight: 1.55,
                   margin: 0,
                   opacity: 0.85,
                   textAlign: "left",
@@ -961,6 +993,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               </div>
             )}
             {/* AI đang stream — turn hiện tại */}
+            {/* [FIX 3] border-radius đúng cho AI (trái), font Cormorant serif italic */}
             {currentAIText && (
               <div style={{
                 display: "flex",
@@ -972,9 +1005,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 <p style={{
                   maxWidth: "82%",
                   wordBreak: "break-word",
-                  overflowWrap: "break-word",
+                  overflowWrap: "anywhere",
                   padding: "8px 12px",
-                  borderRadius: "12px 12px 2px 12px",
+                  borderRadius: "12px 12px 12px 2px",
                   background: "rgba(201, 168, 76, 0.1)",
                   border: "1px solid rgba(201, 168, 76, 0.2)",
                   color: "#C9A84C",
@@ -1047,6 +1080,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           <button
             onClick={handleMicPress}
             disabled={isDisabledMic}
+            title={isDisabledMic ? (state === "connecting" ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
               width: "64px",
               height: "64px",
@@ -1064,10 +1098,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               boxShadow: isRecordingState
                 ? "0 10px 30px rgba(239,68,68,0.35)"
                 : "0 10px 30px rgba(246,196,83,0.45)",
-              opacity: isDisabledMic ? 0.82 : 1,
+              opacity: isDisabledMic ? 0.5 : 1,
             }}
           >
-            {isRecordingState ? "" : "🎤"}
+            {/* [FIX 9] Spinner khi disabled, mic khi active */}
+            {isDisabledMic
+              ? <span style={{ fontSize: "20px", animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span>
+              : isRecordingState ? "" : "🎤"}
           </button>
         </div>
 
@@ -1108,26 +1145,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 >
                   {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
                 </button>
+                {/* [FIX 6] Dùng handleToggleInputMode thay handler inline */}
                 <button
-                  onClick={() => {
-                    setInputMode("text");
-                    if (
-                      stateRef.current === "connecting" ||
-                      stateRef.current === "processing" ||
-                      stateRef.current === "recording"
-                    ) {
-                      return;
-                    }
-                    if (stateRef.current === "ai_speaking") {
-                      stopPlayback();
-                      waitingForAudioRef.current = false;
-                      skipOldTurnRef.current = true;
-                      sendMessage({ type: "interrupt" });
-                      setState("paused");
-                    }
-                    setShowTextInput(true);
-                    window.setTimeout(() => textInputRef.current?.focus(), 100);
-                  }}
+                  onClick={handleToggleInputMode}
                   style={{
                     width: "32px",
                     height: "32px",
@@ -1150,6 +1170,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               </div>
             </div>
           ) : state === "paused" ? (
+            // [FIX 7] paused: chỉ Resume + Ask, ẩn toggle mode
             <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 12 }}>
               <button
                 onClick={handleResume}
@@ -1168,46 +1189,23 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               >
                 ▶ {t(language, "voice.resume")}
               </button>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1 }}>
-                <button
-                  onClick={handleAskPress}
-                  style={{
-                    flex: 1,
-                    height: "56px",
-                    background: "#C9A84C",
-                    border: "none",
-                    borderRadius: "12px",
-                    color: "#0A0A0A",
-                    fontSize: "16px",
-                    fontWeight: 600,
-                    fontFamily: "DM Sans, sans-serif",
-                    cursor: "pointer",
-                  }}
-                >
-                  {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
-                </button>
-                <button
-                  onClick={toggleInputMode}
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "50%",
-                    background: "transparent",
-                    border: `1px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
-                    color: inputMode === "text" ? "#C9A84C" : "#666",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    fontSize: "14px",
-                    transition: "all 0.2s",
-                  }}
-                  aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
-                >
-                  {inputMode === "voice" ? "⌨️" : "🎤"}
-                </button>
-              </div>
+              <button
+                onClick={handleAskPress}
+                style={{
+                  flex: 1,
+                  height: "56px",
+                  background: "#C9A84C",
+                  border: "none",
+                  borderRadius: "12px",
+                  color: "#0A0A0A",
+                  fontSize: "16px",
+                  fontWeight: 600,
+                  fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer",
+                }}
+              >
+                {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
+              </button>
             </div>
           ) : isRecordingState ? (
             <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 10 }}>
@@ -1278,8 +1276,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   : `🎙 ${t(language, "voice.ask")}`}
               </button>
               {state === "ready" && !showIntroButton && (
+                // [FIX 8] Dùng handleToggleInputMode thống nhất
                 <button
-                  onClick={toggleInputMode}
+                  onClick={handleToggleInputMode}
                   style={{
                     width: "32px",
                     height: "32px",
@@ -1404,6 +1403,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           @keyframes slideUp {
             from { transform: translateY(100%); opacity: 0; }
             to { transform: translateY(0); opacity: 1; }
+          }
+          @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
           }
         `}</style>
       </div>
