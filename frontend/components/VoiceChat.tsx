@@ -194,19 +194,14 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
 
-  const { isConnected, messages: wsMessages, sendMessage, disconnect } = useWebSocket(exhibitId, language);
-  // useWebSocket không export sendTextMessage/notice/reconnectNow — shim lại
-  const sendTextMessage = useCallback((text: string): boolean => {
-    try {
-      sendMessage({ type: "text_input", text });
-      return true;
-    } catch {
-      return false;
-    }
-  }, [sendMessage]);
-  const reconnectNow = disconnect;
-  type WSNotice = { reason: string; messageVi: string; messageEn: string; reconnectAllowed: boolean };
-  const wsNotice = null as WSNotice | null;
+  const {
+    isConnected,
+    messages: wsMessages,
+    notice: wsNotice,
+    sendMessage,
+    sendTextMessage,
+    reconnectNow,
+  } = useWebSocket(exhibitId, language);
   const { start, stop: stopRecording } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
   const sentences = messages;
@@ -287,11 +282,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
       // ── Backend ready ──
       if (msg.type === "ready" || msg.type === "session_ready") {
-        // If we reconnected while skipping old turn, clear it now.
-        if (skipOldTurnRef.current) {
-          console.log("🔄 ready received after reconnect → clear skipOldTurn");
-          skipOldTurnRef.current = false;
-        }
         continue;
       }
 
@@ -370,9 +360,15 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           processingTimeoutRef.current = null;
         }
 
-        // Avoid jumping to ready when Gemini ends turn without output.
+        // If Gemini ended without output, never stay stuck in processing/thinking.
         if (!hasAiOutputThisTurnRef.current) {
-          console.warn("⚠️ turn_complete with no AI output → keep current state");
+          console.warn("⚠️ turn_complete with no AI output → fallback to ready");
+          if (stateRef.current !== "recording") {
+            waitingForAudioRef.current = false;
+            pendingUserTextRef.current = "";
+            setCurrentUserText("");
+            setState("ready");
+          }
           continue;
         }
 
@@ -524,6 +520,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     // Set recording state before awaiting so stateRef can block incoming audio.
     previousStateRef.current = stateRef.current === "paused" ? "paused" : "ready";
     setState("recording");
+    sendMessage({ type: "set_language", language });
     const started = sendMessage({ type: "start_of_turn" });
     if (!started) {
       console.warn("⚠️ start_of_turn not sent because websocket is not open");
@@ -543,7 +540,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         },
       }
     );
-  }, [isConnected, stopPlayback, sendMessage, start, unlockAndFlush, markIntroUsed, stopAndSendTurn, currentAIText]);
+  }, [isConnected, stopPlayback, sendMessage, start, unlockAndFlush, markIntroUsed, stopAndSendTurn, currentAIText, language]);
 
   const handleStopRecording = useCallback(() => {
     stopAndSendTurn("manual");
@@ -634,6 +631,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setCurrentAIText("");
     setCurrentUserText(text);
     setState("processing");
+    sendMessage({ type: "set_language", language });
 
     const sent = sendTextMessage(text);
     if (!sent) {
@@ -643,7 +641,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     const museumId =
       typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
     trackEvent("question_asked", museumId, exhibitId, { reason: "text" });
-  }, [textInput, markIntroUsed, sendTextMessage, exhibitId]);
+  }, [textInput, markIntroUsed, sendTextMessage, sendMessage, language, exhibitId]);
 
   const handleCancelRecording = useCallback(() => {
     stopRecording();
@@ -1240,20 +1238,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               >
                 {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
               </button>
-              <button
-                onClick={inputMode === "voice" ? switchToText : switchToVoice}
-                aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
-                style={{
-                  width: "44px", height: "44px", flexShrink: 0,
-                  borderRadius: "50%", background: "rgba(255,255,255,0.06)",
-                  border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
-                  color: inputMode === "text" ? "#C9A84C" : "#888",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontSize: "18px", cursor: "pointer", transition: "all 0.2s",
-                }}
-              >
-                {inputMode === "voice" ? "⌨️" : "🎤"}
-              </button>
             </div>
           ) : isRecordingState ? (
             <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 10 }}>
@@ -1322,23 +1306,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   ? `🎵 ${t(language, "voice.listen_guide")}`
                   : `🎙 ${t(language, "voice.ask")}`}
               </button>
-              {/* Icon toggle luôn hiển thị ở ready — bấm thẳng vào mode đích */}
-              {state === "ready" && !isProcessingState && (
-                <button
-                  onClick={inputMode === "voice" ? switchToText : switchToVoice}
-                  aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
-                  style={{
-                    width: "44px", height: "44px", flexShrink: 0,
-                    borderRadius: "50%", background: "rgba(255,255,255,0.06)",
-                    border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
-                    color: inputMode === "text" ? "#C9A84C" : "#888",
-                    display: "flex", alignItems: "center", justifyContent: "center",
-                    fontSize: "18px", cursor: "pointer", transition: "all 0.2s",
-                  }}
-                >
-                  {inputMode === "voice" ? "⌨️" : "🎤"}
-                </button>
-              )}
             </div>
           )}
         {/* Text input panel — fixed overlay, không đẩy layout */}
