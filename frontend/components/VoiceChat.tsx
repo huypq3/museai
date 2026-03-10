@@ -642,13 +642,30 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     const text = textInput.trim();
     if (!text) return;
 
+    // blur trước để iOS dismiss keyboard trước khi body unlock
+    textInputRef.current?.blur();
     setShowTextInput(false);
     setTextInput("");
-    setInputMode("voice"); // reset về voice sau khi gửi để tránh overlap transcript
+    setInputMode("voice");
     markIntroUsed();
+
+    // Lưu transcript AI đang hiển thị vào messages TRƯỚC khi xoá
+    // (tránh mất transcript thuyết minh trước đó)
+    const existingAIText = pendingAITextRef.current;
+    const existingUserText = pendingUserTextRef.current;
+    if (existingAIText || existingUserText) {
+      setMessages((prev) => {
+        const next = [...prev];
+        if (existingUserText) next.push({ role: "user", text: existingUserText, timestamp: new Date() });
+        if (existingAIText) next.push({ role: "assistant", text: existingAIText, timestamp: new Date() });
+        return next;
+      });
+    }
+
     hasAiOutputThisTurnRef.current = false;
     pendingAITextRef.current = "";
     pendingUserTextRef.current = text;
+    setCurrentAIText("");
     setCurrentUserText(text);
     setState("processing");
 
