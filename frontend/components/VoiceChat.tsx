@@ -569,7 +569,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   const toggleInputMode = useCallback(() => {
     if (stateRef.current === "ai_speaking") return;
-    setInputMode((prev) => (prev === "voice" ? "text" : "voice"));
+    setInputMode((prev) => {
+      const next = prev === "voice" ? "text" : "voice";
+      if (next === "text") {
+        setShowTextInput(true);
+        window.setTimeout(() => textInputRef.current?.focus(), 100);
+      } else {
+        setShowTextInput(false);
+      }
+      return next;
+    });
   }, []);
 
   const handleSendText = useCallback(() => {
@@ -885,7 +894,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   marginBottom: "8px",
                 }}
               >
-                <p style={{
+                <p
+                  dir={msg.role === "user" ? "ltr" : undefined}
+                  style={{
                   maxWidth: "82%",
                   wordBreak: "break-word",
                   overflowWrap: "break-word",
@@ -909,6 +920,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   margin: 0,
                   textAlign: "left",
                   direction: "ltr",
+                  unicodeBidi: "plaintext",
                 }}>
                   {msg.text}
                 </p>
@@ -918,20 +930,22 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             {currentUserText && (
               <div style={{
                 display: "flex",
-                justifyContent: "flex-end",
+                justifyContent: "flex-start",
                 width: "100%",
                 flexShrink: 0,
                 marginBottom: "8px",
               }}>
-                <p style={{
+                <p
+                  dir="ltr"
+                  style={{
                   maxWidth: "82%",
                   wordBreak: "break-word",
                   overflowWrap: "break-word",
                   padding: "8px 12px",
-                  borderRadius: "12px 12px 12px 2px",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "#F5F0E8",
+                  borderRadius: "12px 12px 2px 12px",
+                  background: "rgba(201, 168, 76, 0.1)",
+                  border: "1px solid rgba(201, 168, 76, 0.2)",
+                  color: "#C9A84C",
                   fontFamily: "Cormorant Garamond, serif",
                   fontSize: "17px",
                   fontStyle: "italic",
@@ -940,6 +954,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   opacity: 0.85,
                   textAlign: "left",
                   direction: "ltr",
+                  unicodeBidi: "plaintext",
                 }}>
                   {currentUserText}
                 </p>
@@ -1249,10 +1264,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         {showTextInput && (
           <div
             style={{
-              position: "fixed",
-              bottom: "var(--keyboard-height, 0px)",
-              left: 0,
-              right: 0,
+              position: "relative",
+              width: "100%",
+              maxWidth: "680px",
               background: "#111",
               borderTop: "1px solid #333",
               padding: "12px 16px",
@@ -1260,9 +1274,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               display: "flex",
               alignItems: "center",
               gap: "10px",
+              marginTop: "8px",
               animation: "slideUp 0.2s ease-out",
               zIndex: 100,
-              transition: "bottom 0.2s ease",
             }}
           >
             <input
