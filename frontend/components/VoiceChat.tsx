@@ -193,6 +193,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
+  const keyboardResetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keyboardResetRafRef = useRef<number | null>(null);
 
   const {
     isConnected,
@@ -414,24 +416,70 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     };
   }, []);
 
+  const clearKeyboardLayoutState = useCallback(() => {
+    if (typeof window === "undefined") return;
+
+    const root = document.documentElement;
+    const body = document.body;
+    root.style.removeProperty("--keyboard-height");
+
+    // Defensive cleanup: if iOS Safari left stale body lock styles, clear them.
+    body.style.removeProperty("top");
+    body.style.removeProperty("left");
+    body.style.removeProperty("right");
+    body.style.removeProperty("position");
+    body.style.removeProperty("width");
+    body.style.removeProperty("overflow");
+
+    const resetScroll = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+
+    // iOS keyboard close animation can race with JS; reset across frames.
+    resetScroll();
+    if (keyboardResetRafRef.current !== null) {
+      cancelAnimationFrame(keyboardResetRafRef.current);
+      keyboardResetRafRef.current = null;
+    }
+    keyboardResetRafRef.current = requestAnimationFrame(() => {
+      resetScroll();
+      keyboardResetRafRef.current = requestAnimationFrame(() => {
+        resetScroll();
+        keyboardResetRafRef.current = null;
+      });
+    });
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
     const root = document.documentElement;
 
+    const clearPendingKeyboardReset = () => {
+      if (keyboardResetTimerRef.current) {
+        clearTimeout(keyboardResetTimerRef.current);
+        keyboardResetTimerRef.current = null;
+      }
+      if (keyboardResetRafRef.current !== null) {
+        cancelAnimationFrame(keyboardResetRafRef.current);
+        keyboardResetRafRef.current = null;
+      }
+    };
+
     if (!showTextInput) {
-      const timer = setTimeout(() => {
-        root.style.setProperty("--keyboard-height", "0px");
-        window.scrollTo(0, 0);
+      clearPendingKeyboardReset();
+      keyboardResetTimerRef.current = setTimeout(() => {
+        clearKeyboardLayoutState();
       }, 350);
-      return () => clearTimeout(timer);
+      return () => clearPendingKeyboardReset();
     }
 
-    // Chỉ track keyboard height — KHÔNG lock body.position
-    // body.position:fixed gây layout shift không phục hồi được trên iOS Safari
+    clearPendingKeyboardReset();
     const updateKeyboardHeight = () => {
       const viewport = window.visualViewport;
       if (!viewport) return;
-      const kh = Math.max(0, window.innerHeight - viewport.height);
+      const kh = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
       root.style.setProperty("--keyboard-height", `${kh}px`);
     };
 
@@ -441,9 +489,35 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     return () => {
       window.visualViewport?.removeEventListener("resize", updateKeyboardHeight);
       window.visualViewport?.removeEventListener("scroll", updateKeyboardHeight);
-      root.style.setProperty("--keyboard-height", "0px");
+      root.style.removeProperty("--keyboard-height");
+      clearPendingKeyboardReset();
     };
-  }, [showTextInput]);
+  }, [showTextInput, clearKeyboardLayoutState]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted || !showTextInput) {
+        clearKeyboardLayoutState();
+      }
+    };
+    const handlePageHide = () => {
+      clearKeyboardLayoutState();
+    };
+
+    // Reduce Safari scroll restoration side effects after keyboard interactions.
+    const previousRestoration = window.history.scrollRestoration;
+    window.history.scrollRestoration = "manual";
+    window.addEventListener("pageshow", handlePageShow);
+    window.addEventListener("pagehide", handlePageHide);
+
+    return () => {
+      window.removeEventListener("pageshow", handlePageShow);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.history.scrollRestoration = previousRestoration;
+    };
+  }, [showTextInput, clearKeyboardLayoutState]);
 
   const stopAndSendTurn = useCallback((reason: "manual" | "silence" | "no_speech") => {
     if (stateRef.current !== "recording") return;
