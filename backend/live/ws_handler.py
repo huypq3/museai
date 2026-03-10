@@ -126,6 +126,7 @@ class GeminiLiveHandler:
         self._audio_window_bytes = 0
         self._turn_started_at: float | None = None
         self._pending_language_reminder = False
+        self._suppress_audio_until_turn_complete = False
         try:
             self._genai_version = pkg_version("google-genai")
         except PackageNotFoundError:
@@ -463,9 +464,20 @@ class GeminiLiveHandler:
                     logger.info("📤 Sent to Gemini: %s", greeting[:80])
 
                 elif msg_type == "interrupt":
-                    # Client stopped local playback; no message is sent to Gemini.
-                    # Gemini completes the current turn naturally.
-                    logger.info("📥 interrupt from client — client stopped audio, waiting for next turn")
+                    # Client stopped playback mid-turn.
+                    # Suppress remaining audio chunks of the current Gemini turn.
+                    self._suppress_audio_until_turn_complete = True
+                    logger.info("📥 interrupt from client — suppressing current turn audio until turn_complete")
+
+                elif msg_type == "resume_greeting":
+                    # Resume after paused/stop by asking Gemini to continue briefly.
+                    self._suppress_audio_until_turn_complete = False
+                    lang_name = self._language_label(self.language)
+                    resume_prompt = (
+                        f"Continue your previous explanation in {lang_name} in 1-2 concise sentences."
+                    )
+                    await session.send(input=resume_prompt, end_of_turn=True)
+                    logger.info("📤 Sent resume prompt to Gemini")
 
                 elif msg_type == "text":
                     if not self._accepting_input:
@@ -542,6 +554,9 @@ class GeminiLiveHandler:
 
                         # Audio chunk
                         if response.data:
+                            if self._suppress_audio_until_turn_complete:
+                                logger.debug("🔇 Suppressed audio chunk while waiting for turn_complete")
+                                continue
                             audio_b64 = base64.b64encode(response.data).decode("utf-8")
                             await websocket.send_json({"type": "audio_chunk", "audio": audio_b64})
                             if self.session_state:
@@ -602,6 +617,7 @@ class GeminiLiveHandler:
 
                             # Turn complete
                             if getattr(sc, "turn_complete", False):
+                                self._suppress_audio_until_turn_complete = False
                                 truncated = self._looks_truncated(current_turn_text)
                                 logger.info(
                                     "🧭 turn_complete diagnostics: audio_chunks=%d, transcript_chunks=%d, "

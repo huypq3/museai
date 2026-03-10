@@ -514,10 +514,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const handleStop = useCallback(() => {
     stopPlayback();
     waitingForAudioRef.current = false;
+    // Stop current AI turn immediately and ignore remaining old-turn chunks.
+    skipOldTurnRef.current = true;
+    sendMessage({ type: "interrupt" });
     setState("paused");
-  }, [stopPlayback]);
+  }, [stopPlayback, sendMessage]);
 
   const handleResume = useCallback(() => {
+    // Resume from paused mode by requesting continuation.
+    skipOldTurnRef.current = false;
+    waitingForAudioRef.current = false;
     sendMessage({ type: "resume_greeting" });
     setState("ai_speaking");
   }, [sendMessage]);
