@@ -432,6 +432,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (typeof window === "undefined") return;
 
     const root = document.documentElement;
+    const body = document.body;
+
     const updateKeyboardHeight = () => {
       const viewport = window.visualViewport;
       if (!viewport) return;
@@ -439,12 +441,39 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       root.style.setProperty("--keyboard-height", showTextInput ? `${keyboardHeight}px` : "0px");
     };
 
+    if (showTextInput) {
+      // Khoá scroll ngang toàn trang khi text input mở
+      body.style.overflowX = "hidden";
+      body.style.position = "fixed";
+      body.style.width = "100%";
+      body.style.left = "0";
+      body.style.right = "0";
+      root.style.overflowX = "hidden";
+    } else {
+      // Reset hoàn toàn khi đóng
+      body.style.overflowX = "";
+      body.style.position = "";
+      body.style.width = "";
+      body.style.left = "";
+      body.style.right = "";
+      root.style.overflowX = "";
+      root.style.setProperty("--keyboard-height", "0px");
+      // Force scroll reset về 0,0
+      window.scrollTo(0, 0);
+    }
+
     updateKeyboardHeight();
     window.visualViewport?.addEventListener("resize", updateKeyboardHeight);
     window.visualViewport?.addEventListener("scroll", updateKeyboardHeight);
     return () => {
       window.visualViewport?.removeEventListener("resize", updateKeyboardHeight);
       window.visualViewport?.removeEventListener("scroll", updateKeyboardHeight);
+      // Cleanup: luôn reset body khi effect re-run hoặc unmount
+      body.style.overflowX = "";
+      body.style.position = "";
+      body.style.width = "";
+      body.style.left = "";
+      body.style.right = "";
       root.style.setProperty("--keyboard-height", "0px");
     };
   }, [showTextInput]);
@@ -579,38 +608,35 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setState("ai_speaking");
   }, [sendMessage]);
 
-  const toggleInputMode = useCallback(() => {
-    if (stateRef.current === "ai_speaking") return;
-    setInputMode((prev) => {
-      const next = prev === "voice" ? "text" : "voice";
-      if (next === "text") {
-        setShowTextInput(true);
-        window.setTimeout(() => textInputRef.current?.focus(), 100);
-      } else {
-        setShowTextInput(false);
-      }
-      return next;
-    });
-  }, []);
-
-  // [FIX 5] Handler duy nhất cho icon ⌨️/🎤 mọi state
-  const handleToggleInputMode = useCallback(() => {
-    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") {
-      return;
-    }
+  // Chuyển sang TEXT — mọi state
+  const switchToText = useCallback(() => {
+    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") return;
     if (stateRef.current === "ai_speaking") {
       stopPlayback();
       waitingForAudioRef.current = false;
       skipOldTurnRef.current = true;
       sendMessage({ type: "interrupt" });
       setState("paused");
-      setInputMode("text");
-      setShowTextInput(true);
-      window.setTimeout(() => textInputRef.current?.focus(), 100);
-      return;
     }
-    toggleInputMode();
-  }, [toggleInputMode, stopPlayback, sendMessage]);
+    setInputMode("text");
+    setShowTextInput(true);
+    window.setTimeout(() => textInputRef.current?.focus(), 100);
+  }, [stopPlayback, sendMessage]);
+
+  // Chuyển sang VOICE — đóng textbox, bắt đầu record ngay
+  const switchToVoice = useCallback(async () => {
+    setShowTextInput(false);
+    setTextInput("");
+    setInputMode("voice");
+    if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") return;
+    await handleStartRecording();
+  }, [handleStartRecording]);
+
+  const toggleInputMode = useCallback(() => {
+    if (inputMode === "text") { switchToVoice(); } else { switchToText(); }
+  }, [inputMode, switchToText, switchToVoice]);
+
+  const handleToggleInputMode = toggleInputMode;
 
   const handleSendText = useCallback(() => {
     const text = textInput.trim();
@@ -1122,8 +1148,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         </div>
 
           {isSpeakingState ? (
-            <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 12 }}>
-              {/* Stop — flex:1, text căn giữa */}
+            <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
+              {/* Stop — flex:1 */}
               <button
                 onClick={handleStop}
                 style={{
@@ -1142,7 +1168,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   alignItems: "center",
                   justifyContent: "center",
                   gap: "6px",
-                  padding: "0 12px",
+                  padding: "0 10px",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
@@ -1150,14 +1176,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               >
                 ⏹ {t(language, "voice.stop")}
               </button>
-              {/* Tap to ask — flex:1 bằng Stop, icon ⌨️ nhỏ nằm trong nút */}
+              {/* Tap to ask — flex:1 bằng Stop */}
               <button
                 onClick={handleAskPress}
                 style={{
                   flex: 1,
                   height: "48px",
                   minWidth: 0,
-                  position: "relative",
                   background: "#C9A84C",
                   border: "none",
                   borderRadius: "12px",
@@ -1170,55 +1195,50 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   alignItems: "center",
                   justifyContent: "center",
                   gap: "6px",
-                  padding: "0 36px 0 12px",
+                  padding: "0 10px",
                   whiteSpace: "nowrap",
                   overflow: "hidden",
                   textOverflow: "ellipsis",
                 }}
               >
                 {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
-                {/* Toggle ⌨️/🎤 nằm trong nút, góc phải */}
-                <span
-                  onClick={(e) => { e.stopPropagation(); handleToggleInputMode(); }}
-                  role="button"
-                  aria-label="Switch input mode"
-                  style={{
-                    position: "absolute",
-                    right: "8px",
-                    top: "50%",
-                    transform: "translateY(-50%)",
-                    width: "24px",
-                    height: "24px",
-                    borderRadius: "50%",
-                    background: "rgba(0,0,0,0.18)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: "12px",
-                    flexShrink: 0,
-                    cursor: "pointer",
-                  }}
-                >
-                  {inputMode === "voice" ? "⌨️" : "🎤"}
-                </span>
+              </button>
+              {/* Icon chuyển mode — tách riêng, click thẳng vào mode đích */}
+              <button
+                onClick={inputMode === "voice" ? switchToText : switchToVoice}
+                aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+                style={{
+                  width: "44px",
+                  height: "44px",
+                  flexShrink: 0,
+                  borderRadius: "50%",
+                  background: "rgba(255,255,255,0.06)",
+                  border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
+                  color: inputMode === "text" ? "#C9A84C" : "#888",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "18px",
+                  cursor: "pointer",
+                  transition: "all 0.2s",
+                }}
+              >
+                {inputMode === "voice" ? "⌨️" : "🎤"}
               </button>
             </div>
           ) : state === "paused" ? (
             // [FIX 7] paused: chỉ Resume + Ask, ẩn toggle mode
-            <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 12 }}>
+            <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
               <button
                 onClick={handleResume}
                 style={{
-                  flex: 1,
-                  height: "48px",
-                  background: "transparent",
-                  border: "1.5px solid #666",
-                  borderRadius: "12px",
-                  color: "#F5F0E8",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  fontFamily: "DM Sans, sans-serif",
-                  cursor: "pointer",
+                  flex: 1, height: "48px", minWidth: 0,
+                  background: "transparent", border: "1.5px solid #666",
+                  borderRadius: "12px", color: "#F5F0E8",
+                  fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer", display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: "6px", padding: "0 10px",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 }}
               >
                 ▶ {t(language, "voice.resume")}
@@ -1226,19 +1246,30 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               <button
                 onClick={handleAskPress}
                 style={{
-                  flex: 1,
-                  height: "48px",
-                  background: "#C9A84C",
-                  border: "none",
-                  borderRadius: "12px",
-                  color: "#0A0A0A",
-                  fontSize: "15px",
-                  fontWeight: 600,
-                  fontFamily: "DM Sans, sans-serif",
-                  cursor: "pointer",
+                  flex: 1, height: "48px", minWidth: 0,
+                  background: "#C9A84C", border: "none",
+                  borderRadius: "12px", color: "#0A0A0A",
+                  fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
+                  cursor: "pointer", display: "flex", alignItems: "center",
+                  justifyContent: "center", gap: "6px", padding: "0 10px",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 }}
               >
                 {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
+              </button>
+              <button
+                onClick={inputMode === "voice" ? switchToText : switchToVoice}
+                aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+                style={{
+                  width: "44px", height: "44px", flexShrink: 0,
+                  borderRadius: "50%", background: "rgba(255,255,255,0.06)",
+                  border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
+                  color: inputMode === "text" ? "#C9A84C" : "#888",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontSize: "18px", cursor: "pointer", transition: "all 0.2s",
+                }}
+              >
+                {inputMode === "voice" ? "⌨️" : "🎤"}
               </button>
             </div>
           ) : isRecordingState ? (
@@ -1281,24 +1312,23 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               </button>
             </div>
           ) : (
-            <div style={{ width: "100%", maxWidth: "320px", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
               <button
                 onClick={handleAskPress}
                 disabled={state === "connecting" || isProcessingState}
                 style={{
-                  flex: 1,
-                  height: "48px",
-                  borderRadius: "12px",
-                  border: "none",
+                  flex: 1, height: "48px", minWidth: 0,
+                  borderRadius: "12px", border: "none",
                   cursor: state === "connecting" || isProcessingState ? "not-allowed" : "pointer",
                   background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
-                  color: "#0A0A0A",
-                  fontFamily: "DM Sans, sans-serif",
-                  fontSize: "15px",
-                  fontWeight: "600",
+                  color: "#0A0A0A", fontFamily: "DM Sans, sans-serif",
+                  fontSize: "15px", fontWeight: "600",
                   transition: "all 0.2s ease",
                   opacity: state === "connecting" || isProcessingState ? 0.7 : 1,
                   boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  gap: "6px", padding: "0 10px",
+                  whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
                 }}
               >
                 {isProcessingState
@@ -1309,26 +1339,19 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   ? `🎵 ${t(language, "voice.listen_guide")}`
                   : `🎙 ${t(language, "voice.ask")}`}
               </button>
-              {state === "ready" && !showIntroButton && (
-                // [FIX 8] Dùng handleToggleInputMode thống nhất
+              {/* Icon toggle luôn hiển thị ở ready — bấm thẳng vào mode đích */}
+              {state === "ready" && !isProcessingState && (
                 <button
-                  onClick={handleToggleInputMode}
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "50%",
-                    background: "transparent",
-                    border: `1px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
-                    color: inputMode === "text" ? "#C9A84C" : "#666",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    cursor: "pointer",
-                    flexShrink: 0,
-                    fontSize: "14px",
-                    transition: "all 0.2s",
-                  }}
+                  onClick={inputMode === "voice" ? switchToText : switchToVoice}
                   aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+                  style={{
+                    width: "44px", height: "44px", flexShrink: 0,
+                    borderRadius: "50%", background: "rgba(255,255,255,0.06)",
+                    border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
+                    color: inputMode === "text" ? "#C9A84C" : "#888",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "18px", cursor: "pointer", transition: "all 0.2s",
+                  }}
                 >
                   {inputMode === "voice" ? "⌨️" : "🎤"}
                 </button>
@@ -1383,8 +1406,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             />
             <button
               onClick={() => {
+                // blur trước để iOS dismiss keyboard, tránh body bị offset
+                textInputRef.current?.blur();
                 setShowTextInput(false);
                 setTextInput("");
+                setInputMode("voice");
               }}
               style={{
                 color: "#666",
