@@ -432,7 +432,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (typeof window === "undefined") return;
 
     const root = document.documentElement;
-    const body = document.body;
 
     const updateKeyboardHeight = () => {
       const viewport = window.visualViewport;
@@ -441,39 +440,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       root.style.setProperty("--keyboard-height", showTextInput ? `${keyboardHeight}px` : "0px");
     };
 
-    if (showTextInput) {
-      // Khoá scroll ngang toàn trang khi text input mở
-      body.style.overflowX = "hidden";
-      body.style.position = "fixed";
-      body.style.width = "100%";
-      body.style.left = "0";
-      body.style.right = "0";
-      root.style.overflowX = "hidden";
-    } else {
-      // Reset hoàn toàn khi đóng
-      body.style.overflowX = "";
-      body.style.position = "";
-      body.style.width = "";
-      body.style.left = "";
-      body.style.right = "";
-      root.style.overflowX = "";
-      root.style.setProperty("--keyboard-height", "0px");
-      // Force scroll reset về 0,0
-      window.scrollTo(0, 0);
-    }
-
     updateKeyboardHeight();
     window.visualViewport?.addEventListener("resize", updateKeyboardHeight);
     window.visualViewport?.addEventListener("scroll", updateKeyboardHeight);
     return () => {
       window.visualViewport?.removeEventListener("resize", updateKeyboardHeight);
       window.visualViewport?.removeEventListener("scroll", updateKeyboardHeight);
-      // Cleanup: luôn reset body khi effect re-run hoặc unmount
-      body.style.overflowX = "";
-      body.style.position = "";
-      body.style.width = "";
-      body.style.left = "";
-      body.style.right = "";
       root.style.setProperty("--keyboard-height", "0px");
     };
   }, [showTextInput]);
@@ -631,12 +603,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") return;
     await handleStartRecording();
   }, [handleStartRecording]);
-
-  const toggleInputMode = useCallback(() => {
-    if (inputMode === "text") { switchToVoice(); } else { switchToText(); }
-  }, [inputMode, switchToText, switchToVoice]);
-
-  const handleToggleInputMode = toggleInputMode;
 
   const handleSendText = useCallback(() => {
     const text = textInput.trim();
@@ -1382,7 +1348,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               position: "fixed",
               left: 0,
               right: 0,
-              bottom: 0,
+              bottom: "var(--keyboard-height, 0px)",
+              width: "100%",
+              boxSizing: "border-box",
               background: "#111",
               borderTop: "1px solid #333",
               padding: "12px 16px",
