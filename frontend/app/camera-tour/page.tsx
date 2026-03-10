@@ -8,6 +8,7 @@ import { BACKEND_URL, LanguageCode } from "@/lib/constants";
 import QRScanner, { QRScanPayload } from "@/components/QRScanner";
 import { trackEvent } from "@/lib/analytics";
 import { createExhibitSession, validateMuseum } from "@/lib/api";
+import MuseAILogo from "@/components/MuseAILogo";
 
 type State = "scanning" | "processing" | "detected" | "error";
 
@@ -287,7 +288,7 @@ export default function CameraTourPage() {
            }}>
         <div className="flex items-center justify-between">
           <div>
-            <div className="font-display text-[var(--gold)] text-xl">MuseAI</div>
+            <MuseAILogo variant="horizontal-compact" theme="dark" iconSize={28} />
             <div className="text-xs opacity-60" style={{ fontFamily: 'DM Sans' }}>
               {museumName || museumId}
             </div>

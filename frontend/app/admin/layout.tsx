@@ -4,6 +4,7 @@ import { useMemo } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { clearAdminToken, getAdminSession } from '@/lib/adminAuth'
 import { AdminI18nProvider, useAdminI18n } from '@/lib/i18n/admin'
+import MuseAILogo from '@/components/MuseAILogo'
 
 export default function AdminLayout({
   children,
@@ -66,8 +67,8 @@ function AdminLayoutInner({ children }: { children: React.ReactNode }) {
               background: 'rgba(255,255,255,0.03)',
             }}
           >
-            <div style={{ color: '#C9A84C', fontFamily: 'Cormorant Garamond, serif', fontSize: 28, marginBottom: 12 }}>
-              MuseAI
+            <div style={{ marginBottom: 12 }}>
+              <MuseAILogo variant="horizontal" theme="dark" iconSize={30} />
             </div>
             {navItems.map((item) => (
               (() => {

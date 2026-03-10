@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import QRScanner, { QRScanPayload } from "@/components/QRScanner";
 import { detectLandingLanguage, LANDING_I18N, type LandingLang } from "@/lib/i18n/landing";
+import MuseAILogo from "@/components/MuseAILogo";
 
 const COLORS = {
   bg: "#0A0A0A",
@@ -150,23 +151,10 @@ export default function LandingPageClient() {
             minHeight: 48,
             display: "flex",
             alignItems: "center",
-            gap: 10,
             flexShrink: 0,
           }}
         >
-          <span style={{ color: COLORS.gold, fontFamily: "Cormorant Garamond, serif", fontSize: 24 }}>MuseAI</span>
-          <span style={{ width: 1, height: 22, background: "rgba(201,168,76,0.3)" }} />
-          <span
-            style={{
-              color: "rgba(245,240,232,0.45)",
-              textTransform: "uppercase",
-              letterSpacing: "0.18em",
-              fontSize: 10,
-              fontFamily: "DM Sans, sans-serif",
-            }}
-          >
-            by GuideQR.ai
-          </span>
+          <MuseAILogo variant="horizontal" theme="dark" iconSize={44} />
         </header>
 
         <div style={{ flexShrink: 0 }}>

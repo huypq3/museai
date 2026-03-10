@@ -8,6 +8,7 @@ import { useAudioPlayer } from "@/hooks/useAudioPlayer";
 import { t } from "@/lib/i18n";
 import { BACKEND_URL, LanguageCode } from "@/lib/constants";
 import { trackEvent } from "@/lib/analytics";
+import MuseAILogo from "@/components/MuseAILogo";
 
 type Props = {
   exhibitId: string;
@@ -625,6 +626,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         >
           ←
         </button>
+
+        <div style={{ flexShrink: 0 }}>
+          <MuseAILogo variant="horizontal-compact" theme="dark" iconSize={28} />
+        </div>
 
         <div style={{ textAlign: "center", flex: 1, minWidth: 0 }}>
           {museumName && (

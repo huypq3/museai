@@ -6,6 +6,7 @@ import { useLanguage } from "@/hooks/useLanguage";
 import { t } from "@/lib/i18n";
 import { LanguageCode } from "@/lib/constants";
 import { MuseumValidation, validateMuseum } from "@/lib/api";
+import MuseAILogo from "@/components/MuseAILogo";
 
 const FLAG_MAP: Record<LanguageCode, string> = {
   vi: "🇻🇳",
@@ -199,9 +200,9 @@ export default function WelcomePage() {
           {museumDisplayName}
         </p>
 
-        <h1 className="font-display text-[52px] font-light leading-none mb-3" style={{ color: "var(--museum-white)" }}>
-          MuseAI
-        </h1>
+        <div className="mb-3">
+          <MuseAILogo variant="horizontal" theme="dark" iconSize={36} />
+        </div>
 
         <p className="font-display italic text-lg mb-8" style={{ color: "var(--museum-dim)" }}>
           {welcomeMessage}

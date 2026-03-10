@@ -14,7 +14,7 @@ body {
   background: var(--museum-dark);
   color: var(--museum-white);
   font-family:
-    'DM Sans',
+    var(--font-dm-sans),
     'Noto Sans JP',
     'Noto Sans KR',
     'Noto Sans SC',
@@ -27,7 +27,7 @@ body {
   }
   
   .font-display {
-    font-family: 'Cormorant Garamond', serif;
+    font-family: var(--font-cormorant), serif;
   }
 }
 
