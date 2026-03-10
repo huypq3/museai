@@ -32,6 +32,7 @@ MAX_MESSAGE_SIZE = int(os.getenv("WS_MAX_MESSAGE_SIZE", str(256 * 1024)))
 MAX_AUDIO_SECONDS_PER_MINUTE = int(os.getenv("WS_MAX_AUDIO_SECONDS_PER_MINUTE", "45"))
 PCM_16KHZ_MONO_BYTES_PER_SEC = 16000 * 2
 MAX_CONTINUOUS_AUDIO_SEC = int(os.getenv("WS_MAX_CONTINUOUS_AUDIO_SEC", "300"))
+INTERRUPT_DRAIN_WAIT_SEC = float(os.getenv("WS_INTERRUPT_DRAIN_WAIT_SEC", "1.2"))
 
 LANGUAGE_NAMES = {
     "vi": "Vietnamese",
@@ -127,6 +128,7 @@ class GeminiLiveHandler:
         self._turn_started_at: float | None = None
         self._pending_language_reminder = False
         self._suppress_audio_until_turn_complete = False
+        self._client_turn_open = False
         try:
             self._genai_version = pkg_version("google-genai")
         except PackageNotFoundError:
@@ -397,6 +399,10 @@ class GeminiLiveHandler:
                 if msg_type == "audio":
                     if not self._accepting_input:
                         continue
+                    if not self._client_turn_open:
+                        # Ignore out-of-band audio chunks if client did not open a turn yet.
+                        logger.debug("Ignoring audio chunk before start_of_turn")
+                        continue
                     audio_b64 = message.get("data", "")
                     if audio_b64:
                         audio_bytes = base64.b64decode(audio_b64)
@@ -429,6 +435,7 @@ class GeminiLiveHandler:
                 elif msg_type == "start_of_turn":
                     if not self._accepting_input:
                         continue
+                    await self._wait_for_old_turn_completion(timeout_sec=INTERRUPT_DRAIN_WAIT_SEC)
                     self._turn_started_at = time.monotonic()
                     # Do NOT reset _suppress_audio_until_turn_complete here.
                     # The old Gemini turn may still be generating audio in-flight;
@@ -442,10 +449,14 @@ class GeminiLiveHandler:
                     await self._inject_language_reminder(session)
 
                     await session.send_realtime_input(activity_start=types.ActivityStart())
+                    self._client_turn_open = True
                     logger.info("📥 start_of_turn from client → activity_start sent")
 
                 elif msg_type == "end_of_turn":
                     if not self._accepting_input:
+                        continue
+                    if not self._client_turn_open:
+                        logger.debug("Ignoring end_of_turn without active client turn")
                         continue
                     self._turn_started_at = None
                     # Manual turn mode: close current activity so Gemini can respond
@@ -459,6 +470,7 @@ class GeminiLiveHandler:
                         since_last_audio,
                     )
                     await session.send_realtime_input(activity_end=types.ActivityEnd())
+                    self._client_turn_open = False
                     logger.info("✅ end_of_turn sent (activity_end)")
 
                 elif msg_type == "request_greeting":
@@ -487,6 +499,7 @@ class GeminiLiveHandler:
                     # Client stopped playback mid-turn.
                     # Suppress remaining audio chunks of the current Gemini turn.
                     self._suppress_audio_until_turn_complete = True
+                    self._client_turn_open = False
                     logger.info("📥 interrupt from client — suppressing current turn audio until turn_complete")
 
                 elif msg_type == "resume_greeting":
@@ -652,6 +665,7 @@ class GeminiLiveHandler:
                             # Turn complete
                             if getattr(sc, "turn_complete", False):
                                 self._suppress_audio_until_turn_complete = False
+                                self._client_turn_open = False
                                 truncated = self._looks_truncated(current_turn_text)
                                 logger.info(
                                     "🧭 turn_complete diagnostics: audio_chunks=%d, transcript_chunks=%d, "
@@ -710,6 +724,29 @@ class GeminiLiveHandler:
         except Exception as e:
             logger.error("Fatal error in send loop: %s", e, exc_info=True)
             raise
+
+    async def _wait_for_old_turn_completion(self, timeout_sec: float) -> None:
+        """
+        If previous turn is still being suppressed after an interrupt,
+        wait briefly for its turn_complete before allowing new activity_start.
+        """
+        if not self._suppress_audio_until_turn_complete:
+            return
+
+        deadline = time.monotonic() + max(0.05, timeout_sec)
+        logger.info("⏳ Waiting for old turn_complete before opening new turn")
+        while self._suppress_audio_until_turn_complete and time.monotonic() < deadline:
+            if self._closing:
+                return
+            await asyncio.sleep(0.01)
+
+        if self._suppress_audio_until_turn_complete:
+            # Fail-safe: avoid deadlock if model never emits turn_complete.
+            logger.warning(
+                "Old turn did not complete within %.2fs; forcing suppress clear",
+                timeout_sec,
+            )
+            self._suppress_audio_until_turn_complete = False
 
     def _log_response(self, response):
         """Log a compact summary of Gemini responses."""

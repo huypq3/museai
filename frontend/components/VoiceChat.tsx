@@ -293,8 +293,17 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           // Old turn ended: clear skip flag and resume normal processing.
           console.log("⏭️ Old turn_complete skipped, resuming normal processing");
           skipOldTurnRef.current = false;
+          continue;
         }
-        continue;
+        const isUserTranscriptDuringSkip =
+          msg.type === "user_transcript" ||
+          msg.type === "user_text" ||
+          msg.type === "input_transcript" ||
+          msg.type === "input_text" ||
+          (msg.type === "transcript" && msg.role === "user");
+        if (!isUserTranscriptDuringSkip) {
+          continue;
+        }
       }
 
       // ── User transcript ──
@@ -571,12 +580,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     // From now on, keep using the single ask/stop/processing button flow.
     markIntroUsed();
 
-    // Starting a fresh user turn => clear stale skip flag first.
-    // But if the caller (handleAskPress) already sent interrupt and set skip=true,
-    // we must restore it — otherwise old-turn WS messages won't be filtered
-    // and turn_complete of the old turn can corrupt state mid-recording.
     const interruptFlagWasSet = skipOldTurnRef.current;
-    skipOldTurnRef.current = false;
 
     // Stop local audio and skip remaining messages from the old turn.
     stopPlayback();
@@ -597,10 +601,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       skipOldTurnRef.current = true;
       sendMessage({ type: "interrupt" });
     } else if (interruptFlagWasSet) {
-      // Interrupt was already sent by caller (e.g. handleAskPress sent it then
-      // set state=ready before invoking us). Restore skip without double-sending
-      // interrupt — old-turn messages will still be filtered until turn_complete.
+      // Keep skip flag when an interrupt was already issued recently.
       skipOldTurnRef.current = true;
+    } else {
+      // No in-flight interrupt: clear stale skip flag before the new turn.
+      skipOldTurnRef.current = false;
     }
 
     // Set recording state before awaiting so stateRef can block incoming audio.
@@ -778,13 +783,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
     // inputMode === "voice"
     if (stateRef.current === "ai_speaking") {
-      // Interrupt đồng bộ trước, delay để backend nhận rồi mới start_of_turn
-      stopPlayback();
-      waitingForAudioRef.current = false;
-      skipOldTurnRef.current = true;
-      sendMessage({ type: "interrupt" });
-      setState("ready"); // tạm về ready để handleStartRecording không gửi interrupt lần 2
-      await new Promise((r) => setTimeout(r, 80));
+      // Let handleStartRecording own interrupt+start_of_turn ordering to avoid race.
       await handleStartRecording();
       return;
     }
