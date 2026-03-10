@@ -205,7 +205,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
   }, [sendMessage]);
   const reconnectNow = disconnect;
-  const wsNotice: { reason: string; messageVi: string; messageEn: string; reconnectAllowed: boolean } | null = null;
+  type WSNotice = { reason: string; messageVi: string; messageEn: string; reconnectAllowed: boolean };
+  const wsNotice = null as WSNotice | null;
   const { start, stop: stopRecording } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
   const sentences = messages;
