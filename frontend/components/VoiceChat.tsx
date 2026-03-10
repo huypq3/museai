@@ -360,31 +360,22 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           processingTimeoutRef.current = null;
         }
 
-        // If Gemini ended without output, never stay stuck in processing/thinking.
-        if (!hasAiOutputThisTurnRef.current) {
-          console.warn("⚠️ turn_complete with no AI output → fallback to ready");
-          if (stateRef.current !== "recording") {
-            waitingForAudioRef.current = false;
-            pendingUserTextRef.current = "";
-            setCurrentUserText("");
-            setState("ready");
-          }
-          continue;
-        }
-
         const aiText = pendingAITextRef.current;
         const userText = pendingUserTextRef.current;
         pendingAITextRef.current = "";
         pendingUserTextRef.current = "";
         setCurrentAIText("");
         setCurrentUserText("");
+        hasAiOutputThisTurnRef.current = false;
 
-        setMessages((prev) => {
-          const next = [...prev];
-          if (userText) next.push({ role: "user", text: userText, timestamp: new Date() });
-          if (aiText) next.push({ role: "assistant", text: aiText, timestamp: new Date() });
-          return next;
-        });
+        if (aiText || userText) {
+          setMessages((prev) => {
+            const next = [...prev];
+            if (userText) next.push({ role: "user", text: userText, timestamp: new Date() });
+            if (aiText) next.push({ role: "assistant", text: aiText, timestamp: new Date() });
+            return next;
+          });
+        }
 
         // If user is recording, skip state transition.
         if (stateRef.current === "recording") continue;
@@ -395,7 +386,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             if (stateRef.current !== "recording") {
               console.log("✅ turn_complete → ready");
               waitingForAudioRef.current = false;
-              hasAiOutputThisTurnRef.current = false;
               setState("ready");
             } else {
               waitingForAudioRef.current = false;
@@ -426,14 +416,21 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-
     const root = document.documentElement;
 
+    if (!showTextInput) {
+      root.style.setProperty("--keyboard-height", "0px");
+      window.scrollTo(0, 0);
+      return;
+    }
+
+    // Chỉ track keyboard height — KHÔNG lock body.position
+    // body.position:fixed gây layout shift không phục hồi được trên iOS Safari
     const updateKeyboardHeight = () => {
       const viewport = window.visualViewport;
       if (!viewport) return;
-      const keyboardHeight = Math.max(0, window.innerHeight - viewport.height);
-      root.style.setProperty("--keyboard-height", showTextInput ? `${keyboardHeight}px` : "0px");
+      const kh = Math.max(0, window.innerHeight - viewport.height);
+      root.style.setProperty("--keyboard-height", `${kh}px`);
     };
 
     updateKeyboardHeight();
@@ -458,26 +455,30 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       return;
     }
 
-    const sent = sendMessage({ type: "end_of_turn" });
-    if (!sent) {
-      console.warn("⚠️ end_of_turn not sent because websocket is not open");
-    } else {
-      const museumId = typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
-      trackEvent("question_asked", museumId, exhibitId, { reason });
-    }
-    setState("processing");
+    sendMessage({ type: "end_of_turn" });
+    const museumId = typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
+    trackEvent("question_asked", museumId, exhibitId, { reason });
+
+    // Luôn chuyển sang processing — không phụ thuộc return value của sendMessage
     hasAiOutputThisTurnRef.current = false;
+    setState("processing");
+
     if (reason === "silence") {
       setAutoStopHint("Auto-sent because you stopped speaking.");
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 2200);
     }
 
-    // 15s timeout: keep processing state if Gemini has not responded yet.
+    // 15s timeout: nếu không có phản hồi → force về ready tránh bị kẹt
+    if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
     processingTimeoutRef.current = setTimeout(() => {
-      console.warn("⚠️ 15s timeout while processing (keep processing state)");
+      if (stateRef.current === "processing") {
+        console.warn("⚠️ 15s timeout → force ready");
+        hasAiOutputThisTurnRef.current = false;
+        setState("ready");
+      }
     }, 15000);
-  }, [stopRecording, sendMessage]);
+  }, [stopRecording, sendMessage, exhibitId]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────
   const handleStartRecording = useCallback(async () => {
@@ -675,12 +676,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     await handleStartRecording();
   }, [showIntroButton, state, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
 
-  // [FIX 4] Ask khi ai_speaking → interrupt + auto-record ngay, không dừng ở ready
   const handleAskPress = useCallback(async () => {
     if (inputMode === "text") {
-      if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") {
-        return;
-      }
+      if (stateRef.current === "connecting" || stateRef.current === "processing" || stateRef.current === "recording") return;
       if (stateRef.current === "ai_speaking") {
         stopPlayback();
         waitingForAudioRef.current = false;
@@ -692,9 +690,15 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       window.setTimeout(() => textInputRef.current?.focus(), 100);
       return;
     }
-    // inputMode === "voice": Ask = interrupt nếu đang ai_speaking rồi record ngay
+    // inputMode === "voice"
     if (stateRef.current === "ai_speaking") {
-      // handleStartRecording đã xử lý interrupt + start_of_turn nội bộ
+      // Interrupt đồng bộ trước, delay để backend nhận rồi mới start_of_turn
+      stopPlayback();
+      waitingForAudioRef.current = false;
+      skipOldTurnRef.current = true;
+      sendMessage({ type: "interrupt" });
+      setState("ready"); // tạm về ready để handleStartRecording không gửi interrupt lần 2
+      await new Promise((r) => setTimeout(r, 80));
       await handleStartRecording();
       return;
     }
@@ -725,7 +729,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         display: "flex",
         flexDirection: "column",
         height: "100dvh",
+        width: "100vw",
+        maxWidth: "100vw",
         overflow: "hidden",
+        overflowX: "hidden",
         backgroundColor: "#0A0A0A",
       }}
     >
@@ -1306,16 +1313,33 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   ? `🎵 ${t(language, "voice.listen_guide")}`
                   : `🎙 ${t(language, "voice.ask")}`}
               </button>
+              {/* Toggle ⌨️/🎤 — hiện khi ready và đã qua intro */}
+              {state === "ready" && !showIntroButton && !isProcessingState && (
+                <button
+                  onClick={() => inputMode === "voice" ? switchToText() : switchToVoice()}
+                  style={{
+                    width: "40px", height: "48px", flexShrink: 0,
+                    borderRadius: "12px", border: "1px solid rgba(255,255,255,0.15)",
+                    background: inputMode === "text" ? "rgba(201,168,76,0.15)" : "transparent",
+                    color: inputMode === "text" ? "#C9A84C" : "#666",
+                    display: "flex", alignItems: "center", justifyContent: "center",
+                    cursor: "pointer", fontSize: "16px", transition: "all 0.2s",
+                  }}
+                  aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
+                >
+                  {inputMode === "voice" ? "⌨️" : "🎤"}
+                </button>
+              )}
             </div>
           )}
-        {/* Text input panel — fixed overlay, không đẩy layout */}
+        {/* Text input panel — fixed overlay */}
         {showTextInput && (
           <div
             style={{
               position: "fixed",
               left: 0,
               right: 0,
-              bottom: "var(--keyboard-height, 0px)",
+              bottom: 0,
               width: "100%",
               boxSizing: "border-box",
               background: "#111",
@@ -1325,7 +1349,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               display: "flex",
               alignItems: "center",
               gap: "10px",
-              animation: "slideUp 0.2s ease-out",
               zIndex: 200,
             }}
           >
