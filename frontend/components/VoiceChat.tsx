@@ -390,10 +390,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [wsMessages]); // Depend only on wsMessages, not isPlaying/playChunk/etc.
 
   useEffect(() => {
-    if (sentences.length > 0 || currentAIText || currentUserText) {
+    if (messages.length > 0 || currentAIText || currentUserText) {
       transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [sentences, currentAIText, currentUserText]);
+  }, [messages, currentAIText, currentUserText]);
 
   // ─── Clear timers on unmount ───────────────────────────────────────────
   useEffect(() => {
@@ -780,9 +780,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           flex: 1,
           minHeight: 0,
           overflowY: "auto",
-          padding: "20px 16px 12px",
+          overflowX: "hidden",
           display: "flex",
           flexDirection: "column",
+          gap: "8px",
+          padding: "12px 16px",
+          scrollBehavior: "smooth",
           justifyContent: sentences.length === 0 && !currentAIText && !currentUserText ? "center" : "flex-start",
         }}
       >
@@ -853,15 +856,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 key={index}
                 style={{
                   display: "flex",
-                  flexDirection: "column",
-                  alignItems: msg.role === "user"
-                    ? "flex-end"
-                    : "flex-start",
+                  justifyContent: msg.role === "user" ? "flex-end" : "flex-start",
+                  width: "100%",
+                  flexShrink: 0,
                   marginBottom: "8px",
                 }}
               >
                 <p style={{
-                  maxWidth: "85%",
+                  maxWidth: "82%",
+                  wordBreak: "break-word",
+                  overflowWrap: "break-word",
                   padding: "8px 12px",
                   borderRadius: msg.role === "user"
                     ? "12px 12px 2px 12px"
@@ -875,9 +879,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   color: msg.role === "user"
                     ? "#C9A84C"
                     : "#F5F0E8",
-                  fontSize: "14px",
-                  lineHeight: "1.5",
-                  fontFamily: "DM Sans, sans-serif",
+                  fontFamily: "Cormorant Garamond, serif",
+                  fontSize: "17px",
+                  fontStyle: "italic",
+                  lineHeight: 1.7,
                   margin: 0,
                   textAlign: msg.role === "user"
                     ? "right"
@@ -887,51 +892,61 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 </p>
               </div>
             ))}
-            {/* AI đang stream — turn hiện tại */}
-            {currentAIText && (
-              <div style={{
-                display: "flex",
-                justifyContent: "flex-start",
-                marginBottom: "8px",
-              }}>
-                <p style={{
-                  maxWidth: "85%",
-                  padding: "8px 12px",
-                  borderRadius: "12px 12px 12px 2px",
-                  background: "rgba(255,255,255,0.05)",
-                  border: "1px solid rgba(255,255,255,0.08)",
-                  color: "#F5F0E8",
-                  fontSize: "14px",
-                  lineHeight: "1.5",
-                  fontFamily: "DM Sans, sans-serif",
-                  margin: 0,
-                  opacity: 0.85,
-                }}>
-                  {currentAIText}
-                </p>
-              </div>
-            )}
             {/* User đang nói/gõ — turn hiện tại */}
             {currentUserText && (
               <div style={{
                 display: "flex",
                 justifyContent: "flex-end",
+                width: "100%",
+                flexShrink: 0,
                 marginBottom: "8px",
               }}>
                 <p style={{
-                  maxWidth: "85%",
+                  maxWidth: "82%",
+                  wordBreak: "break-word",
+                  overflowWrap: "break-word",
                   padding: "8px 12px",
                   borderRadius: "12px 12px 2px 12px",
                   background: "rgba(201, 168, 76, 0.1)",
                   border: "1px solid rgba(201, 168, 76, 0.2)",
                   color: "#C9A84C",
-                  fontSize: "14px",
-                  lineHeight: "1.5",
-                  fontFamily: "DM Sans, sans-serif",
+                  fontFamily: "Cormorant Garamond, serif",
+                  fontSize: "17px",
+                  fontStyle: "italic",
+                  lineHeight: 1.7,
                   margin: 0,
                   opacity: 0.85,
                 }}>
                   {currentUserText}
+                </p>
+              </div>
+            )}
+            {/* AI đang stream — turn hiện tại */}
+            {currentAIText && (
+              <div style={{
+                display: "flex",
+                justifyContent: "flex-start",
+                width: "100%",
+                flexShrink: 0,
+                marginBottom: "8px",
+              }}>
+                <p style={{
+                  maxWidth: "82%",
+                  wordBreak: "break-word",
+                  overflowWrap: "break-word",
+                  padding: "8px 12px",
+                  borderRadius: "12px 12px 12px 2px",
+                  background: "rgba(255,255,255,0.05)",
+                  border: "1px solid rgba(255,255,255,0.08)",
+                  color: "#F5F0E8",
+                  fontFamily: "Cormorant Garamond, serif",
+                  fontSize: "17px",
+                  fontStyle: "italic",
+                  lineHeight: 1.7,
+                  margin: 0,
+                  opacity: 0.85,
+                }}>
+                  {currentAIText}
                 </p>
               </div>
             )}
