@@ -170,7 +170,8 @@ function fsmReducer(state: FSMState, event: VoiceEvent): FSMState {
 
   if (process.env.NODE_ENV !== "production") {
     const tag = meta ? ` [${meta}]` : "";
-    console.log(`[FSM] ✅ ${state.current} --[${event.type}]--> ${next}${tag}`);
+    const resolvedIntentLog = state.current === "draining" && next !== "draining" ? ` (resolved intent: ${state.drainingIntent || 'none'})` : '';
+    console.log(`[FSM] ✅ ${state.current} --[${event.type}]--> ${next}${tag}${resolvedIntentLog}`);
   }
 
   return {
