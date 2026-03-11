@@ -516,12 +516,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [stopRecording, stopAudio, router]);
 
   const handleInterrupt = useCallback(async () => {
-    if (!can("INTERRUPT")) return;
     stopPlayback();
     waitingForAudioRef.current = false;
     pendingAskVoiceAfterDrainRef.current = true;
     sendMessage({ type: "interrupt" });
-    dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
+    if (can("INTERRUPT")) {
+      dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
+    } else {
+      // Force FSM transition if stuck in a state like processing
+      dispatch({ type: "STOP_PRESSED", drainingIntent: "ask_voice" });
+    }
 
     if (currentAIText.trim()) {
       setMessages((prev) => [...prev, { role: "assistant", text: currentAIText.trim(), timestamp: new Date() }]);
@@ -534,12 +538,15 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [can, stopPlayback, sendMessage, dispatch, currentAIText]);
 
   const handleStop = useCallback(() => {
-    if (!can("STOP_PRESSED")) return;
     pendingAskVoiceAfterDrainRef.current = false;
     stopPlayback();
     waitingForAudioRef.current = false;
     sendMessage({ type: "interrupt" });
-    dispatch({ type: "STOP_PRESSED", drainingIntent: "stop" });
+    if (can("STOP_PRESSED")) {
+      dispatch({ type: "STOP_PRESSED", drainingIntent: "stop" });
+    } else if (can("INTERRUPT")) {
+      dispatch({ type: "INTERRUPT", drainingIntent: "stop" });
+    }
   }, [can, stopPlayback, sendMessage, dispatch]);
 
   const handleResume = useCallback(() => {
@@ -642,7 +649,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       handleStopRecording();
       return;
     }
-    if (is.aiSpeaking) {
+    if (is.aiSpeaking || is.processing || is.draining) {
       handleInterrupt();
       return;
     }

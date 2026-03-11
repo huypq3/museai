@@ -444,9 +444,6 @@ class GeminiLiveHandler:
                     # turn arrives (see _send_to_client). If suppress is stuck
                     # (e.g. old turn never completed), it will be cleared there too.
                     
-                    # Do not inject reminder here with end_of_turn=False as it breaks the RealtimeInput stream 
-                    # causing Gemini to never return an input_transcript and stay stuck thinking.
-                    
                     await session.send_realtime_input(activity_start=types.ActivityStart())
                     self._client_turn_open = True
                     logger.info("📥 start_of_turn from client → activity_start sent")
@@ -498,9 +495,14 @@ class GeminiLiveHandler:
                     # Client stopped playback mid-turn.
                     # Suppress remaining audio chunks of the current Gemini turn.
                     self._suppress_audio_until_turn_complete = True
-                    self._client_turn_open = False
                     logger.info("📥 interrupt from client — suppressing current turn audio until turn_complete")
                     try:
+                        # Close any open audio stream from our side BEFORE sending a text interrupt
+                        if self._client_turn_open:
+                            await session.send_realtime_input(activity_end=types.ActivityEnd())
+                            self._client_turn_open = False
+                            logger.info("✅ Forced end_of_turn (activity_end) before interrupt text")
+                            
                         # Send a clientContent message to forcefully interrupt the model's ongoing output
                         await session.send(input="[User paused/interrupted]", end_of_turn=True)
                     except Exception as e:
