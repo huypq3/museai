@@ -461,8 +461,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       console.warn("⚠️ Not connected");
       return;
     }
-    if (!can("ASK_VOICE")) return;
-
     // Unlock audio explicitly from the voice button click only.
     await unlockAndFlush();
 
@@ -486,10 +484,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (stateRef.current === "ai_speaking" && can("INTERRUPT")) {
       sendMessage({ type: "interrupt" });
       dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
+      pendingAskVoiceAfterDrainRef.current = true;
+      return;
     }
 
+    if (!can("ASK_VOICE")) return;
     pendingAskVoiceAfterDrainRef.current = false;
-    if (can("ASK_VOICE")) dispatch({ type: "ASK_VOICE" });
+    dispatch({ type: "ASK_VOICE" });
     await startVoiceCapture();
   }, [
     isConnected,
@@ -653,22 +654,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   const handleAskPress = useCallback(async () => {
     if (inputMode === "text") {
-      if (is.inputBlocked || stateRef.current === "recording") return;
-      if (stateRef.current === "ai_speaking" && can("STOP_PRESSED")) {
-        stopPlayback();
-        waitingForAudioRef.current = false;
-        sendMessage({ type: "interrupt" });
-        dispatch({ type: "STOP_PRESSED", drainingIntent: "ask_text" });
-      } else {
-        if (!can("ASK_TEXT")) return;
-        dispatch({ type: "ASK_TEXT" });
-      }
-      setShowTextInput(true);
-      window.setTimeout(() => textInputRef.current?.focus(), 100);
+      switchToText();
       return;
     }
     await handleMicPress();
-  }, [inputMode, is.inputBlocked, stateRef, can, dispatch, handleMicPress, stopPlayback, sendMessage]);
+  }, [inputMode, switchToText, handleMicPress]);
 
   useEffect(() => {
     if (!is.recording) return;
