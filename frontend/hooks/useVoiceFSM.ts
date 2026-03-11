@@ -79,6 +79,8 @@ const TRANSITIONS: Table = {
     END_OF_TURN: "processing",
     NO_SPEECH: "ready",
     CANCEL_RECORDING: "ready",
+    TURN_COMPLETE: "recording",
+    TURN_COMPLETE_EMPTY: "recording",
   },
   processing: {
     ...GLOBAL,

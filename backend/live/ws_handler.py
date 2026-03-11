@@ -497,16 +497,18 @@ class GeminiLiveHandler:
                     self._suppress_audio_until_turn_complete = True
                     logger.info("📥 interrupt from client — suppressing current turn audio until turn_complete")
                     try:
-                        # Close any open audio stream from our side BEFORE sending a text interrupt
+                        # Close any open audio stream from our side
                         if self._client_turn_open:
                             await session.send_realtime_input(activity_end=types.ActivityEnd())
                             self._client_turn_open = False
-                            logger.info("✅ Forced end_of_turn (activity_end) before interrupt text")
-                            
-                        # Send a clientContent message to forcefully interrupt the model's ongoing output
-                        await session.send(input="[User paused/interrupted]", end_of_turn=True)
+                            logger.info("✅ Forced end_of_turn (activity_end) for interrupt")
+
+                        # Send a clientContent message to gracefully signal interruption
+                        # Do NOT set end_of_turn=True here; doing so immediately after activity_end
+                        # can corrupt the Live API state machine for the next incoming turn.
+                        await session.send(input="[User stopped audio playback]", end_of_turn=False)
                     except Exception as e:
-                        logger.warning("Failed to force interrupt Gemini: %s", e)
+                        logger.warning("Failed to send interrupt signal to Gemini: %s", e)
 
                 elif msg_type == "resume_greeting":
                     # Resume after paused/stop by asking Gemini to continue briefly.
