@@ -444,10 +444,9 @@ class GeminiLiveHandler:
                     # turn arrives (see _send_to_client). If suppress is stuck
                     # (e.g. old turn never completed), it will be cleared there too.
                     
-                    # Inject language reminder BEFORE activity_start for voice turns.
-                    # This prevents the text frame from corrupting the audio buffer.
-                    await self._inject_language_reminder(session)
-
+                    # Do not inject reminder here with end_of_turn=False as it breaks the RealtimeInput stream 
+                    # causing Gemini to never return an input_transcript and stay stuck thinking.
+                    
                     await session.send_realtime_input(activity_start=types.ActivityStart())
                     self._client_turn_open = True
                     logger.info("📥 start_of_turn from client → activity_start sent")
@@ -501,6 +500,11 @@ class GeminiLiveHandler:
                     self._suppress_audio_until_turn_complete = True
                     self._client_turn_open = False
                     logger.info("📥 interrupt from client — suppressing current turn audio until turn_complete")
+                    try:
+                        # Send a clientContent message to forcefully interrupt the model's ongoing output
+                        await session.send(input="[User paused/interrupted]", end_of_turn=True)
+                    except Exception as e:
+                        logger.warning("Failed to force interrupt Gemini: %s", e)
 
                 elif msg_type == "resume_greeting":
                     # Resume after paused/stop by asking Gemini to continue briefly.
@@ -527,13 +531,20 @@ class GeminiLiveHandler:
                     text = str(message.get("text", "")).strip()
                     if not text:
                         continue
-                    # Combine language instruction and text into a single send
-                    # to avoid breaking RAG context with multiple consecutive text blocks
-                    lang_name = self._language_label(self.language)
-                    combined_text = f"[Respond in {lang_name}] {text}"
+                        
+                    requested_lang = detect_language_command(text)
+                    if requested_lang:
+                        await self._switch_language(websocket, requested_lang, source="text_input")
+                        
+                    if self._pending_language_reminder:
+                        lang_name = self._language_label(self.language)
+                        combined_text = f"[(System: Switch language to {lang_name})] {text}"
+                        self._pending_language_reminder = False
+                    else:
+                        combined_text = text
+
                     await session.send(input=combined_text, end_of_turn=True)
                     logger.info("📤 Sent text_input to Gemini: %s", combined_text[:80])
-                    self._pending_language_reminder = False
 
                 elif msg_type == "set_language":
                     requested = str(message.get("language", "")).strip().lower()
@@ -960,7 +971,7 @@ class GeminiLiveHandler:
             "until the visitor asks to switch again. Keep the same persona and factual constraints.]"
         )
         try:
-            await session.send(input=reminder, end_of_turn=False)
+            await session.send(input=reminder, end_of_turn=True)
             logger.info("✅ Injected language reminder: %s", lang_name)
         except Exception as e:
             logger.warning("Failed to inject language reminder: %s", e)

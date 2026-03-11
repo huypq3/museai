@@ -552,13 +552,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const switchToText = useCallback(() => {
     pendingAskVoiceAfterDrainRef.current = false;
     if (is.inputBlocked || stateRef.current === "recording") return;
-    if (!can("ASK_TEXT")) return;
     if (stateRef.current === "ai_speaking" && can("STOP_PRESSED")) {
       stopPlayback();
       waitingForAudioRef.current = false;
       sendMessage({ type: "interrupt" });
       dispatch({ type: "STOP_PRESSED", drainingIntent: "ask_text" });
     } else {
+      if (!can("ASK_TEXT")) return;
       dispatch({ type: "ASK_TEXT" });
     }
     setInputMode("text");
@@ -654,14 +654,21 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const handleAskPress = useCallback(async () => {
     if (inputMode === "text") {
       if (is.inputBlocked || stateRef.current === "recording") return;
-      if (!can("ASK_TEXT")) return;
-      dispatch({ type: "ASK_TEXT" });
+      if (stateRef.current === "ai_speaking" && can("STOP_PRESSED")) {
+        stopPlayback();
+        waitingForAudioRef.current = false;
+        sendMessage({ type: "interrupt" });
+        dispatch({ type: "STOP_PRESSED", drainingIntent: "ask_text" });
+      } else {
+        if (!can("ASK_TEXT")) return;
+        dispatch({ type: "ASK_TEXT" });
+      }
       setShowTextInput(true);
       window.setTimeout(() => textInputRef.current?.focus(), 100);
       return;
     }
     await handleMicPress();
-  }, [inputMode, is.inputBlocked, stateRef, can, dispatch, handleMicPress]);
+  }, [inputMode, is.inputBlocked, stateRef, can, dispatch, handleMicPress, stopPlayback, sendMessage]);
 
   useEffect(() => {
     if (!is.recording) return;
