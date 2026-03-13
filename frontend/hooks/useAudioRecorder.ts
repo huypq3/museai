@@ -47,6 +47,7 @@ export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   const processorRef = useRef<AudioNode | null>(null);
+  const micSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const isRecordingRef = useRef(false);
   const chunkCountRef = useRef(0);
@@ -80,8 +81,10 @@ export function useAudioRecorder() {
       streamRef.current = stream;
       audioContextRef.current = ctx;
       const deviceSampleRate = ctx.sampleRate;
+      const micSource = ctx.createMediaStreamSource(stream);
+      micSourceRef.current = micSource;
+      micSource.connect(ctx.destination);
       
-      const source = ctx.createMediaStreamSource(stream);
       const silenceMs = options?.silenceMs ?? 1300;
       const maxNoSpeechMs = options?.maxNoSpeechMs ?? 2800;
       const voiceThreshold = options?.voiceThreshold ?? 0;
@@ -160,7 +163,7 @@ export function useAudioRecorder() {
         };
 
         processorRef.current = workletNode;
-        source.connect(workletNode);
+        micSource.connect(workletNode);
       } else {
         console.warn("AudioWorklet is not supported, falling back to ScriptProcessorNode");
         const processor = ctx.createScriptProcessor(4096, 1, 1);
@@ -168,7 +171,7 @@ export function useAudioRecorder() {
           processFrame(e.inputBuffer.getChannelData(0));
         };
         processorRef.current = processor;
-        source.connect(processor);
+        micSource.connect(processor);
         processor.connect(ctx.destination);
       }
       
@@ -196,6 +199,10 @@ export function useAudioRecorder() {
     if (processorRef.current) {
       processorRef.current.disconnect();
       processorRef.current = null;
+    }
+    if (micSourceRef.current) {
+      micSourceRef.current.disconnect();
+      micSourceRef.current = null;
     }
 
     if (streamRef.current) {
