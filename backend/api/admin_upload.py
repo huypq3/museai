@@ -8,6 +8,7 @@ sys.path.append('..')
 from auth.admin import ensure_museum_scope, get_current_admin
 import uuid
 import os
+from urllib.parse import quote
 
 router = APIRouter(prefix="/admin/upload", tags=["admin"])
 GCS_BUCKET = os.getenv("GCS_BUCKET", "museai-assets")
@@ -46,6 +47,10 @@ async def upload_image(
     filename = f"uploads/{uuid.uuid4()}.{ext}"
     blob = bucket.blob(filename)
     blob.upload_from_string(content, content_type=file.content_type)
-    blob.make_public()
-    
-    return {"url": blob.public_url}
+
+    # Uniform bucket-level access disables object ACL APIs (e.g. make_public()).
+    # Return canonical object URL and rely on bucket-level IAM/public policy.
+    object_path = quote(filename, safe="/")
+    object_url = f"https://storage.googleapis.com/{GCS_BUCKET}/{object_path}"
+
+    return {"url": object_url}
