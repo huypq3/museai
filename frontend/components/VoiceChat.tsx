@@ -183,13 +183,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const pendingAITextRef = useRef("");
   const pendingUserTextRef = useRef("");
   const hasAiOutputThisTurnRef = useRef(false);
-  const pendingAskVoiceAfterDrainRef = useRef(false);
+  const pendingIntroAfterConnectRef = useRef(false);
   const awaitingOldTurnCompleteRef = useRef(false);
   const micPermissionPrimedRef = useRef(false);
   const introMicAnchorStreamRef = useRef<MediaStream | null>(null);
   const runtimeLanguageRef = useRef<LanguageCode>(language);
   const vadInterruptLockRef = useRef(false);
   const lastWaveTapAtRef = useRef(0);
+  const autoStartLockRef = useRef(false);
+  const lastAutoStartAtRef = useRef(0);
+  const lastAiAudioAtRef = useRef(0);
 
   const {
     start,
@@ -213,6 +216,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, []);
   const handleAudioChunk = useCallback((base64: string) => {
     if (!base64 || stateRef.current === "recording") return;
+    lastAiAudioAtRef.current = Date.now();
     hasAiOutputThisTurnRef.current = true;
     waitingForAudioRef.current = true;
     if (stateRef.current === "processing" && can("FIRST_AI_CHUNK")) {
@@ -498,13 +502,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     sendMessage({ type: "interrupt" });
     stopPlayback();
     waitingForAudioRef.current = false;
-    pendingAskVoiceAfterDrainRef.current = true;
     dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
-    // resolve draining immediately — Gemini will cut the old turn on its own
-    // when it receives the new activityStart, no need to wait for turn_complete
-    requestAnimationFrame(() => {
-      if (can("INTERRUPT_DONE")) dispatch({ type: "INTERRUPT_DONE" });
-    });
+    dispatch({ type: "INTERRUPT_DONE" });
 
     if (currentAIText.trim()) {
       setMessages((prev) => [...prev, { role: "assistant", text: currentAIText.trim(), timestamp: new Date() }]);
@@ -514,7 +513,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     pendingUserTextRef.current = "";
     setCurrentUserText("");
 
-  }, [can, stopPlayback, sendMessage, dispatch, currentAIText]);
+    const ok = await startVoiceCapture();
+    if (!ok && can("CANCEL_RECORDING")) {
+      dispatch({ type: "CANCEL_RECORDING" });
+    }
+  }, [can, stopPlayback, sendMessage, dispatch, currentAIText, startVoiceCapture]);
 
   useEffect(() => {
     let cancelled = false;
@@ -524,7 +527,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       isConnected &&
       !is.recording &&
       micPermissionPrimedRef.current &&
-      currentState === "ai_speaking";
+      (currentState === "ai_speaking" || currentState === "ready" || currentState === "paused");
 
     if (!shouldMonitor) {
       void stopVADMonitor();
@@ -542,6 +545,24 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         const s = stateRef.current;
         if (s === "ai_speaking") {
           void handleInterrupt();
+        } else if ((s === "ready" || s === "paused") && can("ASK_VOICE")) {
+          const now = Date.now();
+          const recentlyPlayedAi = now - lastAiAudioAtRef.current < 700;
+          const inTurnCooldown = now - lastAutoStartAtRef.current < 1600;
+          if (recentlyPlayedAi || inTurnCooldown || autoStartLockRef.current) {
+            vadInterruptLockRef.current = false;
+            return;
+          }
+          autoStartLockRef.current = true;
+          lastAutoStartAtRef.current = now;
+          void (async () => {
+            dispatch({ type: "ASK_VOICE" });
+            const ok = await startVoiceCapture();
+            if (!ok && can("CANCEL_RECORDING")) {
+              dispatch({ type: "CANCEL_RECORDING" });
+            }
+            autoStartLockRef.current = false;
+          })();
         }
 
         window.setTimeout(() => {
@@ -550,8 +571,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       },
       {
         threshold: 0.018,
-        minSpeechFrames: 3,
-        cooldownMs: 900,
+        minSpeechFrames: 4,
+        minSpeechMs: 320,
+        cooldownMs: 1200,
       }
     );
 
@@ -559,7 +581,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       cancelled = true;
       void stopVADMonitor();
     };
-  }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef]);
+  }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef, can, dispatch, startVoiceCapture]);
 
   const handleIntro = useCallback(async () => {
     if (!can("GREETING_REQUESTED")) {
@@ -583,23 +605,38 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     const sent = sendMessage({ type: "request_greeting" });
     if (!sent) {
       console.warn("⚠️ request_greeting not sent because websocket is not open");
+      pendingIntroAfterConnectRef.current = true;
+      reconnectNow();
       return;
     }
     markIntroUsed();
     dispatch({ type: "GREETING_REQUESTED" });
     console.log("✅ intro request_greeting sent");
-  }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch, stateRef]);
+  }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch, stateRef, reconnectNow]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    if (!pendingIntroAfterConnectRef.current) return;
+    if (!showIntroButton) return;
+    pendingIntroAfterConnectRef.current = false;
+    void handleIntro();
+  }, [isConnected, showIntroButton, handleIntro]);
 
   const handleMicPress = useCallback(async () => {
     console.log(
       `🎛️ waveform tap: state=${stateRef.current} ready=${is.ready} recording=${is.recording} speaking=${is.aiSpeaking} processing=${is.processing} draining=${is.draining} blocked=${is.inputBlocked}`
     );
     if (showIntroButton && is.ready) {
+      if (!isConnected) {
+        pendingIntroAfterConnectRef.current = true;
+        reconnectNow();
+        return;
+      }
       await handleIntro();
       return;
     }
     console.log("ℹ️ waveform tap ignored: hands-free mode after intro");
-  }, [showIntroButton, is.ready, handleIntro, stateRef, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked]);
+  }, [showIntroButton, is.ready, handleIntro, stateRef, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, isConnected, reconnectNow]);
 
   const handleWaveTap = useCallback(() => {
     const now = Date.now();
@@ -607,18 +644,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     lastWaveTapAtRef.current = now;
     void handleMicPress();
   }, [handleMicPress]);
-
-  useEffect(() => {
-    if (!is.recording) return;
-    if (!pendingAskVoiceAfterDrainRef.current) return;
-    pendingAskVoiceAfterDrainRef.current = false;
-    void (async () => {
-      const ok = await startVoiceCapture();
-      if (!ok && can("CANCEL_RECORDING")) {
-        dispatch({ type: "CANCEL_RECORDING" });
-      }
-    })();
-  }, [is.recording, startVoiceCapture, can, dispatch]);
 
   const isRecordingState = is.recording;
   const isSpeakingState = is.aiSpeaking;

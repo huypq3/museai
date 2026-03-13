@@ -10,6 +10,7 @@ type AutoStopOptions = {
 type VADMonitorOptions = {
   threshold?: number;
   minSpeechFrames?: number;
+  minSpeechMs?: number;
   cooldownMs?: number;
 };
 
@@ -296,9 +297,11 @@ export function useAudioRecorder() {
 
         const threshold = options?.threshold ?? 0.02;
         const minSpeechFrames = options?.minSpeechFrames ?? 3;
+        const minSpeechMs = options?.minSpeechMs ?? 260;
         const cooldownMs = options?.cooldownMs ?? 800;
         vadConsecutiveFramesRef.current = 0;
         vadCooldownUntilRef.current = 0;
+        let speechStartAt = 0;
 
         processor.onaudioprocess = (e) => {
           const now = Date.now();
@@ -313,14 +316,20 @@ export function useAudioRecorder() {
           const rms = Math.sqrt(energy / Math.max(1, input.length));
 
           if (rms >= threshold) {
+            if (speechStartAt === 0) speechStartAt = now;
             vadConsecutiveFramesRef.current += 1;
-            if (vadConsecutiveFramesRef.current >= minSpeechFrames) {
+            if (
+              vadConsecutiveFramesRef.current >= minSpeechFrames &&
+              now - speechStartAt >= minSpeechMs
+            ) {
               vadConsecutiveFramesRef.current = 0;
+              speechStartAt = 0;
               vadCooldownUntilRef.current = now + cooldownMs;
               onSpeechStart();
             }
           } else {
             vadConsecutiveFramesRef.current = 0;
+            speechStartAt = 0;
           }
         };
 
