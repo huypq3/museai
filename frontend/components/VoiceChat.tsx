@@ -641,8 +641,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       handleStopRecording();
       return;
     }
-    if (is.aiSpeaking || is.processing || is.draining) {
+    if (is.aiSpeaking) {
       handleInterrupt();
+      return;
+    }
+    if (is.processing || is.draining) {
       return;
     }
     if (is.inputBlocked) {
@@ -661,7 +664,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const isRecordingState = is.recording;
   const isSpeakingState = is.aiSpeaking;
   const isProcessingState = is.processing;
-  const isDisabledWave = is.connecting || is.reconnecting || is.error || is.sessionEnded;
+  const isDisabledWave =
+    is.connecting || is.reconnecting || is.error || is.sessionEnded || is.processing || is.draining;
   const goldBright = "#F6C453";
   const goldLight = "#FFE08A";
   const goldRing = "rgba(246,196,83,0.72)";
