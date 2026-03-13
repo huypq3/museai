@@ -511,8 +511,9 @@ async def websocket_persona(
         else:
             exhibit_data["persona"] = {}
         
-        # Start websocket session handler
-        await budget_guard.record_session_start()
+        # Start websocket session handler.
+        # Budget is now recorded only when there is actual model output,
+        # not on bare websocket connect.
         await handle_persona_websocket(websocket, exhibit_data, language)
         
     except Exception as e:

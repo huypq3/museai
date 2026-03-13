@@ -18,6 +18,7 @@ class GeminiBudgetGuard:
     """
 
     def __init__(self) -> None:
+        self.enabled = os.getenv("BUDGET_GUARD_ENABLED", "true").lower() == "true"
         self.daily_limit_usd = float(os.getenv("DAILY_GEMINI_BUDGET_USD", "50"))
         self.monthly_limit_usd = float(os.getenv("MONTHLY_GEMINI_BUDGET_USD", "500"))
         self.approx_cost_per_session = float(os.getenv("GEMINI_EST_COST_PER_SESSION_USD", "0.5"))
@@ -48,6 +49,8 @@ class GeminiBudgetGuard:
         return self._daily_local, self._monthly_local
 
     async def check_budget(self) -> None:
+        if not self.enabled:
+            return
         daily, monthly = await self._get_spend()
         if daily >= self.daily_limit_usd:
             raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -55,6 +58,8 @@ class GeminiBudgetGuard:
             raise HTTPException(status_code=503, detail="Service temporarily unavailable")
 
     async def record_session_start(self, estimated_cost_usd: float | None = None) -> None:
+        if not self.enabled:
+            return
         amount = estimated_cost_usd if estimated_cost_usd is not None else self.approx_cost_per_session
         daily_key, monthly_key = self._keys()
         if self.redis:

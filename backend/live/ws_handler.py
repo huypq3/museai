@@ -23,6 +23,7 @@ from persona.prompt_builder import build_prompt
 from live.rag_context import get_exhibit_context, get_exhibit_name, get_museum_prompt_config
 from live.session_manager import SessionManager
 from security.rate_limit import register_ws_session, unregister_ws_session
+from security.budget_guard import budget_guard
 
 
 logger = logging.getLogger(__name__)
@@ -132,6 +133,7 @@ class GeminiLiveHandler:
         self._awaiting_interrupted_turn_complete = False
         self._old_turn_done_event = asyncio.Event()
         self._old_turn_done_event.set()  # initially "done" (no pending old turn)
+        self._budget_recorded = False
         try:
             self._genai_version = pkg_version("google-genai")
         except PackageNotFoundError:
@@ -641,6 +643,12 @@ class GeminiLiveHandler:
                                 continue
                             audio_b64 = base64.b64encode(response.data).decode("utf-8")
                             await websocket.send_json({"type": "audio_chunk", "audio": audio_b64})
+                            if not self._budget_recorded:
+                                try:
+                                    await budget_guard.record_session_start()
+                                    self._budget_recorded = True
+                                except Exception as budget_e:
+                                    logger.warning("Failed to record budget usage: %s", budget_e)
                             if self.session_state:
                                 self._schedule_session_metric_task(
                                     session_manager.incr_out(
