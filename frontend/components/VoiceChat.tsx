@@ -457,17 +457,17 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }, 15000);
   }, [stopRecording, sendMessage, exhibitId, can, dispatch, stateRef]);
 
-  const startVoiceCapture = useCallback(async () => {
+  const startVoiceCapture = useCallback(async (): Promise<boolean> => {
     sendMessage({ type: "set_language", language: runtimeLanguageRef.current });
     const started = sendMessage({ type: "start_of_turn" });
     if (!started) {
       console.warn("⚠️ start_of_turn not sent because websocket is not open");
-      return;
+      return false;
     }
     const ctx = getAudioContext();
     if (!ctx) {
       console.warn("⚠️ AudioContext is not ready; unlockAndFlush must run before startVoiceCapture");
-      return;
+      return false;
     }
     await start(
       ctx,
@@ -483,6 +483,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       }
     );
     micPermissionPrimedRef.current = true;
+    return true;
   }, [sendMessage, start, stopAndSendTurn, getAudioContext]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────
@@ -531,7 +532,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (!can("ASK_VOICE")) return;
     pendingAskVoiceAfterDrainRef.current = false;
     dispatch({ type: "ASK_VOICE" });
-    await startVoiceCapture();
+    const ok = await startVoiceCapture();
+    if (!ok && can("CANCEL_RECORDING")) {
+      dispatch({ type: "CANCEL_RECORDING" });
+    }
   }, [
     isConnected,
     can,
@@ -628,7 +632,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       }
     }
     await unlockAndFlush();
-    sendMessage({ type: "request_greeting" });
+    const sent = sendMessage({ type: "request_greeting" });
+    if (!sent) {
+      console.warn("⚠️ request_greeting not sent because websocket is not open");
+      return;
+    }
     dispatch({ type: "GREETING_REQUESTED" });
   }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch]);
 
@@ -658,8 +666,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (!is.recording) return;
     if (!pendingAskVoiceAfterDrainRef.current) return;
     pendingAskVoiceAfterDrainRef.current = false;
-    void startVoiceCapture();
-  }, [is.recording, startVoiceCapture]);
+    void (async () => {
+      const ok = await startVoiceCapture();
+      if (!ok && can("CANCEL_RECORDING")) {
+        dispatch({ type: "CANCEL_RECORDING" });
+      }
+    })();
+  }, [is.recording, startVoiceCapture, can, dispatch]);
 
   const isRecordingState = is.recording;
   const isSpeakingState = is.aiSpeaking;
