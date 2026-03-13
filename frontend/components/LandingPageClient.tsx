@@ -44,7 +44,6 @@ export default function LandingPageClient() {
   const router = useRouter();
   const [openScanner, setOpenScanner] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [videoReady, setVideoReady] = useState(false);
   const [locale, setLocale] = useState<LandingLang>("en");
 
   useEffect(() => {
@@ -231,62 +230,16 @@ export default function LandingPageClient() {
             background: "linear-gradient(135deg, #151515, #1f1f1f)",
           }}
         >
-          <video
-            autoPlay
-            muted
-            loop
-            playsInline
-            {...({ "webkit-playsinline": "true" } as Record<string, string>)}
-            preload="metadata"
-            poster="/demo-thumbnail.jpg"
-            onLoadedData={() => setVideoReady(true)}
-            onCanPlay={() => setVideoReady(true)}
+          <img
+            src="/museai_demo.jpg"
+            alt={tr.demoVideoAriaLabel}
             style={{
               width: "100%",
               height: "100%",
               objectFit: "cover",
               display: "block",
             }}
-            aria-label={tr.demoVideoAriaLabel}
-          >
-            <source src="/demo.mp4" type="video/mp4" />
-          </video>
-
-          {!videoReady && (
-            <div
-              style={{
-                position: "absolute",
-                inset: 0,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                background: "linear-gradient(135deg, #1a1a1a, #2a2a2a)",
-              }}
-            >
-              <div
-                style={{
-                  width: 74,
-                  height: 74,
-                  borderRadius: 999,
-                  border: `1px solid ${COLORS.goldSoft}`,
-                  background: "rgba(201,168,76,0.15)",
-                  animation: "goldPulse 1.8s ease-in-out infinite",
-                }}
-              />
-              <p
-                style={{
-                  position: "absolute",
-                  bottom: 14,
-                  margin: 0,
-                  color: "rgba(245,240,232,0.72)",
-                  fontFamily: "DM Sans, sans-serif",
-                  fontSize: 12,
-                }}
-              >
-                {tr.demoVideoPlaceholder}
-              </p>
-            </div>
-          )}
+          />
 
           <div
             aria-hidden
