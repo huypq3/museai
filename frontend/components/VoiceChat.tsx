@@ -336,9 +336,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   useEffect(() => {
     fetch(`${BACKEND_URL}/exhibits/${exhibitId}`)
       .then((r) => r.json())
-      .then((data) => setExhibitName(data.data?.name || ""))
+      .then((data) => {
+        const exhibit = data.data || {};
+        const displayName =
+          language === "en"
+            ? exhibit.name_en || exhibit.name || ""
+            : exhibit.name || exhibit.name_en || "";
+        setExhibitName(displayName);
+      })
       .catch((e) => console.error("Failed to load exhibit:", e));
-  }, [exhibitId]);
+  }, [exhibitId, language]);
 
   useEffect(() => {
     setShowIntroButton(true);
