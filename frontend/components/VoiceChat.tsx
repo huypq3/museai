@@ -189,6 +189,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const introMicAnchorStreamRef = useRef<MediaStream | null>(null);
   const runtimeLanguageRef = useRef<LanguageCode>(language);
   const vadInterruptLockRef = useRef(false);
+  const lastWaveTapAtRef = useRef(0);
 
   const {
     start,
@@ -667,6 +668,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     await handleStartRecording();
   }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording, stateRef]);
 
+  const handleWaveTap = useCallback(() => {
+    const now = Date.now();
+    if (now - lastWaveTapAtRef.current < 250) return;
+    lastWaveTapAtRef.current = now;
+    void handleMicPress();
+  }, [handleMicPress]);
+
   useEffect(() => {
     if (!is.recording) return;
     if (!pendingAskVoiceAfterDrainRef.current) return;
@@ -1080,7 +1088,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             }}
           />
           <button
-            onClick={handleMicPress}
+            onPointerDown={handleWaveTap}
+            onTouchStart={handleWaveTap}
+            onClick={handleWaveTap}
             title={isDisabledWave ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
               width: "64px",
@@ -1088,6 +1098,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               borderRadius: "50%",
               border: "none",
               cursor: isDisabledWave ? "not-allowed" : "pointer",
+              pointerEvents: "auto",
+              position: "relative",
+              zIndex: 20,
               background: isRecordingState
                 ? "radial-gradient(circle at 30% 30%, #fb7185, #dc2626 70%)"
                 : `radial-gradient(circle at 30% 30%, ${goldLight}, ${goldBright} 72%)`,
