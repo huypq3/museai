@@ -199,6 +199,13 @@ export function useWebSocket(exhibitId: string | null, language: string, options
         }
         onControlMessageRef.current?.(data);
 
+        if (data.type === "error" && (data.code === "WS_RATE_LIMIT" || data.code === "RATE_LIMIT")) {
+          shouldAutoReconnectRef.current = false;
+          const mapped = mapCloseToNotice(4003, "rate_limit");
+          setNotice(mapped);
+          return;
+        }
+
         if (data.type === "session_end") {
           shouldAutoReconnectRef.current = false;
           const mapped = mapCloseToNotice(
@@ -225,7 +232,16 @@ export function useWebSocket(exhibitId: string | null, language: string, options
       setNotice(mapped);
 
       if (!shouldReconnectRef.current || !shouldAutoReconnectRef.current || !mapped.reconnectAllowed) return;
-      if (event.code === 1000 || event.code === 1001 || event.code === 4401 || event.code === 4403) return;
+      if (
+        event.code === 1000 ||
+        event.code === 1001 ||
+        event.code === 1008 ||
+        event.code === 4003 ||
+        event.code === 4401 ||
+        event.code === 4403
+      ) {
+        return;
+      }
 
       if (retryCountRef.current < MAX_RETRY) {
         retryCountRef.current++;
@@ -243,7 +259,7 @@ export function useWebSocket(exhibitId: string | null, language: string, options
     ws.onerror = () => {
       isConnectingRef.current = false;
     };
-  }, [exhibitId, language]);
+  }, [exhibitId, language, MAX_RETRY]);
 
   useEffect(() => {
     connectLanguageRef.current = language;
