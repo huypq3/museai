@@ -188,12 +188,15 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const micPermissionPrimedRef = useRef(false);
   const introMicAnchorStreamRef = useRef<MediaStream | null>(null);
   const runtimeLanguageRef = useRef<LanguageCode>(language);
-  const textInputRef = useRef<HTMLInputElement>(null);
-  const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
-  const [textInput, setTextInput] = useState("");
-  const [showTextInput, setShowTextInput] = useState(false);
+  const vadInterruptLockRef = useRef(false);
 
-  const { start, stop: stopRecording, destroy: destroyRecorder } = useAudioRecorder();
+  const {
+    start,
+    stop: stopRecording,
+    destroy: destroyRecorder,
+    startVADMonitor,
+    stopVADMonitor,
+  } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush, getContext: getAudioContext } = useAudioPlayer();
   const releaseIntroMicAnchor = useCallback(() => {
     if (!introMicAnchorStreamRef.current) return;
@@ -329,7 +332,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     isConnected,
     notice: wsNotice,
     sendMessage,
-    sendTextMessage,
     reconnectNow,
   } = useWebSocket(exhibitId, language, {
     onAudioChunk: handleAudioChunk,
@@ -413,10 +415,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       if (aiTextFlushTimerRef.current) clearTimeout(aiTextFlushTimerRef.current);
       releaseIntroMicAnchor();
+      void stopVADMonitor();
       destroyRecorder();
       stopAudio();
     };
-  }, [destroyRecorder, stopAudio, releaseIntroMicAnchor]);
+  }, [destroyRecorder, stopAudio, releaseIntroMicAnchor, stopVADMonitor]);
 
   const stopAndSendTurn = useCallback((reason: "manual" | "silence" | "no_speech") => {
     if (stateRef.current !== "recording") return;
@@ -479,12 +482,14 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         },
       }
     );
+    micPermissionPrimedRef.current = true;
   }, [sendMessage, start, stopAndSendTurn, getAudioContext]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────
   const handleStartRecording = useCallback(async () => {
     console.log(`🎤 Start recording — state=${stateRef.current} connected=${isConnected}`);
     releaseIntroMicAnchor();
+    void stopVADMonitor();
 
     if (!isConnected) {
       console.warn("⚠️ Not connected");
@@ -539,6 +544,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     currentAIText,
     stateRef,
     releaseIntroMicAnchor,
+    stopVADMonitor,
   ]);
 
   const handleStopRecording = useCallback(() => {
@@ -574,97 +580,39 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   }, [can, stopPlayback, sendMessage, dispatch, currentAIText]);
 
-  const handleStop = useCallback(() => {
-    if (!can("STOP_PRESSED")) return;
-    pendingAskVoiceAfterDrainRef.current = false;
-    stopPlayback();
-    waitingForAudioRef.current = false;
-    sendMessage({ type: "interrupt" });
-    dispatch({ type: "STOP_PRESSED", drainingIntent: "stop" });
-  }, [can, stopPlayback, sendMessage, dispatch]);
+  useEffect(() => {
+    let cancelled = false;
 
-  const handleResume = useCallback(() => {
-    if (!can("RESUME_PRESSED")) return;
-    waitingForAudioRef.current = false;
-    dispatch({ type: "RESUME_PRESSED" });
-    sendMessage({ type: "resume_greeting" });
-  }, [can, dispatch, sendMessage]);
-
-  // Chuyển sang TEXT — mọi state
-  const switchToText = useCallback(() => {
-    pendingAskVoiceAfterDrainRef.current = false;
-    if (is.inputBlocked || stateRef.current === "recording") return;
-    if (stateRef.current === "ai_speaking" && can("STOP_PRESSED")) {
-      stopPlayback();
-      waitingForAudioRef.current = false;
-      sendMessage({ type: "interrupt" });
-      dispatch({ type: "STOP_PRESSED", drainingIntent: "ask_text" });
-    } else {
-      if (!can("ASK_TEXT")) return;
-      dispatch({ type: "ASK_TEXT" });
-    }
-    setInputMode("text");
-    setShowTextInput(true);
-    window.setTimeout(() => textInputRef.current?.focus(), 100);
-  }, [is.inputBlocked, can, stateRef, stopPlayback, sendMessage, dispatch]);
-
-  // Chuyển sang VOICE — đóng textbox, bắt đầu record ngay
-  const switchToVoice = useCallback(async () => {
-    setShowTextInput(false);
-    setTextInput("");
-    setInputMode("voice");
-    if (is.inputBlocked || stateRef.current === "recording") return;
-    await handleStartRecording();
-  }, [is.inputBlocked, stateRef, handleStartRecording]);
-
-  const handleSendText = useCallback(() => {
-    const text = textInput.trim();
-    if (!text) return;
-
-    // blur trước để iOS dismiss keyboard trước khi body unlock
-    textInputRef.current?.blur();
-    setShowTextInput(false);
-    setTextInput("");
-    setInputMode("voice");
-    markIntroUsed();
-
-    // Lưu transcript AI đang hiển thị vào messages TRƯỚC khi xoá
-    // (tránh mất transcript thuyết minh trước đó)
-    const existingAIText = pendingAITextRef.current;
-    const existingUserText = pendingUserTextRef.current;
-    if (existingAIText || existingUserText) {
-      setMessages((prev) => {
-        const next = [...prev];
-        if (existingUserText) next.push({ role: "user", text: existingUserText, timestamp: new Date() });
-        if (existingAIText) next.push({ role: "assistant", text: existingAIText, timestamp: new Date() });
-        return next;
-      });
+    if (!is.aiSpeaking || !isConnected || is.recording || !micPermissionPrimedRef.current) {
+      void stopVADMonitor();
+      return () => {
+        cancelled = true;
+      };
     }
 
-    hasAiOutputThisTurnRef.current = false;
-    pendingAITextRef.current = "";
-    pendingUserTextRef.current = text;
-    setCurrentAIText("");
-    setCurrentUserText(text);
-    if (can("TEXT_SENT")) dispatch({ type: "TEXT_SENT" });
-    sendMessage({ type: "set_language", language: runtimeLanguageRef.current });
+    void startVADMonitor(
+      () => {
+        if (cancelled) return;
+        if (stateRef.current !== "ai_speaking") return;
+        if (vadInterruptLockRef.current) return;
+        vadInterruptLockRef.current = true;
+        void handleInterrupt();
+        window.setTimeout(() => {
+          vadInterruptLockRef.current = false;
+        }, 900);
+      },
+      {
+        threshold: 0.018,
+        minSpeechFrames: 3,
+        cooldownMs: 900,
+      }
+    );
 
-    const sent = sendTextMessage(text);
-    if (!sent) {
-      if (can("PROCESSING_TIMEOUT")) dispatch({ type: "PROCESSING_TIMEOUT" });
-      return;
-    }
-    const museumId =
-      typeof window !== "undefined" ? localStorage.getItem("museum_id") || "demo_museum" : "demo_museum";
-    trackEvent("question_asked", museumId, exhibitId, { reason: "text" });
-  }, [textInput, markIntroUsed, sendTextMessage, sendMessage, exhibitId, can, dispatch]);
-
-  const handleCancelRecording = useCallback(() => {
-    pendingAskVoiceAfterDrainRef.current = false;
-    stopRecording();
-    hasAiOutputThisTurnRef.current = false;
-    if (can("CANCEL_RECORDING")) dispatch({ type: "CANCEL_RECORDING" });
-  }, [stopRecording, can, dispatch]);
+    return () => {
+      cancelled = true;
+      void stopVADMonitor();
+    };
+  }, [is.aiSpeaking, isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef]);
 
   const handleIntro = useCallback(async () => {
     if (!can("GREETING_REQUESTED")) return;
@@ -703,14 +651,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     await handleStartRecording();
   }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
 
-  const handleAskPress = useCallback(async () => {
-    if (inputMode === "text") {
-      switchToText();
-      return;
-    }
-    await handleMicPress();
-  }, [inputMode, switchToText, handleMicPress]);
-
   useEffect(() => {
     if (!is.recording) return;
     if (!pendingAskVoiceAfterDrainRef.current) return;
@@ -721,7 +661,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const isRecordingState = is.recording;
   const isSpeakingState = is.aiSpeaking;
   const isProcessingState = is.processing;
-  const isDisabledMic = is.aiSpeaking || is.connecting || is.processing || is.draining;
+  const isDisabledWave = is.connecting || is.reconnecting || is.error || is.sessionEnded;
   const goldBright = "#F6C453";
   const goldLight = "#FFE08A";
   const goldRing = "rgba(246,196,83,0.72)";
@@ -1100,7 +1040,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 : `1px solid ${goldRing}`,
               transform: "scale(1)",
               animation: isRecordingState || isSpeakingState ? "orbPulse 1.6s ease-in-out infinite" : "none",
-              opacity: isDisabledMic ? 0.7 : 0.95,
+              opacity: isDisabledWave ? 0.7 : 0.95,
             }}
           />
           <span
@@ -1114,19 +1054,19 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 : `1px solid ${goldRingSoft}`,
               transform: "scale(1)",
               animation: isRecordingState || isSpeakingState ? "orbPulse 1.6s ease-in-out 0.2s infinite" : "none",
-              opacity: isDisabledMic ? 0.55 : 0.85,
+              opacity: isDisabledWave ? 0.55 : 0.85,
             }}
           />
           <button
             onClick={handleMicPress}
-            disabled={isDisabledMic}
-            title={isDisabledMic ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
+            disabled={isDisabledWave}
+            title={isDisabledWave ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
               width: "64px",
               height: "64px",
               borderRadius: "50%",
               border: "none",
-              cursor: isDisabledMic ? "not-allowed" : "pointer",
+              cursor: isDisabledWave ? "not-allowed" : "pointer",
               background: isRecordingState
                 ? "radial-gradient(circle at 30% 30%, #fb7185, #dc2626 70%)"
                 : `radial-gradient(circle at 30% 30%, ${goldLight}, ${goldBright} 72%)`,
@@ -1138,306 +1078,36 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               boxShadow: isRecordingState
                 ? "0 10px 30px rgba(239,68,68,0.35)"
                 : "0 10px 30px rgba(246,196,83,0.45)",
-              opacity: isDisabledMic ? 0.5 : 1,
+              opacity: isDisabledWave ? 0.5 : 1,
             }}
           >
-            {/* [FIX 9] Spinner khi disabled, mic khi active */}
-            {isDisabledMic
+            {isDisabledWave
               ? <span style={{ fontSize: "20px", animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span>
               : isRecordingState ? "" : "🎤"}
           </button>
         </div>
 
-        {isSpeakingState ? (
-          <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
-            {/* Stop — flex:1 */}
-            <button
-              onClick={handleStop}
-              style={{
-                flex: 1,
-                height: "48px",
-                minWidth: 0,
-                background: "transparent",
-                border: "1.5px solid #666",
-                borderRadius: "12px",
-                color: "#F5F0E8",
-                fontSize: "15px",
-                fontWeight: 600,
-                fontFamily: "DM Sans, sans-serif",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-                padding: "0 10px",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              ⏹ {t(language, "voice.stop")}
-            </button>
-            {/* Tap to ask — flex:1 bằng Stop */}
-            <button
-              onClick={handleAskPress}
-              style={{
-                flex: 1,
-                height: "48px",
-                minWidth: 0,
-                background: "#C9A84C",
-                border: "none",
-                borderRadius: "12px",
-                color: "#0A0A0A",
-                fontSize: "15px",
-                fontWeight: 600,
-                fontFamily: "DM Sans, sans-serif",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: "6px",
-                padding: "0 10px",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
-              {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
-            </button>
-            {/* Icon chuyển mode — tách riêng, click thẳng vào mode đích */}
-            <button
-              onClick={inputMode === "voice" ? switchToText : switchToVoice}
-              aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
-              style={{
-                width: "44px",
-                height: "44px",
-                flexShrink: 0,
-                borderRadius: "50%",
-                background: "rgba(255,255,255,0.06)",
-                border: `1.5px solid ${inputMode === "text" ? "#C9A84C" : "#444"}`,
-                color: inputMode === "text" ? "#C9A84C" : "#888",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                fontSize: "18px",
-                cursor: "pointer",
-                transition: "all 0.2s",
-              }}
-            >
-              {inputMode === "voice" ? "⌨️" : "🎤"}
-            </button>
-          </div>
-        ) : is.draining ? (
-          <div style={{ width: "100%", maxWidth: "320px", textAlign: "center", color: "#C9A84C", fontSize: 14 }}>
-            ⏳ {language === "vi" ? "Đang chờ AI dừng lượt cũ..." : "Waiting old AI turn to stop..."}
-          </div>
-        ) : is.paused ? (
-          // [FIX 7] paused: chỉ Resume + Ask, ẩn toggle mode
-          <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={handleResume}
-              style={{
-                flex: 1, height: "48px", minWidth: 0,
-                background: "transparent", border: "1.5px solid #666",
-                borderRadius: "12px", color: "#F5F0E8",
-                fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
-                cursor: "pointer", display: "flex", alignItems: "center",
-                justifyContent: "center", gap: "6px", padding: "0 10px",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}
-            >
-              ▶ {t(language, "voice.resume")}
-            </button>
-            <button
-              onClick={handleAskPress}
-              style={{
-                flex: 1, height: "48px", minWidth: 0,
-                background: "#C9A84C", border: "none",
-                borderRadius: "12px", color: "#0A0A0A",
-                fontSize: "15px", fontWeight: 600, fontFamily: "DM Sans, sans-serif",
-                cursor: "pointer", display: "flex", alignItems: "center",
-                justifyContent: "center", gap: "6px", padding: "0 10px",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}
-            >
-              {inputMode === "voice" ? `🎙 ${t(language, "voice.ask")}` : `⌨️ ${t(language, "voice.ask")}`}
-            </button>
-          </div>
-        ) : isRecordingState ? (
-          <div style={{ width: "100%", maxWidth: "320px", display: "flex", gap: 10 }}>
-            <button
-              onClick={handleMicPress}
-              style={{
-                flex: 1,
-                height: "48px",
-                borderRadius: "12px",
-                border: "none",
-                cursor: "pointer",
-                background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
-                color: "#0A0A0A",
-                fontFamily: "DM Sans, sans-serif",
-                fontSize: "15px",
-                fontWeight: "600",
-                transition: "all 0.2s ease",
-                boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
-              }}
-            >
-              🔴 {t(language, "voice.recording")}
-            </button>
-            <button
-              onClick={handleCancelRecording}
-              style={{
-                height: "48px",
-                padding: "0 16px",
-                borderRadius: "12px",
-                border: "1px solid rgba(245,240,232,0.28)",
-                background: "transparent",
-                color: "#F5F0E8",
-                fontFamily: "DM Sans, sans-serif",
-                fontSize: "14px",
-                fontWeight: 600,
-                cursor: "pointer",
-              }}
-            >
-              ✕ {t(language, "voice.cancel")}
-            </button>
-          </div>
-        ) : (
-          <div style={{ width: "100%", maxWidth: "360px", display: "flex", alignItems: "center", gap: 8 }}>
-            <button
-              onClick={handleAskPress}
-              disabled={is.inputBlocked}
-              style={{
-                flex: 1, height: "48px", minWidth: 0,
-                borderRadius: "12px", border: "none",
-                cursor: is.inputBlocked ? "not-allowed" : "pointer",
-                background: `linear-gradient(135deg, ${goldLight}, ${goldBright})`,
-                color: "#0A0A0A", fontFamily: "DM Sans, sans-serif",
-                fontSize: "15px", fontWeight: "600",
-                transition: "all 0.2s ease",
-                opacity: is.inputBlocked ? 0.7 : 1,
-                boxShadow: "0 12px 30px rgba(246,196,83,0.38)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                gap: "6px", padding: "0 10px",
-                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-              }}
-            >
-              {isProcessingState
-                ? `⏳ ${t(language, "voice.processing")}`
-                : inputMode === "text"
-                  ? `⌨️ ${t(language, "voice.ask")}`
+        <p
+          style={{
+            margin: 0,
+            color: "rgba(245,240,232,0.8)",
+            fontFamily: "DM Sans, sans-serif",
+            fontSize: 13,
+            letterSpacing: "0.02em",
+          }}
+        >
+          {is.draining
+            ? (language === "vi" ? "Đang chuyển sang lượt mới..." : "Switching to new turn...")
+            : isRecordingState
+              ? t(language, "voice.recording")
+              : isSpeakingState
+                ? t(language, "voice.speaking")
+                : isProcessingState
+                  ? t(language, "voice.processing")
                   : showIntroButton && is.ready
-                    ? `🎵 ${t(language, "voice.listen_guide")}`
-                    : `🎙 ${t(language, "voice.ask")}`}
-            </button>
-            {/* Toggle ⌨️/🎤 — hiện khi ready và đã qua intro */}
-            {is.ready && !showIntroButton && !isProcessingState && (
-              <button
-                onClick={() => inputMode === "voice" ? switchToText() : switchToVoice()}
-                style={{
-                  width: "40px", height: "48px", flexShrink: 0,
-                  borderRadius: "12px", border: "1px solid rgba(255,255,255,0.15)",
-                  background: inputMode === "text" ? "rgba(201,168,76,0.15)" : "transparent",
-                  color: inputMode === "text" ? "#C9A84C" : "#666",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer", fontSize: "16px", transition: "all 0.2s",
-                }}
-                aria-label={inputMode === "voice" ? "Switch to text input" : "Switch to voice input"}
-              >
-                {inputMode === "voice" ? "⌨️" : "🎤"}
-              </button>
-            )}
-          </div>
-        )}
-        {/* Text input panel — in-flow */}
-        {showTextInput && (
-          <div
-            style={{
-              width: "100%",
-              boxSizing: "border-box",
-              background: "#111",
-              borderTop: "1px solid #333",
-              padding: "12px 16px",
-              paddingBottom: "max(12px, env(safe-area-inset-bottom))",
-              display: "flex",
-              alignItems: "center",
-              gap: "10px",
-              zIndex: 200,
-            }}
-          >
-            <input
-              ref={textInputRef}
-              value={textInput}
-              onChange={(e) => setTextInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  handleSendText();
-                }
-              }}
-              placeholder={t(language, "voice.type_question")}
-              maxLength={500}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                height: "44px",
-                background: "#1a1a1a",
-                border: "1px solid #444",
-                borderRadius: "22px",
-                padding: "0 16px",
-                color: "#F5F0E8",
-                fontSize: "15px",
-                fontFamily: "DM Sans, sans-serif",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-            />
-            <button
-              onClick={() => {
-                // blur trước để iOS dismiss keyboard, tránh body bị offset
-                textInputRef.current?.blur();
-                setShowTextInput(false);
-                setTextInput("");
-                setInputMode("voice");
-                if (can("TEXT_CANCELLED")) dispatch({ type: "TEXT_CANCELLED" });
-              }}
-              style={{
-                color: "#666",
-                fontSize: "13px",
-                background: "none",
-                border: "none",
-                cursor: "pointer",
-                fontFamily: "DM Sans, sans-serif",
-                padding: "4px 8px",
-                flexShrink: 0,
-                whiteSpace: "nowrap",
-              }}
-            >
-              {t(language, "voice.cancel")}
-            </button>
-            <button
-              onClick={handleSendText}
-              disabled={!textInput.trim()}
-              style={{
-                width: "44px",
-                height: "44px",
-                borderRadius: "50%",
-                background: textInput.trim() ? "#C9A84C" : "#333",
-                border: "none",
-                color: textInput.trim() ? "#0A0A0A" : "#666",
-                fontSize: "18px",
-                cursor: textInput.trim() ? "pointer" : "default",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                transition: "all 0.2s",
-                flexShrink: 0,
-              }}
-            >
-              ➤
-            </button>
-          </div>
-        )}
+                    ? t(language, "voice.listen_guide")
+                    : t(language, "voice.ask")}
+        </p>
         {autoStopHint && (
           <p
             style={{

@@ -7,6 +7,12 @@ type AutoStopOptions = {
   voiceThreshold?: number;
 };
 
+type VADMonitorOptions = {
+  threshold?: number;
+  minSpeechFrames?: number;
+  cooldownMs?: number;
+};
+
 const WORKLET_CODE = `
 class PcmProcessor extends AudioWorkletProcessor {
   constructor() {
@@ -55,6 +61,12 @@ export function useAudioRecorder() {
   const recordingStartedAtRef = useRef(0);
   const hasDetectedVoiceRef = useRef(false);
   const autoStoppedRef = useRef(false);
+  const vadContextRef = useRef<AudioContext | null>(null);
+  const vadProcessorRef = useRef<ScriptProcessorNode | null>(null);
+  const vadSourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
+  const vadStreamRef = useRef<MediaStream | null>(null);
+  const vadConsecutiveFramesRef = useRef(0);
+  const vadCooldownUntilRef = useRef(0);
 
   const bytesToBase64 = (bytes: Uint8Array): string => {
     let binary = "";
@@ -215,12 +227,111 @@ export function useAudioRecorder() {
 
   const destroy = useCallback(async () => {
     stop();
+    if (vadProcessorRef.current) {
+      vadProcessorRef.current.disconnect();
+      vadProcessorRef.current = null;
+    }
+    if (vadSourceRef.current) {
+      vadSourceRef.current.disconnect();
+      vadSourceRef.current = null;
+    }
+    if (vadStreamRef.current) {
+      vadStreamRef.current.getTracks().forEach((track) => track.stop());
+      vadStreamRef.current = null;
+    }
+    const vadCtx = vadContextRef.current;
+    vadContextRef.current = null;
+    if (vadCtx && vadCtx.state !== "closed") {
+      await vadCtx.close();
+    }
     const ctx = audioContextRef.current;
     audioContextRef.current = null;
     if (ctx && ctx.state !== "closed") {
       await ctx.close();
     }
   }, [stop]);
+
+  const stopVADMonitor = useCallback(async () => {
+    vadConsecutiveFramesRef.current = 0;
+    vadCooldownUntilRef.current = 0;
+    if (vadProcessorRef.current) {
+      vadProcessorRef.current.disconnect();
+      vadProcessorRef.current = null;
+    }
+    if (vadSourceRef.current) {
+      vadSourceRef.current.disconnect();
+      vadSourceRef.current = null;
+    }
+    if (vadStreamRef.current) {
+      vadStreamRef.current.getTracks().forEach((track) => track.stop());
+      vadStreamRef.current = null;
+    }
+    const ctx = vadContextRef.current;
+    vadContextRef.current = null;
+    if (ctx && ctx.state !== "closed") {
+      await ctx.close();
+    }
+  }, []);
+
+  const startVADMonitor = useCallback(
+    async (onSpeechStart: () => void, options?: VADMonitorOptions) => {
+      await stopVADMonitor();
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+        vadStreamRef.current = stream;
+
+        const vadContext = new AudioContext();
+        vadContextRef.current = vadContext;
+        const source = vadContext.createMediaStreamSource(stream);
+        vadSourceRef.current = source;
+
+        const processor = vadContext.createScriptProcessor(1024, 1, 1);
+        vadProcessorRef.current = processor;
+
+        const threshold = options?.threshold ?? 0.02;
+        const minSpeechFrames = options?.minSpeechFrames ?? 3;
+        const cooldownMs = options?.cooldownMs ?? 800;
+        vadConsecutiveFramesRef.current = 0;
+        vadCooldownUntilRef.current = 0;
+
+        processor.onaudioprocess = (e) => {
+          const now = Date.now();
+          if (now < vadCooldownUntilRef.current) return;
+
+          const input = e.inputBuffer.getChannelData(0);
+          let energy = 0;
+          for (let i = 0; i < input.length; i++) {
+            const s = input[i];
+            energy += s * s;
+          }
+          const rms = Math.sqrt(energy / Math.max(1, input.length));
+
+          if (rms >= threshold) {
+            vadConsecutiveFramesRef.current += 1;
+            if (vadConsecutiveFramesRef.current >= minSpeechFrames) {
+              vadConsecutiveFramesRef.current = 0;
+              vadCooldownUntilRef.current = now + cooldownMs;
+              onSpeechStart();
+            }
+          } else {
+            vadConsecutiveFramesRef.current = 0;
+          }
+        };
+
+        source.connect(processor);
+        processor.connect(vadContext.destination);
+      } catch (error) {
+        console.warn("VAD monitor unavailable:", error);
+      }
+    },
+    [stopVADMonitor]
+  );
 
   // VAD mode: continuous streaming (always send audio, Gemini detects activity)
   const startContinuous = useCallback(
@@ -274,5 +385,5 @@ export function useAudioRecorder() {
     []
   );
 
-  return { start, stop, destroy, startContinuous, isRecording };
+  return { start, stop, destroy, startContinuous, startVADMonitor, stopVADMonitor, isRecording };
 }
