@@ -186,6 +186,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const pendingAskVoiceAfterDrainRef = useRef(false);
   const awaitingOldTurnCompleteRef = useRef(false);
   const micPermissionPrimedRef = useRef(false);
+  const introMicAnchorStreamRef = useRef<MediaStream | null>(null);
   const runtimeLanguageRef = useRef<LanguageCode>(language);
   const textInputRef = useRef<HTMLInputElement>(null);
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
@@ -194,6 +195,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   const { start, stop: stopRecording, destroy: destroyRecorder } = useAudioRecorder();
   const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush, getContext: getAudioContext } = useAudioPlayer();
+  const releaseIntroMicAnchor = useCallback(() => {
+    if (!introMicAnchorStreamRef.current) return;
+    introMicAnchorStreamRef.current.getTracks().forEach((track) => track.stop());
+    introMicAnchorStreamRef.current = null;
+    console.log("🧪 [iOS-audio] intro mic anchor released");
+  }, []);
   const scheduleAITextFlush = useCallback(() => {
     if (aiTextFlushTimerRef.current) return;
     aiTextFlushTimerRef.current = setTimeout(() => {
@@ -228,6 +235,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       return;
     }
     if (msg.type === "session_end") {
+      releaseIntroMicAnchor();
       if (can("SESSION_ENDED")) dispatch({ type: "SESSION_ENDED" });
       return;
     }
@@ -282,6 +290,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
 
     if (msg.type === "turn_complete") {
+      releaseIntroMicAnchor();
       if (aiTextFlushTimerRef.current) {
         clearTimeout(aiTextFlushTimerRef.current);
         aiTextFlushTimerRef.current = null;
@@ -315,7 +324,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       hasAiOutputThisTurnRef.current = false;
       transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     }
-  }, [can, dispatch, stateRef, onLanguageChange, handleAudioChunk, stopPlayback, scheduleAITextFlush]);
+  }, [can, dispatch, stateRef, onLanguageChange, handleAudioChunk, stopPlayback, scheduleAITextFlush, releaseIntroMicAnchor]);
 
   const {
     isConnected,
@@ -404,10 +413,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       if (aiTextFlushTimerRef.current) clearTimeout(aiTextFlushTimerRef.current);
+      releaseIntroMicAnchor();
       destroyRecorder();
       stopAudio();
     };
-  }, [destroyRecorder, stopAudio]);
+  }, [destroyRecorder, stopAudio, releaseIntroMicAnchor]);
 
   const stopAndSendTurn = useCallback((reason: "manual" | "silence" | "no_speech") => {
     if (stateRef.current !== "recording") return;
@@ -475,6 +485,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   // ─── Handlers ─────────────────────────────────────────────────────────
   const handleStartRecording = useCallback(async () => {
     console.log(`🎤 Start recording — state=${stateRef.current} connected=${isConnected}`);
+    releaseIntroMicAnchor();
 
     if (!isConnected) {
       console.warn("⚠️ Not connected");
@@ -528,6 +539,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     startVoiceCapture,
     currentAIText,
     stateRef,
+    releaseIntroMicAnchor,
   ]);
 
   const handleStopRecording = useCallback(() => {
@@ -662,9 +674,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (!micPermissionPrimedRef.current) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
+        introMicAnchorStreamRef.current = stream;
         micPermissionPrimedRef.current = true;
-        console.log("🧪 [iOS-audio] mic permission primed before greeting");
+        console.log("🧪 [iOS-audio] mic permission primed before greeting (anchor active)");
       } catch (e) {
         console.warn("⚠️ Mic permission preflight failed before greeting:", e);
       }
