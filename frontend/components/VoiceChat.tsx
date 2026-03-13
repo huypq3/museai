@@ -487,75 +487,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     return true;
   }, [sendMessage, start, stopAndSendTurn, getAudioContext]);
 
-  // ─── Handlers ─────────────────────────────────────────────────────────
-  const handleStartRecording = useCallback(async () => {
-    console.log(`🎤 Start recording — state=${stateRef.current} connected=${isConnected}`);
-    releaseIntroMicAnchor();
-    void stopVADMonitor();
-
-    if (!isConnected) {
-      console.warn("⚠️ Not connected");
-      return;
-    }
-    // Unlock audio explicitly from the voice button click only.
-    await unlockAndFlush();
-
-    // From now on, keep using the single ask/stop/processing button flow.
-    markIntroUsed();
-
-    // Stop local audio and skip remaining messages from the old turn.
-    stopPlayback();
-    waitingForAudioRef.current = false;
-    if (currentAIText.trim()) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", text: currentAIText.trim(), timestamp: new Date() },
-      ]);
-    }
-    pendingAITextRef.current = "";
-    pendingUserTextRef.current = "";
-    setCurrentAIText("");
-    setCurrentUserText("");
-
-    if (stateRef.current === "ai_speaking" && can("INTERRUPT")) {
-      sendMessage({ type: "interrupt" });
-      stopPlayback();
-      dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
-      // resolve draining immediately — Gemini will cut the old turn on its own
-      // when it receives the new activityStart, no need to wait for turn_complete
-      requestAnimationFrame(() => {
-        if (can("INTERRUPT_DONE")) dispatch({ type: "INTERRUPT_DONE" });
-      });
-      pendingAskVoiceAfterDrainRef.current = true;
-      return;
-    }
-
-    if (!can("ASK_VOICE")) return;
-    pendingAskVoiceAfterDrainRef.current = false;
-    dispatch({ type: "ASK_VOICE" });
-    const ok = await startVoiceCapture();
-    if (!ok && can("CANCEL_RECORDING")) {
-      dispatch({ type: "CANCEL_RECORDING" });
-    }
-  }, [
-    isConnected,
-    can,
-    dispatch,
-    sendMessage,
-    stopPlayback,
-    unlockAndFlush,
-    markIntroUsed,
-    startVoiceCapture,
-    currentAIText,
-    stateRef,
-    releaseIntroMicAnchor,
-    stopVADMonitor,
-  ]);
-
-  const handleStopRecording = useCallback(() => {
-    stopAndSendTurn("manual");
-  }, [stopAndSendTurn]);
-
   const handleBack = useCallback(() => {
     stopRecording();
     stopAudio();
@@ -588,7 +519,14 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   useEffect(() => {
     let cancelled = false;
 
-    if (!is.aiSpeaking || !isConnected || is.recording || !micPermissionPrimedRef.current) {
+    const currentState = stateRef.current;
+    const shouldMonitor =
+      isConnected &&
+      !is.recording &&
+      micPermissionPrimedRef.current &&
+      (currentState === "ai_speaking" || currentState === "ready" || currentState === "paused");
+
+    if (!shouldMonitor) {
       void stopVADMonitor();
       return () => {
         cancelled = true;
@@ -598,10 +536,22 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     void startVADMonitor(
       () => {
         if (cancelled) return;
-        if (stateRef.current !== "ai_speaking") return;
         if (vadInterruptLockRef.current) return;
         vadInterruptLockRef.current = true;
-        void handleInterrupt();
+
+        const s = stateRef.current;
+        if (s === "ai_speaking") {
+          void handleInterrupt();
+        } else if ((s === "ready" || s === "paused") && can("ASK_VOICE")) {
+          void (async () => {
+            dispatch({ type: "ASK_VOICE" });
+            const ok = await startVoiceCapture();
+            if (!ok && can("CANCEL_RECORDING")) {
+              dispatch({ type: "CANCEL_RECORDING" });
+            }
+          })();
+        }
+
         window.setTimeout(() => {
           vadInterruptLockRef.current = false;
         }, 900);
@@ -617,7 +567,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       cancelled = true;
       void stopVADMonitor();
     };
-  }, [is.aiSpeaking, isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef]);
+  }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef, can, dispatch, startVoiceCapture]);
 
   const handleIntro = useCallback(async () => {
     if (!can("GREETING_REQUESTED")) return;
@@ -649,24 +599,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       await handleIntro();
       return;
     }
-    if (is.recording) {
-      handleStopRecording();
-      return;
-    }
-    if (is.aiSpeaking) {
-      handleInterrupt();
-      return;
-    }
-    if (is.processing || is.draining) {
-      console.log("⏳ waveform ignored: processing/draining");
-      return;
-    }
-    if (is.inputBlocked) {
-      console.log(`⛔ waveform blocked by state=${stateRef.current}`);
-      return;
-    }
-    await handleStartRecording();
-  }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording, stateRef]);
+    console.log("ℹ️ waveform tap ignored: hands-free mode after intro");
+  }, [showIntroButton, is.ready, handleIntro, stateRef, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked]);
 
   const handleWaveTap = useCallback(() => {
     const now = Date.now();
@@ -692,6 +626,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const isProcessingState = is.processing;
   const isDisabledWave =
     is.connecting || is.reconnecting || is.error || is.sessionEnded || is.processing || is.draining;
+  const isWaveStartEnabled = showIntroButton && is.ready && !isDisabledWave;
   const goldBright = "#F6C453";
   const goldLight = "#FFE08A";
   const goldRing = "rgba(246,196,83,0.72)";
@@ -1091,13 +1026,14 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             onPointerDown={handleWaveTap}
             onTouchStart={handleWaveTap}
             onClick={handleWaveTap}
+            disabled={!isWaveStartEnabled}
             title={isDisabledWave ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
               width: "64px",
               height: "64px",
               borderRadius: "50%",
               border: "none",
-              cursor: isDisabledWave ? "not-allowed" : "pointer",
+              cursor: isWaveStartEnabled ? "pointer" : "not-allowed",
               pointerEvents: "auto",
               position: "relative",
               zIndex: 20,
@@ -1112,10 +1048,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               boxShadow: isRecordingState
                 ? "0 10px 30px rgba(239,68,68,0.35)"
                 : "0 10px 30px rgba(246,196,83,0.45)",
-              opacity: isDisabledWave ? 0.5 : 1,
+              opacity: isWaveStartEnabled ? 1 : 0.5,
             }}
           >
-            {isDisabledWave
+            {!isWaveStartEnabled
               ? <span style={{ fontSize: "20px", animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span>
               : isRecordingState ? "" : "🎤"}
           </button>
