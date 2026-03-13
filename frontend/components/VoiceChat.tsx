@@ -641,6 +641,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch]);
 
   const handleMicPress = useCallback(async () => {
+    console.log(
+      `🎛️ waveform tap: state=${stateRef.current} ready=${is.ready} recording=${is.recording} speaking=${is.aiSpeaking} processing=${is.processing} draining=${is.draining} blocked=${is.inputBlocked}`
+    );
     if (showIntroButton && is.ready) {
       await handleIntro();
       return;
@@ -654,13 +657,15 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       return;
     }
     if (is.processing || is.draining) {
+      console.log("⏳ waveform ignored: processing/draining");
       return;
     }
     if (is.inputBlocked) {
+      console.log(`⛔ waveform blocked by state=${stateRef.current}`);
       return;
     }
     await handleStartRecording();
-  }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
+  }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording, stateRef]);
 
   useEffect(() => {
     if (!is.recording) return;
@@ -1076,7 +1081,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           />
           <button
             onClick={handleMicPress}
-            disabled={isDisabledWave}
             title={isDisabledWave ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
               width: "64px",
