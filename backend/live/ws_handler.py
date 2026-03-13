@@ -129,6 +129,9 @@ class GeminiLiveHandler:
         self._pending_language_reminder = False
         self._suppress_audio_until_turn_complete = False
         self._client_turn_open = False
+        self._awaiting_interrupted_turn_complete = False
+        self._old_turn_done_event = asyncio.Event()
+        self._old_turn_done_event.set()  # initially "done" (no pending old turn)
         try:
             self._genai_version = pkg_version("google-genai")
         except PackageNotFoundError:
@@ -217,6 +220,17 @@ class GeminiLiveHandler:
             # SDK currently installed may not expose these fields yet.
             # Sending unsupported fields causes 1007 invalid frame payload at connect-time.
             live_fields = set(getattr(types.LiveConnectConfig, "model_fields", {}).keys())
+
+            if "context_window_compression_config" in live_fields:
+                config["context_window_compression_config"] = {
+                    "trigger_tokens": int(os.getenv("LIVE_CWCC_TRIGGER_TOKENS", "12000")),
+                    "target_tokens": int(os.getenv("LIVE_CWCC_TARGET_TOKENS", "6000")),
+                }
+                logger.info("✅ context_window_compression_config enabled (trigger=%s target=%s)",
+                            os.getenv("LIVE_CWCC_TRIGGER_TOKENS", "12000"),
+                            os.getenv("LIVE_CWCC_TARGET_TOKENS", "6000"))
+            else:
+                logger.warning("⚠️ SDK does not support context_window_compression_config yet")
 
             if "output_audio_transcription" in live_fields:
                 config["output_audio_transcription"] = {}
@@ -393,8 +407,14 @@ class GeminiLiveHandler:
                 if self._closing:
                     break
                 if self.session_state:
-                    await session_manager.touch_client_activity(self.session_state.session_id)
-                    await session_manager.incr_in(self.session_state.session_id)
+                    self._schedule_session_metric_task(
+                        session_manager.touch_client_activity(self.session_state.session_id),
+                        "touch_client_activity",
+                    )
+                    self._schedule_session_metric_task(
+                        session_manager.incr_in(self.session_state.session_id),
+                        "incr_in",
+                    )
 
                 if msg_type == "audio":
                     if not self._accepting_input:
@@ -423,8 +443,11 @@ class GeminiLiveHandler:
                             await self.close_session(websocket, reason="policy_violation")
                             break
                         if self.session_state:
-                            await session_manager.incr_in(
-                                self.session_state.session_id, audio_bytes=len(audio_bytes)
+                            self._schedule_session_metric_task(
+                                session_manager.incr_in(
+                                    self.session_state.session_id, audio_bytes=len(audio_bytes)
+                                ),
+                                "incr_in",
                             )
                         self.last_audio_chunk_at_ms = int(time.monotonic() * 1000)
                         await session.send_realtime_input(
@@ -435,7 +458,6 @@ class GeminiLiveHandler:
                 elif msg_type == "start_of_turn":
                     if not self._accepting_input:
                         continue
-                    await self._wait_for_old_turn_completion(timeout_sec=INTERRUPT_DRAIN_WAIT_SEC)
                     self._turn_started_at = time.monotonic()
                     # Do NOT reset _suppress_audio_until_turn_complete here.
                     # The old Gemini turn may still be generating audio in-flight;
@@ -452,8 +474,7 @@ class GeminiLiveHandler:
                     if not self._accepting_input:
                         continue
                     if not self._client_turn_open:
-                        logger.debug("Ignoring end_of_turn without active client turn")
-                        continue
+                        logger.warning("⚠️ end_of_turn received but client_turn_open=False — sending activity_end anyway")
                     self._turn_started_at = None
                     # Manual turn mode: close current activity so Gemini can respond
                     # to the audio just streamed. Avoid sending dummy text payloads.
@@ -493,26 +514,22 @@ class GeminiLiveHandler:
 
                 elif msg_type == "interrupt":
                     # Client stopped playback mid-turn.
-                    # Suppress remaining audio chunks of the current Gemini turn.
                     self._suppress_audio_until_turn_complete = True
-                    logger.info("📥 interrupt from client — suppressing current turn audio until turn_complete")
+                    self._old_turn_done_event.clear()
+                    self._awaiting_interrupted_turn_complete = True
+                    logger.info("📥 interrupt from client — clearing old stream")
                     try:
-                        # Close any open audio stream from our side
                         if self._client_turn_open:
                             await session.send_realtime_input(activity_end=types.ActivityEnd())
                             self._client_turn_open = False
                             logger.info("✅ Forced end_of_turn (activity_end) for interrupt")
-
-                        # Send a clientContent message to gracefully signal interruption
-                        # Do NOT set end_of_turn=True here; doing so immediately after activity_end
-                        # can corrupt the Live API state machine for the next incoming turn.
-                        await session.send(input="[User stopped audio playback]", end_of_turn=False)
                     except Exception as e:
                         logger.warning("Failed to send interrupt signal to Gemini: %s", e)
 
                 elif msg_type == "resume_greeting":
                     # Resume after paused/stop by asking Gemini to continue briefly.
                     self._suppress_audio_until_turn_complete = False
+                    self._awaiting_interrupted_turn_complete = False
                     lang_name = self._language_label(self.language)
                     resume_prompt = (
                         f"Continue your previous explanation in {lang_name} in 1-2 concise sentences."
@@ -561,7 +578,10 @@ class GeminiLiveHandler:
                             }
                         )
                         if self.session_state:
-                            await session_manager.incr_out(self.session_state.session_id)
+                            self._schedule_session_metric_task(
+                                session_manager.incr_out(self.session_state.session_id),
+                                "incr_out",
+                            )
 
                 elif msg_type == "pong":
                     if self.session_state:
@@ -622,8 +642,11 @@ class GeminiLiveHandler:
                             audio_b64 = base64.b64encode(response.data).decode("utf-8")
                             await websocket.send_json({"type": "audio_chunk", "audio": audio_b64})
                             if self.session_state:
-                                await session_manager.incr_out(
-                                    self.session_state.session_id, audio_bytes=len(response.data)
+                                self._schedule_session_metric_task(
+                                    session_manager.incr_out(
+                                        self.session_state.session_id, audio_bytes=len(response.data)
+                                    ),
+                                    "incr_out",
                                 )
                             logger.info("🔊 Audio chunk: %d bytes", len(response.data))
                             turn_audio_chunks += 1
@@ -659,16 +682,16 @@ class GeminiLiveHandler:
                             if getattr(sc, "interrupted", False):
                                     await websocket.send_json({"type": "interrupted"})
                                     if self.session_state:
-                                        await session_manager.incr_out(self.session_state.session_id)
+                                        self._schedule_session_metric_task(
+                                            session_manager.incr_out(self.session_state.session_id),
+                                            "incr_out",
+                                        )
                                     logger.info("⚠️ Gemini interrupted")
 
                             # Input transcription (user speech transcript, if available)
                             if getattr(sc, "input_transcription", None):
                                 txt = sc.input_transcription.text
                                 logger.info("🎤 Input transcript: %s", str(txt)[:80])
-                                await websocket.send_json({"type": "user_transcript", "text": txt})
-                                if self.session_state:
-                                    await session_manager.incr_out(self.session_state.session_id)
                                 requested_lang = detect_language_command(str(txt or ""))
                                 if requested_lang:
                                     await self._switch_language(
@@ -679,12 +702,17 @@ class GeminiLiveHandler:
 
                             # Turn complete
                             if getattr(sc, "turn_complete", False):
+                                old_turn_complete = self._awaiting_interrupted_turn_complete
+                                self._awaiting_interrupted_turn_complete = False
                                 self._suppress_audio_until_turn_complete = False
-                                self._client_turn_open = False
+                                self._old_turn_done_event.set()
+                                if not old_turn_complete:
+                                    self._client_turn_open = False
                                 truncated = self._looks_truncated(current_turn_text)
                                 logger.info(
-                                    "🧭 turn_complete diagnostics: audio_chunks=%d, transcript_chunks=%d, "
-                                    "transcript_chars=%d, truncated=%s, recovery_attempted=%s",
+                                    "🧭 turn_complete diagnostics: old_turn=%s, audio_chunks=%d, "
+                                    "transcript_chunks=%d, transcript_chars=%d, truncated=%s, recovery_attempted=%s",
+                                    old_turn_complete,
                                     turn_audio_chunks,
                                     turn_transcript_chunks,
                                     len(current_turn_text),
@@ -694,7 +722,7 @@ class GeminiLiveHandler:
                                 logger.info("🧭 turn_complete transcript_tail: %s", current_turn_text[-160:] if current_turn_text else "(empty)")
                                 logger.info("🧭 turn_complete server_content snapshot: %s", sc)
 
-                                if (not recovery_attempted) and truncated:
+                                if (not old_turn_complete) and (not recovery_attempted) and truncated:
                                     recovery_attempted = True
                                     logger.warning(
                                         "⚠️ Detected truncated ending, requesting continuation: %s",
@@ -712,7 +740,10 @@ class GeminiLiveHandler:
 
                                 await websocket.send_json({"type": "turn_complete"})
                                 if self.session_state:
-                                    await session_manager.incr_out(self.session_state.session_id)
+                                    self._schedule_session_metric_task(
+                                        session_manager.incr_out(self.session_state.session_id),
+                                        "incr_out",
+                                    )
                                 logger.info("✅ turn_complete sent to client")
                                 self._last_assistant_transcript = ""
                                 current_turn_text = ""
@@ -741,27 +772,19 @@ class GeminiLiveHandler:
             raise
 
     async def _wait_for_old_turn_completion(self, timeout_sec: float) -> None:
-        """
-        If previous turn is still being suppressed after an interrupt,
-        wait briefly for its turn_complete before allowing new activity_start.
-        """
         if not self._suppress_audio_until_turn_complete:
             return
-
-        deadline = time.monotonic() + max(0.05, timeout_sec)
-        logger.info("⏳ Waiting for old turn_complete before opening new turn")
-        while self._suppress_audio_until_turn_complete and time.monotonic() < deadline:
-            if self._closing:
-                return
-            await asyncio.sleep(0.01)
-
-        if self._suppress_audio_until_turn_complete:
-            # Fail-safe: avoid deadlock if model never emits turn_complete.
+        try:
+            await asyncio.wait_for(
+                self._old_turn_done_event.wait(),
+                timeout=max(0.05, timeout_sec)
+            )
+        except asyncio.TimeoutError:
             logger.warning(
-                "Old turn did not complete within %.2fs; forcing suppress clear",
-                timeout_sec,
+                "⚠️ Old turn wait timeout %.2fs; force clearing suppress", timeout_sec
             )
             self._suppress_audio_until_turn_complete = False
+            self._old_turn_done_event.set()
 
     def _log_response(self, response):
         """Log a compact summary of Gemini responses."""
@@ -774,6 +797,18 @@ class GeminiLiveHandler:
             "📤 Gemini → data=%d bytes, text=%s, turn_complete=%s",
             data_bytes, text_preview, turn_complete
         )
+
+    def _schedule_session_metric_task(self, coro, op_name: str) -> None:
+        async def _runner():
+            try:
+                await coro
+            except Exception as e:
+                logger.debug("Session manager task failed (%s): %s", op_name, e)
+
+        try:
+            asyncio.create_task(_runner())
+        except Exception as e:
+            logger.warning("Failed to schedule session manager task (%s): %s", op_name, e)
 
     async def _send_assistant_transcript(self, websocket: WebSocket, text: str) -> str:
         """Send assistant transcript with basic dedupe for incremental repeats."""
@@ -808,7 +843,10 @@ class GeminiLiveHandler:
             "text": payload_text,
         })
         if self.session_state:
-            await session_manager.incr_out(self.session_state.session_id)
+            self._schedule_session_metric_task(
+                session_manager.incr_out(self.session_state.session_id),
+                "incr_out",
+            )
         logger.info("📝 Transcript: %s", payload_text[:80])
         self._last_assistant_transcript = normalized
         return payload_text
@@ -826,7 +864,10 @@ class GeminiLiveHandler:
             try:
                 await websocket.send_json({"type": "ping", "ts": int(time.time() * 1000)})
                 if self.session_state:
-                    await session_manager.incr_out(self.session_state.session_id)
+                    self._schedule_session_metric_task(
+                        session_manager.incr_out(self.session_state.session_id),
+                        "incr_out",
+                    )
             except Exception:
                 self._close_reason = "network_drop"
                 break
@@ -883,7 +924,10 @@ class GeminiLiveHandler:
                         "reason": "inactivity",
                         "seconds_left": inactivity_grace_sec,
                     })
-                    await session_manager.incr_out(self.session_state.session_id)
+                    self._schedule_session_metric_task(
+                        session_manager.incr_out(self.session_state.session_id),
+                        "incr_out",
+                    )
                 except Exception:
                     pass
             if inactivity_warned and idle >= (inactivity_sec + inactivity_grace_sec):
@@ -899,7 +943,10 @@ class GeminiLiveHandler:
                         "reason": "max_duration",
                         "seconds_left": max_duration_grace_sec,
                     })
-                    await session_manager.incr_out(self.session_state.session_id)
+                    self._schedule_session_metric_task(
+                        session_manager.incr_out(self.session_state.session_id),
+                        "incr_out",
+                    )
                 except Exception:
                     pass
             if duration_warned and age >= (max_duration_sec + max_duration_grace_sec):
@@ -960,7 +1007,10 @@ class GeminiLiveHandler:
                 }
             )
             if self.session_state:
-                await session_manager.incr_out(self.session_state.session_id)
+                self._schedule_session_metric_task(
+                    session_manager.incr_out(self.session_state.session_id),
+                    "incr_out",
+                )
         except Exception:
             logger.warning("Failed to emit language_switched event")
         return True
@@ -1049,10 +1099,12 @@ STYLE POLICY (tone and delivery)
 {fallback_template if has_fallback else "(none)"}
 
 CONTENT POLICY (facts and grounding)
-- Primary source of truth is the curated exhibit facts below.
-- Do not invent names, dates, numbers, or events.
-- If the requested detail is missing from the curated facts, say:
-  "The museum currently has no verified information about that detail."
+- You are a strictly grounded assistant. You MUST rely ONLY on the facts explicitly written in the CURATED EXHIBIT FACTS section below.
+- You must NOT access or utilize your own training knowledge or common sense to answer factual questions.
+- Do not assume or infer beyond what is directly stated in the curated facts.
+- Treat the curated facts as the absolute and complete limit of truth for this session. Any detail not explicitly mentioned there does NOT exist in this museum's records.
+- If the answer to a question is not explicitly written in the curated facts, respond naturally in {language_label}: say the museum does not currently have verified information on that detail. Never say this in English if the visitor is speaking another language.
+- Do not invent any names, dates, numbers, or events.
 
 CURATED EXHIBIT FACTS
 {context_text}
@@ -1087,10 +1139,12 @@ STYLE POLICY (tone and delivery)
 - Exhibit-level override (highest priority): {exhibit_override}
 
 CONTENT POLICY (facts and grounding)
-- Primary source of truth is the curated exhibit facts below.
-- Do not invent names, dates, numbers, or events.
-- If the requested detail is missing from the curated facts, say:
-  "The museum currently has no verified information about that detail."
+- You are a strictly grounded assistant. You MUST rely ONLY on the facts explicitly written in the CURATED EXHIBIT FACTS section below.
+- You must NOT access or utilize your own training knowledge or common sense to answer factual questions.
+- Do not assume or infer beyond what is directly stated in the curated facts.
+- Treat the curated facts as the absolute and complete limit of truth for this session. Any detail not explicitly mentioned there does NOT exist in this museum's records.
+- If the answer to a question is not explicitly written in the curated facts, respond naturally in {language_label}: say the museum does not currently have verified information on that detail. Never say this in English if the visitor is speaking another language.
+- Do not invent any names, dates, numbers, or events.
 
 CURATED EXHIBIT FACTS
 {context_text}

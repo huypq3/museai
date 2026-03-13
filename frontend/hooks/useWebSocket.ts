@@ -20,6 +20,11 @@ type WSNotice = {
   reconnectAllowed: boolean;
 };
 
+type UseWebSocketOptions = {
+  onAudioChunk?: (base64: string) => void;
+  onControlMessage?: (msg: any) => void;
+};
+
 const MAX_RETRY_DEFAULT = 5;
 
 function mapCloseToNotice(code: number, reason: string): WSNotice {
@@ -100,9 +105,8 @@ function mapCloseToNotice(code: number, reason: string): WSNotice {
   }
 }
 
-export function useWebSocket(exhibitId: string | null, language: string) {
+export function useWebSocket(exhibitId: string | null, language: string, options?: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
-  const [messages, setMessages] = useState<WSMessage[]>([]);
   const [notice, setNotice] = useState<WSNotice | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
@@ -111,7 +115,14 @@ export function useWebSocket(exhibitId: string | null, language: string) {
   const shouldReconnectRef = useRef(true);
   const shouldAutoReconnectRef = useRef(true);
   const connectLanguageRef = useRef(language);
+  const onAudioChunkRef = useRef<UseWebSocketOptions["onAudioChunk"]>(options?.onAudioChunk);
+  const onControlMessageRef = useRef<UseWebSocketOptions["onControlMessage"]>(options?.onControlMessage);
   const MAX_RETRY = MAX_RETRY_DEFAULT;
+
+  useEffect(() => {
+    onAudioChunkRef.current = options?.onAudioChunk;
+    onControlMessageRef.current = options?.onControlMessage;
+  }, [options?.onAudioChunk, options?.onControlMessage]);
 
   const connect = useCallback(async () => {
     if (!exhibitId) return;
@@ -163,7 +174,6 @@ export function useWebSocket(exhibitId: string | null, language: string) {
     ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        console.log("📨", data.type, "received");
 
         // Heartbeat response path.
         if (data.type === "ping") {
@@ -175,6 +185,20 @@ export function useWebSocket(exhibitId: string | null, language: string) {
           return;
         }
 
+        // Hot path: audio bypasses React state entirely.
+        if (data.type === "audio_chunk") {
+          if (typeof data.audio === "string") {
+            onAudioChunkRef.current?.(data.audio);
+          }
+          return; // do NOT call setMessages or any setState
+        }
+
+        // Control messages only.
+        if (process.env.NODE_ENV !== "production") {
+          console.log("📨", data.type);
+        }
+        onControlMessageRef.current?.(data);
+
         if (data.type === "session_end") {
           shouldAutoReconnectRef.current = false;
           const mapped = mapCloseToNotice(
@@ -185,20 +209,8 @@ export function useWebSocket(exhibitId: string | null, language: string) {
         }
 
         if (data.type === "session_warning") {
-          const warningReason = typeof data.reason === "string" ? data.reason : "warning";
-          const secLeft = typeof data.seconds_left === "number" ? data.seconds_left : 0;
-          const warningText =
-            warningReason === "inactivity"
-              ? `Session will close for inactivity in ${secLeft}s`
-              : `Session time limit reached, closing in ${secLeft}s`;
-          setMessages((prev) => [
-            ...prev,
-            { type: "notice", text: warningText, reason: warningReason, seconds_left: secLeft },
-          ]);
           return;
         }
-
-        setMessages((prev) => [...prev, data]);
       } catch (e) {
         console.error("Failed to parse WS message:", e);
       }
@@ -298,5 +310,5 @@ export function useWebSocket(exhibitId: string | null, language: string) {
     void connect();
   }, [connect]);
 
-  return { isConnected, messages, notice, sendMessage, sendTextMessage, disconnect, reconnectNow };
+  return { isConnected, notice, sendMessage, sendTextMessage, disconnect, reconnectNow };
 }

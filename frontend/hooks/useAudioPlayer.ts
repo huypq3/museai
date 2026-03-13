@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 const STREAM_SAMPLE_RATE = 24000;
-const BUFFER_DELAY_SEC = 0.1;
+const BUFFER_DELAY_SEC = 0.02;
 
 export function useAudioPlayer() {
   const audioContextRef = useRef<AudioContext | null>(null);

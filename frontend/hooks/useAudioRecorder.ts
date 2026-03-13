@@ -7,10 +7,46 @@ type AutoStopOptions = {
   voiceThreshold?: number;
 };
 
+const WORKLET_CODE = `
+class PcmProcessor extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this._buffer = [];
+    this._targetSamples = 640; // 40ms @ 16kHz
+  }
+  process(inputs) {
+    const input = inputs[0]?.[0];
+    if (!input) return true;
+    for (let i = 0; i < input.length; i++) this._buffer.push(input[i]);
+    while (this._buffer.length >= this._targetSamples) {
+      this.port.postMessage(new Float32Array(this._buffer.splice(0, this._targetSamples)));
+    }
+    return true;
+  }
+}
+registerProcessor('pcm-processor', PcmProcessor);
+`;
+
+function downsample(buffer: Float32Array, fromRate: number, toRate: number): Float32Array {
+  if (fromRate === toRate) return buffer;
+  const ratio = fromRate / toRate;
+  const newLength = Math.round(buffer.length / ratio);
+  const result = new Float32Array(newLength);
+  for (let i = 0; i < newLength; i++) {
+    const pos = i * ratio;
+    const idx = Math.floor(pos);
+    const frac = pos - idx;
+    result[i] = idx + 1 < buffer.length
+      ? buffer[idx] * (1 - frac) + buffer[idx + 1] * frac
+      : buffer[idx];
+  }
+  return result;
+}
+
 export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const processorRef = useRef<AudioNode | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const isRecordingRef = useRef(false);
   const chunkCountRef = useRef(0);
@@ -43,48 +79,40 @@ export function useAudioRecorder() {
       
       streamRef.current = stream;
       
-      // Create AudioContext for PCM conversion
-      const audioContext = new AudioContext({ sampleRate: 16000 });
+      // Create AudioContext first, then read actual device sample rate
+      const audioContext = new AudioContext();
       audioContextRef.current = audioContext;
+      const deviceSampleRate = audioContext.sampleRate;
       
       const source = audioContext.createMediaStreamSource(stream);
-      
-      // Use ScriptProcessorNode to get raw PCM data
-      const processor = audioContext.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
       const silenceMs = options?.silenceMs ?? 1300;
       const maxNoSpeechMs = options?.maxNoSpeechMs ?? 2800;
       const voiceThreshold = options?.voiceThreshold ?? 0;
-      
-      processor.onaudioprocess = (e) => {
+
+      const processFrame = (floatData: Float32Array) => {
         if (!isRecordingRef.current) return;
-        
-        const inputData = e.inputBuffer.getChannelData(0);
+
+        const mono16k = downsample(floatData, deviceSampleRate, 16000);
         let energy = 0;
-        
-        // Convert Float32Array to Int16Array (PCM 16-bit)
-        const pcmData = new Int16Array(inputData.length);
-        for (let i = 0; i < inputData.length; i++) {
-          const s = Math.max(-1, Math.min(1, inputData[i]));
+        const pcmData = new Int16Array(mono16k.length);
+        for (let i = 0; i < mono16k.length; i++) {
+          const s = Math.max(-1, Math.min(1, mono16k[i]));
           energy += s * s;
-          pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+          pcmData[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
         }
-        const rms = Math.sqrt(energy / inputData.length);
+
+        const rms = mono16k.length > 0 ? Math.sqrt(energy / mono16k.length) : 0;
         const now = Date.now();
         if (rms >= voiceThreshold) {
           lastVoiceAtRef.current = now;
           hasDetectedVoiceRef.current = true;
         }
-        
-        // Convert to base64
+
         const base64 = bytesToBase64(new Uint8Array(pcmData.buffer));
-        
-        // Log every 10 chunks
         if (chunkCountRef.current % 10 === 0) {
           console.log(`🎙️ Audio chunk #${chunkCountRef.current}: ${pcmData.length} samples`);
         }
         chunkCountRef.current++;
-        
         onChunk(base64);
 
         if (autoStoppedRef.current) return;
@@ -108,9 +136,44 @@ export function useAudioRecorder() {
           options?.onAutoStop?.("no_speech");
         }
       };
-      
-      source.connect(processor);
-      processor.connect(audioContext.destination);
+
+      const supportsWorklet =
+        typeof AudioWorkletNode !== "undefined" &&
+        typeof audioContext.audioWorklet !== "undefined";
+
+      if (supportsWorklet) {
+        const workletUrl = URL.createObjectURL(
+          new Blob([WORKLET_CODE], { type: "application/javascript" })
+        );
+        try {
+          await audioContext.audioWorklet.addModule(workletUrl);
+        } finally {
+          URL.revokeObjectURL(workletUrl);
+        }
+
+        const workletNode = new AudioWorkletNode(audioContext, "pcm-processor", {
+          numberOfInputs: 1,
+          numberOfOutputs: 0,
+          channelCount: 1,
+        });
+        workletNode.port.onmessage = (event: MessageEvent<Float32Array>) => {
+          const frame = event.data;
+          if (!frame) return;
+          processFrame(frame);
+        };
+
+        processorRef.current = workletNode;
+        source.connect(workletNode);
+      } else {
+        console.warn("AudioWorklet is not supported, falling back to ScriptProcessorNode");
+        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (e) => {
+          processFrame(e.inputBuffer.getChannelData(0));
+        };
+        processorRef.current = processor;
+        source.connect(processor);
+        processor.connect(audioContext.destination);
+      }
       
       isRecordingRef.current = true;
       hasDetectedVoiceRef.current = false;

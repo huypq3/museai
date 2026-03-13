@@ -34,6 +34,7 @@ export type VoiceEvent =
   | { type: "RESUME_PRESSED" }
   | { type: "PROCESSING_TIMEOUT" }
   | { type: "DRAINING_TIMEOUT" }
+  | { type: "INTERRUPT_DONE" }
   | { type: "FATAL_ERROR"; message?: string }
   | { type: "SESSION_ENDED" };
 
@@ -79,8 +80,6 @@ const TRANSITIONS: Table = {
     END_OF_TURN: "processing",
     NO_SPEECH: "ready",
     CANCEL_RECORDING: "ready",
-    TURN_COMPLETE: "recording",
-    TURN_COMPLETE_EMPTY: "recording",
   },
   processing: {
     ...GLOBAL,
@@ -99,6 +98,7 @@ const TRANSITIONS: Table = {
     ...GLOBAL,
     TURN_COMPLETE: DR,
     DRAINING_TIMEOUT: DR,
+    INTERRUPT_DONE: DR,
   },
   paused: {
     ...GLOBAL,

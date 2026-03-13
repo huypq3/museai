@@ -175,31 +175,157 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [autoStopHint, setAutoStopHint] = useState("");
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const autoStopHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const aiTextFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs that should not trigger re-renders
-  const lastProcessedIndexRef = useRef<number>(-1);
   const processingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const waitingForAudioRef = useRef(false);
   const pendingAITextRef = useRef("");
   const pendingUserTextRef = useRef("");
   const hasAiOutputThisTurnRef = useRef(false);
   const pendingAskVoiceAfterDrainRef = useRef(false);
+  const awaitingOldTurnCompleteRef = useRef(false);
   const runtimeLanguageRef = useRef<LanguageCode>(language);
   const textInputRef = useRef<HTMLInputElement>(null);
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
 
+  const { start, stop: stopRecording } = useAudioRecorder();
+  const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
+  const scheduleAITextFlush = useCallback(() => {
+    if (aiTextFlushTimerRef.current) return;
+    aiTextFlushTimerRef.current = setTimeout(() => {
+      setCurrentAIText(pendingAITextRef.current);
+      aiTextFlushTimerRef.current = null;
+    }, 100);
+  }, []);
+  const handleAudioChunk = useCallback((base64: string) => {
+    if (!base64 || stateRef.current === "recording") return;
+    hasAiOutputThisTurnRef.current = true;
+    waitingForAudioRef.current = true;
+    if (stateRef.current === "processing" && can("FIRST_AI_CHUNK")) {
+      dispatch({ type: "FIRST_AI_CHUNK" });
+    }
+    playChunk(base64);
+    if (processingTimeoutRef.current) {
+      clearTimeout(processingTimeoutRef.current);
+      processingTimeoutRef.current = null;
+    }
+  }, [can, dispatch, playChunk, stateRef]);
+
+  const handleControlMessage = useCallback((msg: any) => {
+    if (!msg || typeof msg.type !== "string") return;
+
+    if (msg.type === "ready" || msg.type === "session_ready") return;
+    if (msg.type === "language_switched") {
+      const toLang = String(msg.to || "").toLowerCase() as LanguageCode;
+      if (toLang && LANGUAGES[toLang]) {
+        runtimeLanguageRef.current = toLang;
+        onLanguageChange?.(toLang);
+      }
+      return;
+    }
+    if (msg.type === "session_end") {
+      if (can("SESSION_ENDED")) dispatch({ type: "SESSION_ENDED" });
+      return;
+    }
+
+    // turn_complete from old interrupted turn: ignore it, we already resolved draining
+    if (awaitingOldTurnCompleteRef.current && msg.type === "turn_complete") {
+      awaitingOldTurnCompleteRef.current = false;
+      return;
+    }
+
+    const isUserTranscriptMsg =
+      msg.type === "user_transcript" ||
+      msg.type === "user_text" ||
+      msg.type === "input_transcript" ||
+      msg.type === "input_text" ||
+      (msg.type === "transcript" && msg.role === "user");
+    if (isUserTranscriptMsg) {
+      const txt = String(msg.data || msg.text || msg.transcript || msg.input_transcript || "").trim();
+      if (!txt) return;
+      pendingUserTextRef.current = mergeTranscript(pendingUserTextRef.current, txt);
+      setCurrentUserText(pendingUserTextRef.current);
+      return;
+    }
+
+    if (msg.type === "audio" && (msg.data || msg.audio)) {
+      const audioData = String(msg.data || msg.audio || "");
+      handleAudioChunk(audioData);
+      return;
+    }
+
+    if (
+      (msg.type === "transcript" || msg.type === "text") &&
+      msg.role !== "user" &&
+      (msg.data || msg.text)
+    ) {
+      if (stateRef.current === "recording") return;
+      const txt = String(msg.data || msg.text || "").trim();
+      if (!txt) return;
+      if (stateRef.current === "processing" && can("FIRST_AI_CHUNK")) {
+        dispatch({ type: "FIRST_AI_CHUNK" });
+      }
+      hasAiOutputThisTurnRef.current = true;
+      pendingAITextRef.current = mergeTranscript(pendingAITextRef.current, txt);
+      scheduleAITextFlush();
+      return;
+    }
+
+    if (msg.type === "interrupted") {
+      stopPlayback(); // always flush immediately regardless of FSM state
+      waitingForAudioRef.current = false;
+      return;
+    }
+
+    if (msg.type === "turn_complete") {
+      if (aiTextFlushTimerRef.current) {
+        clearTimeout(aiTextFlushTimerRef.current);
+        aiTextFlushTimerRef.current = null;
+      }
+      if (processingTimeoutRef.current) {
+        clearTimeout(processingTimeoutRef.current);
+        processingTimeoutRef.current = null;
+      }
+
+      const aiText = pendingAITextRef.current.trim();
+      const userText = pendingUserTextRef.current.trim();
+
+      if (userText) {
+        setMessages((prev) => [...prev, { role: "user", text: userText, timestamp: new Date() }]);
+      }
+      if (aiText) {
+        setMessages((prev) => [...prev, { role: "assistant", text: aiText, timestamp: new Date() }]);
+      }
+
+      pendingAITextRef.current = "";
+      pendingUserTextRef.current = "";
+      setCurrentAIText("");
+      setCurrentUserText("");
+      waitingForAudioRef.current = false;
+
+      if (!hasAiOutputThisTurnRef.current) {
+        if (can("TURN_COMPLETE_EMPTY")) dispatch({ type: "TURN_COMPLETE_EMPTY" });
+      } else if (can("TURN_COMPLETE")) {
+        dispatch({ type: "TURN_COMPLETE" });
+      }
+      hasAiOutputThisTurnRef.current = false;
+      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  }, [can, dispatch, stateRef, onLanguageChange, handleAudioChunk, stopPlayback, scheduleAITextFlush]);
+
   const {
     isConnected,
-    messages: wsMessages,
     notice: wsNotice,
     sendMessage,
     sendTextMessage,
     reconnectNow,
-  } = useWebSocket(exhibitId, language);
-  const { start, stop: stopRecording } = useAudioRecorder();
-  const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
+  } = useWebSocket(exhibitId, language, {
+    onAudioChunk: handleAudioChunk,
+    onControlMessage: handleControlMessage,
+  });
   const sentences = messages;
 
   const markIntroUsed = useCallback(() => {
@@ -254,122 +380,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     }
   }, [isPlaying, can, dispatch, stateRef]);
 
-  // ─── Process WS messages with FSM ──────────────────────────────────────
-  useEffect(() => {
-    if (wsMessages.length === 0) return;
-
-    const startIndex = lastProcessedIndexRef.current + 1;
-    if (startIndex >= wsMessages.length) return;
-
-    for (let i = startIndex; i < wsMessages.length; i++) {
-      const msg = wsMessages[i];
-
-      if (msg.type === "ready" || msg.type === "session_ready") continue;
-      if (msg.type === "language_switched") {
-        const toLang = String(msg.to || "").toLowerCase() as LanguageCode;
-        if (toLang && LANGUAGES[toLang]) {
-          runtimeLanguageRef.current = toLang;
-          onLanguageChange?.(toLang);
-        }
-        continue;
-      }
-      if (msg.type === "session_end") {
-        if (can("SESSION_ENDED")) dispatch({ type: "SESSION_ENDED" });
-        continue;
-      }
-
-      if (is.draining) {
-        if (msg.type === "turn_complete") {
-          if (can("TURN_COMPLETE")) dispatch({ type: "TURN_COMPLETE" });
-        }
-        continue;
-      }
-
-      const isUserTranscriptMsg =
-        msg.type === "user_transcript" ||
-        msg.type === "user_text" ||
-        msg.type === "input_transcript" ||
-        msg.type === "input_text" ||
-        (msg.type === "transcript" && msg.role === "user");
-      if (isUserTranscriptMsg) {
-        const txt = String(msg.data || msg.text || msg.transcript || msg.input_transcript || "").trim();
-        if (!txt) continue;
-        pendingUserTextRef.current = mergeTranscript(pendingUserTextRef.current, txt);
-        setCurrentUserText(pendingUserTextRef.current);
-      }
-
-      if ((msg.type === "audio_chunk" || msg.type === "audio") && (msg.data || msg.audio)) {
-        const audioData = msg.data || msg.audio || "";
-        if (stateRef.current === "recording") continue;
-
-        hasAiOutputThisTurnRef.current = true;
-        waitingForAudioRef.current = true;
-        if (stateRef.current === "processing" && can("FIRST_AI_CHUNK")) {
-          dispatch({ type: "FIRST_AI_CHUNK" });
-        }
-        playChunk(audioData);
-        if (processingTimeoutRef.current) {
-          clearTimeout(processingTimeoutRef.current);
-          processingTimeoutRef.current = null;
-        }
-      }
-
-      if (
-        (msg.type === "transcript" || msg.type === "text") &&
-        msg.role !== "user" &&
-        (msg.data || msg.text)
-      ) {
-        if (stateRef.current === "recording") continue;
-        const txt = String(msg.data || msg.text || "").trim();
-        if (!txt) continue;
-        if (stateRef.current === "processing" && can("FIRST_AI_CHUNK")) {
-          dispatch({ type: "FIRST_AI_CHUNK" });
-        }
-        hasAiOutputThisTurnRef.current = true;
-        pendingAITextRef.current = mergeTranscript(pendingAITextRef.current, txt);
-        setCurrentAIText(pendingAITextRef.current);
-      }
-
-      if (msg.type === "interrupted") {
-        if (stateRef.current === "processing" || stateRef.current === "recording") continue;
-        stopPlayback();
-        waitingForAudioRef.current = false;
-      }
-
-      if (msg.type === "turn_complete") {
-        if (processingTimeoutRef.current) {
-          clearTimeout(processingTimeoutRef.current);
-          processingTimeoutRef.current = null;
-        }
-
-        const aiText = pendingAITextRef.current.trim();
-        const userText = pendingUserTextRef.current.trim();
-
-        if (userText) {
-          setMessages((prev) => [...prev, { role: "user", text: userText, timestamp: new Date() }]);
-        }
-        if (aiText) {
-          setMessages((prev) => [...prev, { role: "assistant", text: aiText, timestamp: new Date() }]);
-        }
-
-        pendingAITextRef.current = "";
-        pendingUserTextRef.current = "";
-        setCurrentAIText("");
-        setCurrentUserText("");
-        waitingForAudioRef.current = false;
-
-        if (!hasAiOutputThisTurnRef.current) {
-          if (can("TURN_COMPLETE_EMPTY")) dispatch({ type: "TURN_COMPLETE_EMPTY" });
-        } else if (can("TURN_COMPLETE")) {
-          dispatch({ type: "TURN_COMPLETE" });
-        }
-        hasAiOutputThisTurnRef.current = false;
-      }
-    }
-
-    lastProcessedIndexRef.current = wsMessages.length - 1;
-  }, [wsMessages, is.draining, can, dispatch, stateRef, playChunk, stopPlayback, onLanguageChange]);
-
   useEffect(() => {
     if (!is.draining) return;
     const t = setTimeout(() => {
@@ -380,17 +390,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     return () => clearTimeout(t);
   }, [is.draining, can, dispatch, stateRef]);
 
-  useEffect(() => {
-    if (messages.length > 0 || currentAIText || currentUserText) {
-      transcriptEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    }
-  }, [messages, currentAIText, currentUserText]);
-
   // ─── Clear timers on unmount ───────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
+      if (aiTextFlushTimerRef.current) clearTimeout(aiTextFlushTimerRef.current);
       stopRecording();
       stopAudio();
     };
@@ -483,7 +488,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
     if (stateRef.current === "ai_speaking" && can("INTERRUPT")) {
       sendMessage({ type: "interrupt" });
+      stopPlayback();
       dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
+      // resolve draining immediately — Gemini will cut the old turn on its own
+      // when it receives the new activityStart, no need to wait for turn_complete
+      requestAnimationFrame(() => {
+        if (can("INTERRUPT_DONE")) dispatch({ type: "INTERRUPT_DONE" });
+      });
       pendingAskVoiceAfterDrainRef.current = true;
       return;
     }
@@ -516,16 +527,17 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [stopRecording, stopAudio, router]);
 
   const handleInterrupt = useCallback(async () => {
+    if (!can("INTERRUPT")) return;
+    sendMessage({ type: "interrupt" });
     stopPlayback();
     waitingForAudioRef.current = false;
     pendingAskVoiceAfterDrainRef.current = true;
-    sendMessage({ type: "interrupt" });
-    if (can("INTERRUPT")) {
-      dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
-    } else {
-      // Force FSM transition if stuck in a state like processing
-      dispatch({ type: "STOP_PRESSED", drainingIntent: "ask_voice" });
-    }
+    dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
+    // resolve draining immediately — Gemini will cut the old turn on its own
+    // when it receives the new activityStart, no need to wait for turn_complete
+    requestAnimationFrame(() => {
+      if (can("INTERRUPT_DONE")) dispatch({ type: "INTERRUPT_DONE" });
+    });
 
     if (currentAIText.trim()) {
       setMessages((prev) => [...prev, { role: "assistant", text: currentAIText.trim(), timestamp: new Date() }]);
@@ -538,15 +550,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [can, stopPlayback, sendMessage, dispatch, currentAIText]);
 
   const handleStop = useCallback(() => {
+    if (!can("STOP_PRESSED")) return;
     pendingAskVoiceAfterDrainRef.current = false;
     stopPlayback();
     waitingForAudioRef.current = false;
     sendMessage({ type: "interrupt" });
-    if (can("STOP_PRESSED")) {
-      dispatch({ type: "STOP_PRESSED", drainingIntent: "stop" });
-    } else if (can("INTERRUPT")) {
-      dispatch({ type: "INTERRUPT", drainingIntent: "stop" });
-    }
+    dispatch({ type: "STOP_PRESSED", drainingIntent: "stop" });
   }, [can, stopPlayback, sendMessage, dispatch]);
 
   const handleResume = useCallback(() => {
@@ -657,7 +666,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       return;
     }
     await handleStartRecording();
-  }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
+  }, [showIntroButton, is.ready, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, handleIntro, handleStopRecording, handleInterrupt, handleStartRecording]);
 
   const handleAskPress = useCallback(async () => {
     if (inputMode === "text") {
@@ -1355,6 +1364,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                 setShowTextInput(false);
                 setTextInput("");
                 setInputMode("voice");
+                if (can("TEXT_CANCELLED")) dispatch({ type: "TEXT_CANCELLED" });
               }}
               style={{
                 color: "#666",

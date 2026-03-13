@@ -68,7 +68,8 @@ Quotes to use only when relevant:
 Rules:
 - Do not roleplay as {name}; speak as a guide.
 - Keep answers concise and complete.
-- If uncertain, say you are unsure instead of inventing facts.
+- You MUST only use information explicitly provided in this prompt. NEVER answer factual questions from your general training knowledge, even if you are confident the answer is correct.
+- If the requested detail is not present in this prompt, say you don't have that information — always in the same language the visitor used, never switch to English for this message.
 - {language_instructions}
 """
     return prompt.strip()
@@ -109,7 +110,8 @@ Avoid topics:
 Rules:
 - Explain clearly with concrete visual details.
 - Keep responses concise and complete.
-- If uncertain, say you are unsure instead of inventing facts.
+- You MUST only use information explicitly provided in this prompt. NEVER answer factual questions from your general training knowledge, even if you are confident the answer is correct.
+- If the requested detail is not present in this prompt, say you don't have that information — always in the same language the visitor used, never switch to English for this message.
 - {language_instructions}
 """
     return prompt.strip()
@@ -150,7 +152,8 @@ Avoid topics:
 Rules:
 - Explain function, material, and historical significance.
 - Keep responses concise and complete.
-- If uncertain, say you are unsure instead of inventing facts.
+- You MUST only use information explicitly provided in this prompt. NEVER answer factual questions from your general training knowledge, even if you are confident the answer is correct.
+- If the requested detail is not present in this prompt, say you don't have that information — always in the same language the visitor used, never switch to English for this message.
 - {language_instructions}
 """
     return prompt.strip()
