@@ -185,6 +185,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const hasAiOutputThisTurnRef = useRef(false);
   const pendingAskVoiceAfterDrainRef = useRef(false);
   const awaitingOldTurnCompleteRef = useRef(false);
+  const micPermissionPrimedRef = useRef(false);
   const runtimeLanguageRef = useRef<LanguageCode>(language);
   const textInputRef = useRef<HTMLInputElement>(null);
   const [inputMode, setInputMode] = useState<"voice" | "text">("voice");
@@ -657,6 +658,16 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const handleIntro = useCallback(async () => {
     if (!can("GREETING_REQUESTED")) return;
     markIntroUsed();
+    if (!micPermissionPrimedRef.current) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((track) => track.stop());
+        micPermissionPrimedRef.current = true;
+        console.log("🧪 [iOS-audio] mic permission primed before greeting");
+      } catch (e) {
+        console.warn("⚠️ Mic permission preflight failed before greeting:", e);
+      }
+    }
     await unlockAndFlush();
     sendMessage({ type: "request_greeting" });
     dispatch({ type: "GREETING_REQUESTED" });
