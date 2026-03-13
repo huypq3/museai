@@ -18,7 +18,7 @@ export function useAudioPlayer() {
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       // Keep context sample rate aligned with incoming PCM stream when possible.
       try {
-        audioContextRef.current = new AudioContext({ sampleRate: STREAM_SAMPLE_RATE });
+        audioContextRef.current = new AudioContext();
       } catch {
         audioContextRef.current = new AudioContext();
       }
