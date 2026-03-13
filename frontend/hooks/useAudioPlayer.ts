@@ -13,22 +13,6 @@ export function useAudioPlayer() {
   const pendingChunksRef = useRef<string[]>([]);
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const stopDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const contextDebugAttachedRef = useRef(false);
-
-  const debugCtx = useCallback((label: string, ctx: AudioContext | null) => {
-    if (!ctx) {
-      console.log(`🧪 [iOS-audio] ${label}: no-context`);
-      return;
-    }
-    console.log(`🧪 [iOS-audio] ${label}`, {
-      state: ctx.state,
-      sampleRate: ctx.sampleRate,
-      currentTime: Number(ctx.currentTime.toFixed(3)),
-      pendingChunks: pendingChunksRef.current.length,
-      activeSources: activeSourcesRef.current.length,
-      unlocked: isUnlockedRef.current,
-    });
-  }, []);
 
   const getOrCreateContext = (): AudioContext => {
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
@@ -43,13 +27,6 @@ export function useAudioPlayer() {
         state: audioContextRef.current.state,
         sampleRate: audioContextRef.current.sampleRate,
       });
-      debugCtx("context-created", audioContextRef.current);
-      if (!contextDebugAttachedRef.current) {
-        audioContextRef.current.onstatechange = () => {
-          debugCtx("context-statechange", audioContextRef.current);
-        };
-        contextDebugAttachedRef.current = true;
-      }
     }
     return audioContextRef.current;
   };
@@ -151,21 +128,17 @@ export function useAudioPlayer() {
     if (isUnlockedRef.current) return;
     try {
       const ctx = getOrCreateContext();
-      debugCtx("unlock-start", ctx);
       if (ctx.state !== "running") {
         await ctx.resume();
-        debugCtx("unlock-after-resume", ctx);
       }
       if (ctx.state === "running") {
         warmUpOutput(ctx);
         isUnlockedRef.current = true;
         setIsUnlocked(true);
         console.log("🔓 AudioContext unlocked", { sampleRate: ctx.sampleRate });
-        debugCtx("unlock-success", ctx);
         await flushPending(ctx);
       } else {
         console.warn("⚠️ AudioContext still not running after unlock", { state: ctx.state });
-        debugCtx("unlock-not-running", ctx);
       }
     } catch (e) {
       console.warn("AudioContext unlock failed:", e);
@@ -175,12 +148,10 @@ export function useAudioPlayer() {
   const playChunk = useCallback(async (base64: string) => {
     try {
       const ctx = getOrCreateContext();
-      debugCtx("playchunk-enter", ctx);
 
       if (ctx.state !== "running") {
         try {
           await ctx.resume();
-          debugCtx("playchunk-after-resume", ctx);
         } catch (e) {
           console.warn("⚠️ AudioContext resume failed in playChunk:", e);
         }
@@ -235,7 +206,6 @@ export function useAudioPlayer() {
     }
 
     setIsPlaying(false);
-    debugCtx("stop-playback", audioContextRef.current);
   }, []);
 
   const stop = useCallback(() => {
@@ -246,7 +216,6 @@ export function useAudioPlayer() {
       }
       audioContextRef.current = null;
     }
-    contextDebugAttachedRef.current = false;
     nextStartTimeRef.current = 0;
     isUnlockedRef.current = false;
     setIsUnlocked(false);

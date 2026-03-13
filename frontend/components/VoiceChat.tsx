@@ -199,7 +199,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (!introMicAnchorStreamRef.current) return;
     introMicAnchorStreamRef.current.getTracks().forEach((track) => track.stop());
     introMicAnchorStreamRef.current = null;
-    console.log("🧪 [iOS-audio] intro mic anchor released");
   }, []);
   const scheduleAITextFlush = useCallback(() => {
     if (aiTextFlushTimerRef.current) return;
@@ -676,7 +675,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         introMicAnchorStreamRef.current = stream;
         micPermissionPrimedRef.current = true;
-        console.log("🧪 [iOS-audio] mic permission primed before greeting (anchor active)");
       } catch (e) {
         console.warn("⚠️ Mic permission preflight failed before greeting:", e);
       }

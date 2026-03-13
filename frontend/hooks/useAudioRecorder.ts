@@ -68,10 +68,6 @@ export function useAudioRecorder() {
 
   const start = useCallback(async (ctx: AudioContext, onChunk: (base64: string) => void, options?: AutoStopOptions) => {
     try {
-      console.log("🧪 [iOS-audio] recorder-start-enter", {
-        ctxState: ctx.state,
-        sampleRate: ctx.sampleRate,
-      });
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
           sampleRate: 16000,
@@ -85,20 +81,9 @@ export function useAudioRecorder() {
       streamRef.current = stream;
       audioContextRef.current = ctx;
       const deviceSampleRate = ctx.sampleRate;
-      const [track] = stream.getAudioTracks();
-      console.log("🧪 [iOS-audio] recorder-gum-ok", {
-        ctxState: ctx.state,
-        trackLabel: track?.label || "",
-        trackMuted: track?.muted ?? null,
-        trackReadyState: track?.readyState || "",
-        trackSettings: track?.getSettings ? track.getSettings() : {},
-      });
       const micSource = ctx.createMediaStreamSource(stream);
       micSourceRef.current = micSource;
       micSource.connect(ctx.destination);
-      console.log("🧪 [iOS-audio] recorder-mic-anchored-to-destination", {
-        ctxState: ctx.state,
-      });
       
       const silenceMs = options?.silenceMs ?? 1300;
       const maxNoSpeechMs = options?.maxNoSpeechMs ?? 2800;
@@ -205,12 +190,6 @@ export function useAudioRecorder() {
 
   const stop = useCallback(() => {
     console.log("🛑 Stopping recording");
-    console.log("🧪 [iOS-audio] recorder-stop", {
-      hadProcessor: Boolean(processorRef.current),
-      hadMicSource: Boolean(micSourceRef.current),
-      hadStream: Boolean(streamRef.current),
-      ctxState: audioContextRef.current?.state || "none",
-    });
     
     isRecordingRef.current = false;
     chunkCountRef.current = 0;  // Reset counter
