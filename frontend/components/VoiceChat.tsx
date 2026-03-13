@@ -524,7 +524,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       isConnected &&
       !is.recording &&
       micPermissionPrimedRef.current &&
-      (currentState === "ai_speaking" || currentState === "ready" || currentState === "paused");
+      currentState === "ai_speaking";
 
     if (!shouldMonitor) {
       void stopVADMonitor();
@@ -542,14 +542,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         const s = stateRef.current;
         if (s === "ai_speaking") {
           void handleInterrupt();
-        } else if ((s === "ready" || s === "paused") && can("ASK_VOICE")) {
-          void (async () => {
-            dispatch({ type: "ASK_VOICE" });
-            const ok = await startVoiceCapture();
-            if (!ok && can("CANCEL_RECORDING")) {
-              dispatch({ type: "CANCEL_RECORDING" });
-            }
-          })();
         }
 
         window.setTimeout(() => {
@@ -567,7 +559,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       cancelled = true;
       void stopVADMonitor();
     };
-  }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef, can, dispatch, startVoiceCapture]);
+  }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef]);
 
   const handleIntro = useCallback(async () => {
     if (!can("GREETING_REQUESTED")) {
