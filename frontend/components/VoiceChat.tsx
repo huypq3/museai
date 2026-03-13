@@ -658,6 +658,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const handleIntro = useCallback(async () => {
     if (!can("GREETING_REQUESTED")) return;
     markIntroUsed();
+    await unlockAndFlush();
     if (!micPermissionPrimedRef.current) {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
