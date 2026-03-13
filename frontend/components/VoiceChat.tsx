@@ -570,14 +570,19 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef, can, dispatch, startVoiceCapture]);
 
   const handleIntro = useCallback(async () => {
-    if (!can("GREETING_REQUESTED")) return;
-    markIntroUsed();
+    if (!can("GREETING_REQUESTED")) {
+      console.warn(`⚠️ GREETING_REQUESTED not allowed in state=${stateRef.current}`);
+      return;
+    }
+    console.log("🎬 intro-start");
     await unlockAndFlush();
     if (!micPermissionPrimedRef.current) {
       try {
+        console.log("🎤 intro requesting mic permission...");
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         introMicAnchorStreamRef.current = stream;
         micPermissionPrimedRef.current = true;
+        console.log("✅ intro mic permission granted");
       } catch (e) {
         console.warn("⚠️ Mic permission preflight failed before greeting:", e);
       }
@@ -588,8 +593,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       console.warn("⚠️ request_greeting not sent because websocket is not open");
       return;
     }
+    markIntroUsed();
     dispatch({ type: "GREETING_REQUESTED" });
-  }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch]);
+    console.log("✅ intro request_greeting sent");
+  }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch, stateRef]);
 
   const handleMicPress = useCallback(async () => {
     console.log(
