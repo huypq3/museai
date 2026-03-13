@@ -14,7 +14,7 @@ export function useAudioPlayer() {
   const activeSourcesRef = useRef<AudioBufferSourceNode[]>([]);
   const stopDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const getContext = (): AudioContext => {
+  const getOrCreateContext = (): AudioContext => {
     if (!audioContextRef.current || audioContextRef.current.state === "closed") {
       // Keep context sample rate aligned with incoming PCM stream when possible.
       try {
@@ -127,7 +127,7 @@ export function useAudioPlayer() {
   const unlockAndFlush = useCallback(async () => {
     if (isUnlockedRef.current) return;
     try {
-      const ctx = getContext();
+      const ctx = getOrCreateContext();
       if (ctx.state !== "running") {
         await ctx.resume();
       }
@@ -147,7 +147,7 @@ export function useAudioPlayer() {
 
   const playChunk = useCallback(async (base64: string) => {
     try {
-      const ctx = getContext();
+      const ctx = getOrCreateContext();
 
       if (ctx.state !== "running") {
         pendingChunksRef.current.push(base64);
@@ -203,7 +203,9 @@ export function useAudioPlayer() {
   const stop = useCallback(() => {
     stopPlayback();
     if (audioContextRef.current) {
-      audioContextRef.current.close();
+      if (audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close();
+      }
       audioContextRef.current = null;
     }
     nextStartTimeRef.current = 0;
@@ -211,5 +213,9 @@ export function useAudioPlayer() {
     setIsUnlocked(false);
   }, [stopPlayback]);
 
-  return { playChunk, stopPlayback, stop, isPlaying, isUnlocked, unlockAndFlush };
+  const getContext = useCallback((): AudioContext | null => {
+    return audioContextRef.current;
+  }, []);
+
+  return { playChunk, stopPlayback, stop, isPlaying, isUnlocked, unlockAndFlush, getContext };
 }

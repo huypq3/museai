@@ -191,8 +191,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [textInput, setTextInput] = useState("");
   const [showTextInput, setShowTextInput] = useState(false);
 
-  const { start, stop: stopRecording } = useAudioRecorder();
-  const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush } = useAudioPlayer();
+  const { start, stop: stopRecording, destroy: destroyRecorder } = useAudioRecorder();
+  const { playChunk, stopPlayback, stop: stopAudio, isPlaying, unlockAndFlush, getContext: getAudioContext } = useAudioPlayer();
   const scheduleAITextFlush = useCallback(() => {
     if (aiTextFlushTimerRef.current) return;
     aiTextFlushTimerRef.current = setTimeout(() => {
@@ -403,10 +403,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       if (processingTimeoutRef.current) clearTimeout(processingTimeoutRef.current);
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       if (aiTextFlushTimerRef.current) clearTimeout(aiTextFlushTimerRef.current);
-      stopRecording();
+      destroyRecorder();
       stopAudio();
     };
-  }, [stopRecording, stopAudio]);
+  }, [destroyRecorder, stopAudio]);
 
   const stopAndSendTurn = useCallback((reason: "manual" | "silence" | "no_speech") => {
     if (stateRef.current !== "recording") return;
@@ -451,7 +451,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       console.warn("⚠️ start_of_turn not sent because websocket is not open");
       return;
     }
+    const ctx = getAudioContext();
+    if (!ctx) {
+      console.warn("⚠️ AudioContext is not ready; unlockAndFlush must run before startVoiceCapture");
+      return;
+    }
     await start(
+      ctx,
       (base64) => sendMessage({ type: "audio", data: base64 }),
       {
         silenceMs: 1600,
@@ -463,7 +469,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         },
       }
     );
-  }, [sendMessage, start, stopAndSendTurn]);
+  }, [sendMessage, start, stopAndSendTurn, getAudioContext]);
 
   // ─── Handlers ─────────────────────────────────────────────────────────
   const handleStartRecording = useCallback(async () => {

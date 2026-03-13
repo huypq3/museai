@@ -65,7 +65,7 @@ export function useAudioRecorder() {
     return btoa(binary);
   };
 
-  const start = useCallback(async (onChunk: (base64: string) => void, options?: AutoStopOptions) => {
+  const start = useCallback(async (ctx: AudioContext, onChunk: (base64: string) => void, options?: AutoStopOptions) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -78,13 +78,10 @@ export function useAudioRecorder() {
       });
       
       streamRef.current = stream;
+      audioContextRef.current = ctx;
+      const deviceSampleRate = ctx.sampleRate;
       
-      // Create AudioContext first, then read actual device sample rate
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      const deviceSampleRate = audioContext.sampleRate;
-      
-      const source = audioContext.createMediaStreamSource(stream);
+      const source = ctx.createMediaStreamSource(stream);
       const silenceMs = options?.silenceMs ?? 1300;
       const maxNoSpeechMs = options?.maxNoSpeechMs ?? 2800;
       const voiceThreshold = options?.voiceThreshold ?? 0;
@@ -139,19 +136,19 @@ export function useAudioRecorder() {
 
       const supportsWorklet =
         typeof AudioWorkletNode !== "undefined" &&
-        typeof audioContext.audioWorklet !== "undefined";
+        typeof ctx.audioWorklet !== "undefined";
 
       if (supportsWorklet) {
         const workletUrl = URL.createObjectURL(
           new Blob([WORKLET_CODE], { type: "application/javascript" })
         );
         try {
-          await audioContext.audioWorklet.addModule(workletUrl);
+          await ctx.audioWorklet.addModule(workletUrl);
         } finally {
           URL.revokeObjectURL(workletUrl);
         }
 
-        const workletNode = new AudioWorkletNode(audioContext, "pcm-processor", {
+        const workletNode = new AudioWorkletNode(ctx, "pcm-processor", {
           numberOfInputs: 1,
           numberOfOutputs: 0,
           channelCount: 1,
@@ -166,13 +163,13 @@ export function useAudioRecorder() {
         source.connect(workletNode);
       } else {
         console.warn("AudioWorklet is not supported, falling back to ScriptProcessorNode");
-        const processor = audioContext.createScriptProcessor(4096, 1, 1);
+        const processor = ctx.createScriptProcessor(4096, 1, 1);
         processor.onaudioprocess = (e) => {
           processFrame(e.inputBuffer.getChannelData(0));
         };
         processorRef.current = processor;
         source.connect(processor);
-        processor.connect(audioContext.destination);
+        processor.connect(ctx.destination);
       }
       
       isRecordingRef.current = true;
@@ -200,12 +197,7 @@ export function useAudioRecorder() {
       processorRef.current.disconnect();
       processorRef.current = null;
     }
-    
-    if (audioContextRef.current) {
-      audioContextRef.current.close();
-      audioContextRef.current = null;
-    }
-    
+
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
       streamRef.current = null;
@@ -213,6 +205,15 @@ export function useAudioRecorder() {
     
     setIsRecording(false);
   }, []);
+
+  const destroy = useCallback(async () => {
+    stop();
+    const ctx = audioContextRef.current;
+    audioContextRef.current = null;
+    if (ctx && ctx.state !== "closed") {
+      await ctx.close();
+    }
+  }, [stop]);
 
   // VAD mode: continuous streaming (always send audio, Gemini detects activity)
   const startContinuous = useCallback(
@@ -266,5 +267,5 @@ export function useAudioRecorder() {
     []
   );
 
-  return { start, stop, startContinuous, isRecording };
+  return { start, stop, destroy, startContinuous, isRecording };
 }
