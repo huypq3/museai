@@ -583,14 +583,17 @@ export default function CameraTourPage() {
         
         <button
           onClick={() => setShowQRScanner(true)}
-          className="w-14 h-14 rounded-[14px] flex items-center justify-center text-xl transition-all"
+          className="h-14 px-4 rounded-[14px] flex items-center justify-center gap-2 text-sm font-medium transition-all whitespace-nowrap"
           style={{
             background: '#111111',
             border: '1px solid rgba(201,168,76,0.15)',
+            color: 'var(--museum-white)',
+            fontFamily: 'DM Sans',
           }}>
           <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M4 4h5v2H6v3H4V4Zm11 0h5v5h-2V6h-3V4ZM4 15h2v3h3v2H4v-5Zm14 0h2v5h-5v-2h3v-3ZM8 8h8v8H8V8Zm2 2v4h4v-4h-4Z" fill="currentColor"/>
           </svg>
+          <span>QR code</span>
         </button>
       </div>
 
