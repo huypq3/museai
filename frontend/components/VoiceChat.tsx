@@ -196,6 +196,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const autoStartLockRef = useRef(false);
   const lastAutoStartAtRef = useRef(0);
   const lastAiAudioAtRef = useRef(0);
+  const showIntroButtonRef = useRef(true);
 
   const {
     start,
@@ -375,6 +376,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   useEffect(() => {
     runtimeLanguageRef.current = language;
   }, [language]);
+
+  useEffect(() => {
+    showIntroButtonRef.current = showIntroButton;
+  }, [showIntroButton]);
 
   useEffect(() => {
     currentAITextRef.current = currentAIText;
@@ -561,6 +566,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         if (s === "ai_speaking") {
           void handleInterrupt();
         } else if ((s === "ready" || s === "paused") && can("ASK_VOICE")) {
+          if (showIntroButtonRef.current) {
+            // Intro not yet played — don't auto-start recording via VAD
+            vadInterruptLockRef.current = false;
+            return;
+          }
           const now = Date.now();
           const recentlyPlayedAi = now - lastAiAudioAtRef.current < 700;
           const inTurnCooldown = now - lastAutoStartAtRef.current < 1600;
@@ -650,7 +660,15 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       `🎛️ waveform tap: state=${currentState} ready=${is.ready} connected=${isConnected} showIntro=${showIntroButton}`
     );
     if (!showIntroButton) {
-      console.log("ℹ️ waveform tap ignored: hands-free mode after intro");
+      // Post-intro: button acts as manual interrupt or mic trigger
+      if (currentState === "ai_speaking" && can("INTERRUPT")) {
+        void handleInterrupt();
+      } else if ((currentState === "ready" || currentState === "paused") && can("ASK_VOICE")) {
+        await unlockAndFlush();
+        dispatch({ type: "ASK_VOICE" });
+        const ok = await startVoiceCapture();
+        if (!ok && can("CANCEL_RECORDING")) dispatch({ type: "CANCEL_RECORDING" });
+      }
       return;
     }
 
@@ -679,7 +697,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 3000);
     console.log(`⏳ intro queued: connected=${isConnected} ready=${is.ready} state=${stateRef.current}`);
     void connect();
-  }, [showIntroButton, isConnected, is.ready, handleIntro, stateRef, connect, unlockAndFlush, language]);
+  }, [showIntroButton, isConnected, is.ready, handleIntro, stateRef, connect, unlockAndFlush, language, can, handleInterrupt, dispatch, startVoiceCapture]);
 
   const handleWaveTap = useCallback(() => {
     const tapId = ++waveTapSeqRef.current;
@@ -700,7 +718,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const isProcessingState = is.processing;
   const isDisabledWave =
     is.connecting || is.reconnecting || is.error || is.sessionEnded || is.processing || is.draining;
-  const isWaveStartEnabled = showIntroButton && !is.error && !is.sessionEnded;
+  // Show spinner only in truly transient states; after intro the button is always active
+  const showButtonSpinner = is.connecting || is.reconnecting || is.processing || is.draining;
+  const isWaveStartEnabled = !is.error && !is.sessionEnded && !showButtonSpinner;
   const goldBright = "#F6C453";
   const goldLight = "#FFE08A";
   const goldRing = "rgba(246,196,83,0.72)";
@@ -1123,7 +1143,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               opacity: isWaveStartEnabled ? 1 : 0.6,
             }}
           >
-            {!isWaveStartEnabled
+            {showButtonSpinner
               ? <span style={{ fontSize: "20px", animation: "spin 1s linear infinite", display: "inline-block" }}>⏳</span>
               : isRecordingState ? "" : "🎤"}
           </button>
