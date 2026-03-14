@@ -184,6 +184,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const pendingUserTextRef = useRef("");
   const hasAiOutputThisTurnRef = useRef(false);
   const pendingIntroAfterConnectRef = useRef(false);
+  const introInFlightRef = useRef(false);
   const awaitingOldTurnCompleteRef = useRef(false);
   const micPermissionPrimedRef = useRef(false);
   const introMicAnchorStreamRef = useRef<MediaStream | null>(null);
@@ -535,11 +536,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         cancelled = true;
       };
     }
+    console.log(`🧪 VAD monitor start: state=${currentState}`);
 
     void startVADMonitor(
       () => {
         if (cancelled) return;
         if (vadInterruptLockRef.current) return;
+        console.log(`🧪 VAD trigger: state=${stateRef.current}`);
         vadInterruptLockRef.current = true;
 
         const s = stateRef.current;
@@ -579,40 +582,50 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
     return () => {
       cancelled = true;
+      console.log("🧪 VAD monitor stop");
       void stopVADMonitor();
     };
   }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef, can, dispatch, startVoiceCapture]);
 
   const handleIntro = useCallback(async () => {
+    if (introInFlightRef.current) return;
     if (!can("GREETING_REQUESTED")) {
       console.warn(`⚠️ GREETING_REQUESTED not allowed in state=${stateRef.current}`);
       return;
     }
-    console.log("🎬 intro-start");
-    await unlockAndFlush();
-    if (!micPermissionPrimedRef.current) {
-      try {
-        console.log("🎤 intro requesting mic permission...");
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        introMicAnchorStreamRef.current = stream;
-        micPermissionPrimedRef.current = true;
-        console.log("✅ intro mic permission granted");
-      } catch (e) {
-        console.warn("⚠️ Mic permission preflight failed before greeting:", e);
+    introInFlightRef.current = true;
+    try {
+      console.log("🎬 intro-start");
+      await unlockAndFlush();
+      if (!micPermissionPrimedRef.current) {
+        try {
+          console.log("🎤 intro requesting mic permission...");
+          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          introMicAnchorStreamRef.current = stream;
+          micPermissionPrimedRef.current = true;
+          console.log("✅ intro mic permission granted");
+        } catch (e) {
+          console.warn("⚠️ Mic permission preflight failed before greeting:", e);
+        }
       }
+      await unlockAndFlush();
+      const sent = sendMessage({ type: "request_greeting" });
+      if (!sent) {
+        console.warn("⚠️ request_greeting not sent because websocket is not open");
+        pendingIntroAfterConnectRef.current = true;
+        reconnectNow();
+        return;
+      }
+      pendingIntroAfterConnectRef.current = false;
+      markIntroUsed();
+      // Release temporary intro anchor so VAD can immediately re-open mic stream.
+      releaseIntroMicAnchor();
+      dispatch({ type: "GREETING_REQUESTED" });
+      console.log("✅ intro request_greeting sent");
+    } finally {
+      introInFlightRef.current = false;
     }
-    await unlockAndFlush();
-    const sent = sendMessage({ type: "request_greeting" });
-    if (!sent) {
-      console.warn("⚠️ request_greeting not sent because websocket is not open");
-      pendingIntroAfterConnectRef.current = true;
-      reconnectNow();
-      return;
-    }
-    markIntroUsed();
-    dispatch({ type: "GREETING_REQUESTED" });
-    console.log("✅ intro request_greeting sent");
-  }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch, stateRef, reconnectNow]);
+  }, [can, markIntroUsed, unlockAndFlush, sendMessage, dispatch, stateRef, reconnectNow, releaseIntroMicAnchor]);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -1048,8 +1061,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           />
           <button
             onPointerDown={handleWaveTap}
-            onTouchStart={handleWaveTap}
-            onClick={handleWaveTap}
             disabled={!isWaveStartEnabled}
             title={isDisabledWave ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
