@@ -629,19 +629,21 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   useEffect(() => {
     if (!isConnected) return;
+    if (!is.ready) return;
     if (!pendingIntroAfterConnectRef.current) return;
     if (!showIntroButton) return;
     pendingIntroAfterConnectRef.current = false;
     void handleIntro();
-  }, [isConnected, showIntroButton, handleIntro]);
+  }, [isConnected, is.ready, showIntroButton, handleIntro]);
 
   const handleMicPress = useCallback(async () => {
     console.log(
       `🎛️ waveform tap: state=${stateRef.current} ready=${is.ready} recording=${is.recording} speaking=${is.aiSpeaking} processing=${is.processing} draining=${is.draining} blocked=${is.inputBlocked}`
     );
-    if (showIntroButton && is.ready) {
-      if (!isConnected) {
+    if (showIntroButton) {
+      if (!isConnected || !is.ready) {
         pendingIntroAfterConnectRef.current = true;
+        console.log("⏳ intro queued; reconnecting websocket...");
         reconnectNow();
         return;
       }
@@ -1061,14 +1063,13 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           />
           <button
             onPointerDown={handleWaveTap}
-            disabled={!isWaveStartEnabled}
             title={isDisabledWave ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{
               width: "64px",
               height: "64px",
               borderRadius: "50%",
               border: "none",
-              cursor: isWaveStartEnabled ? "pointer" : "not-allowed",
+              cursor: "pointer",
               pointerEvents: "auto",
               position: "relative",
               zIndex: 20,
@@ -1083,7 +1084,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               boxShadow: isRecordingState
                 ? "0 10px 30px rgba(239,68,68,0.35)"
                 : "0 10px 30px rgba(246,196,83,0.45)",
-              opacity: isWaveStartEnabled ? 1 : 0.5,
+              opacity: isWaveStartEnabled ? 1 : 0.6,
             }}
           >
             {!isWaveStartEnabled
