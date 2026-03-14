@@ -53,6 +53,8 @@ LANGUAGE_COMMANDS = {
         "switch to english",
         "in english",
         "speak english",
+        "can we speak english",
+        "can you speak english",
         "answer in english",
         "continue in english",
         "explain in english",
@@ -67,12 +69,34 @@ LANGUAGE_COMMANDS = {
         "tra loi tieng viet",
         "noi tieng viet",
         "chuyen sang tieng viet",
+        "toi co the chuyen sang tieng viet duoc khong",
+        "co the chuyen sang tieng viet duoc khong",
+        "chuyen sang tieng viet duoc khong",
+        "ban co the noi tieng viet khong",
+        "toi muon noi tieng viet",
+        "tra loi bang tieng viet duoc khong",
+        "switch to vietnamese",
+        "in vietnamese",
+        "speak vietnamese",
     ],
     "fr": ["en francais", "in french", "switch to french", "parle francais"],
     "ja": ["日本語で", "japanese please", "switch to japanese", "in japanese"],
     "ko": ["한국어로", "in korean", "switch to korean"],
     "zh": ["用中文", "in chinese", "switch to chinese", "说中文"],
     "es": ["en espanol", "in spanish", "switch to spanish", "habla espanol"],
+}
+
+LANGUAGE_SWITCH_ACK = {
+    "vi": "Chắc chắn rồi. Mình sẽ trả lời bằng tiếng Việt. Bạn muốn trao đổi gì tiếp theo?",
+    "en": "Of course. I will reply in English. What would you like to talk about next?",
+    "de": "Natürlich. Ich antworte auf Deutsch. Worüber möchten Sie als Nächstes sprechen?",
+    "ru": "Конечно. Я буду отвечать по-русски. О чём вы хотите поговорить дальше?",
+    "ar": "بالتأكيد. سأجيب بالعربية. عمّ تود أن نتحدث بعد ذلك؟",
+    "es": "Claro. Responderé en español. ¿Sobre qué te gustaría conversar ahora?",
+    "fr": "Bien sûr. Je répondrai en français. De quoi souhaitez-vous parler maintenant ?",
+    "ja": "もちろんです。日本語でお答えします。次は何について話しましょうか？",
+    "ko": "물론입니다. 한국어로 답변할게요. 다음에는 무엇을 이야기할까요?",
+    "zh": "当然可以。我会用中文回答。接下来你想聊什么？",
 }
 
 
@@ -90,6 +114,69 @@ def detect_language_command(transcript: str) -> str | None:
     for lang_code, patterns in LANGUAGE_COMMANDS.items():
         if any(pattern in text for pattern in patterns):
             return lang_code
+    return None
+
+
+def detect_input_language(text: str) -> str | None:
+    """
+    Best-effort language detection for normal user input (not only switch commands).
+    Keep conservative to avoid false flips.
+    """
+    raw = (text or "").strip()
+    if len(raw) < 3:
+        return None
+
+    # Script-based languages (high confidence).
+    if re.search(r"[\u0600-\u06FF]", raw):
+        return "ar"
+    if re.search(r"[\u3040-\u30FF]", raw):
+        return "ja"
+    if re.search(r"[\uAC00-\uD7AF]", raw):
+        return "ko"
+    if re.search(r"[\u4E00-\u9FFF]", raw):
+        return "zh"
+    if re.search(r"[\u0400-\u04FF]", raw):
+        return "ru"
+
+    lowered = raw.lower()
+    normalized = _normalize_for_command(raw)
+    words = [w for w in re.split(r"[^a-zA-ZÀ-ỹ]+", lowered) if w]
+
+    # Vietnamese with diacritics / common tokens.
+    if re.search(r"[ăâđêôơưáàảãạắằẳẵặấầẩẫậéèẻẽẹếềểễệíìỉĩịóòỏõọốồổỗộớờởỡợúùủũụứừửữựýỳỷỹỵ]", lowered):
+        return "vi"
+    vi_markers = {
+        "toi",
+        "ban",
+        "duoc",
+        "khong",
+        "tieng",
+        "viet",
+        "hien",
+        "vat",
+        "bao",
+        "tang",
+        "xin",
+        "chao",
+        "cam",
+        "on",
+        "muon",
+        "noi",
+    }
+    if sum(1 for w in words if w in vi_markers) >= 2:
+        return "vi"
+
+    # Latin languages: require >=2 markers to reduce false positives.
+    marker_sets = {
+        "en": {"the", "can", "you", "please", "what", "how", "where", "when", "tell", "about", "museum", "exhibit"},
+        "fr": {"bonjour", "merci", "s'il", "plait", "musee", "objet", "exposition"},
+        "de": {"hallo", "danke", "bitte", "deutsch", "museum", "ausstellung"},
+        "es": {"hola", "gracias", "por", "favor", "museo", "exposicion", "objeto"},
+    }
+    for lang_code, markers in marker_sets.items():
+        if sum(1 for w in words if w in markers) >= 2:
+            return lang_code
+
     return None
 
 
@@ -558,7 +645,7 @@ class GeminiLiveHandler:
                     if not text:
                         continue
                         
-                    requested_lang = detect_language_command(text)
+                    requested_lang = detect_language_command(text) or detect_input_language(text)
                     if requested_lang:
                         await self._switch_language(websocket, requested_lang, source="text_input")
                         
@@ -703,7 +790,7 @@ class GeminiLiveHandler:
                             if getattr(sc, "input_transcription", None):
                                 txt = sc.input_transcription.text
                                 logger.info("🎤 Input transcript: %s", str(txt)[:80])
-                                requested_lang = detect_language_command(str(txt or ""))
+                                requested_lang = detect_language_command(str(txt or "")) or detect_input_language(str(txt or ""))
                                 if requested_lang:
                                     await self._switch_language(
                                         websocket,
@@ -1024,6 +1111,24 @@ class GeminiLiveHandler:
                 )
         except Exception:
             logger.warning("Failed to emit language_switched event")
+
+        # Immediate deterministic ack so users feel the switch happened instantly.
+        ack_text = LANGUAGE_SWITCH_ACK.get(target, LANGUAGE_SWITCH_ACK["en"])
+        try:
+            await websocket.send_json(
+                {
+                    "type": "transcript",
+                    "role": "assistant",
+                    "text": ack_text,
+                }
+            )
+            if self.session_state:
+                self._schedule_session_metric_task(
+                    session_manager.incr_out(self.session_state.session_id),
+                    "incr_out",
+                )
+        except Exception:
+            logger.warning("Failed to emit language switch ack transcript")
         return True
 
     async def _inject_language_reminder(self, session) -> None:
@@ -1082,8 +1187,6 @@ class GeminiLiveHandler:
         fallback_template = self.system_instruction.strip()
         has_fallback = bool(fallback_template)
         context_text = exhibit_context.strip() or "No curated exhibit facts are available."
-        language_label = self._language_label(self.language)
-
         museum_persona = (
             self._museum_ai_persona.strip()
             if has_museum_persona
@@ -1098,10 +1201,10 @@ class GeminiLiveHandler:
         prompt_with_fallback = f"""You are a professional museum guide currently presenting: {exhibit_name}.
 
 LANGUAGE
-- Current default response language is {language_label}.
-- If the visitor asks to switch language (for example: "switch to English", "trả lời bằng tiếng Việt"),
-  comply immediately and continue in the new language.
-- Keep using the new language for subsequent answers until the visitor asks to switch again.
+- Detect the visitor's latest input language and reply in that same language by default.
+- Apply this even when the input is a short statement, confirmation, or casual phrase (not only direct questions).
+- If the visitor switches language naturally in their next sentence, follow immediately (no need for explicit command).
+- If uncertain, keep current language and ask one short clarification question.
 
 STYLE POLICY (tone and delivery)
 - Museum persona baseline: {museum_persona}
@@ -1110,14 +1213,23 @@ STYLE POLICY (tone and delivery)
 {fallback_template if has_fallback else "(none)"}
 
 CONTENT POLICY (facts and grounding)
-- You are a strictly grounded assistant. You MUST rely ONLY on the facts explicitly written in the CURATED EXHIBIT FACTS section below.
-- You must NOT access or utilize your own training knowledge or common sense to answer factual questions.
-- Do not assume or infer beyond what is directly stated in the curated facts.
-- Treat the curated facts as the absolute and complete limit of truth for this session. Any detail not explicitly mentioned there does NOT exist in this museum's records.
-- If the answer to a question is not explicitly written in the curated facts, respond naturally in {language_label}: say the museum does not currently have verified information on that detail. Never say this in English if the visitor is speaking another language.
-- Do not invent any names, dates, numbers, or events.
-- For pure social chit-chat (greetings, thanks, confirmations, encouragement) that does not request factual museum details, you may answer naturally in {language_label} in ONE short sentence.
-- Even in chit-chat mode, do NOT introduce any new factual claims about exhibits, history, dates, people, or places.
+- For factual museum/exhibit questions, rely ONLY on CURATED EXHIBIT FACTS below.
+- Do NOT use external/world knowledge for museum facts.
+- If museum/exhibit detail is missing in curated facts, say naturally that the museum currently has no verified information on that detail yet.
+- For basic social conversation (greetings, thanks, confirmations, short small-talk), you may reply naturally and briefly.
+- For non-museum information requests (politics, weather, finance, medical/legal/general world info), politely decline and state you only have verified museum/exhibit information in this session.
+- Never invent names, dates, numbers, events, or claims about museum/exhibits.
+
+TURN ROUTING POLICY
+- First classify each user turn:
+  1) Social/meta conversation (greeting, thanks, language preference, short small-talk)
+  2) Museum/exhibit factual question
+  3) Non-museum factual question (outside museum scope)
+- For type (1): respond naturally and briefly.
+- For type (2): answer only from CURATED EXHIBIT FACTS. If missing, explicitly say the museum currently has no verified information.
+- For type (3): politely decline and explain you only have museum/exhibit data in this session.
+- Never mix unverified factual claims into either type.
+- Keep refusals and missing-data replies warm and helpful; offer to continue with museum/exhibit topics.
 
 CURATED EXHIBIT FACTS
 {context_text}
@@ -1142,24 +1254,33 @@ PRIORITY ORDER
         prompt_without_fallback = f"""You are a professional museum guide currently presenting: {exhibit_name}.
 
 LANGUAGE
-- Current default response language is {language_label}.
-- If the visitor asks to switch language (for example: "switch to English", "trả lời bằng tiếng Việt"),
-  comply immediately and continue in the new language.
-- Keep using the new language for subsequent answers until the visitor asks to switch again.
+- Detect the visitor's latest input language and reply in that same language by default.
+- Apply this even when the input is a short statement, confirmation, or casual phrase (not only direct questions).
+- If the visitor switches language naturally in their next sentence, follow immediately (no need for explicit command).
+- If uncertain, keep current language and ask one short clarification question.
 
 STYLE POLICY (tone and delivery)
 - Museum persona baseline: {museum_persona}
 - Exhibit-level override (highest priority): {exhibit_override}
 
 CONTENT POLICY (facts and grounding)
-- You are a strictly grounded assistant. You MUST rely ONLY on the facts explicitly written in the CURATED EXHIBIT FACTS section below.
-- You must NOT access or utilize your own training knowledge or common sense to answer factual questions.
-- Do not assume or infer beyond what is directly stated in the curated facts.
-- Treat the curated facts as the absolute and complete limit of truth for this session. Any detail not explicitly mentioned there does NOT exist in this museum's records.
-- If the answer to a question is not explicitly written in the curated facts, respond naturally in {language_label}: say the museum does not currently have verified information on that detail. Never say this in English if the visitor is speaking another language.
-- Do not invent any names, dates, numbers, or events.
-- For pure social chit-chat (greetings, thanks, confirmations, encouragement) that does not request factual museum details, you may answer naturally in {language_label} in ONE short sentence.
-- Even in chit-chat mode, do NOT introduce any new factual claims about exhibits, history, dates, people, or places.
+- For factual museum/exhibit questions, rely ONLY on CURATED EXHIBIT FACTS below.
+- Do NOT use external/world knowledge for museum facts.
+- If museum/exhibit detail is missing in curated facts, say naturally that the museum currently has no verified information on that detail yet.
+- For basic social conversation (greetings, thanks, confirmations, short small-talk), you may reply naturally and briefly.
+- For non-museum information requests (politics, weather, finance, medical/legal/general world info), politely decline and state you only have verified museum/exhibit information in this session.
+- Never invent names, dates, numbers, events, or claims about museum/exhibits.
+
+TURN ROUTING POLICY
+- First classify each user turn:
+  1) Social/meta conversation (greeting, thanks, language preference, short small-talk)
+  2) Museum/exhibit factual question
+  3) Non-museum factual question (outside museum scope)
+- For type (1): respond naturally and briefly.
+- For type (2): answer only from CURATED EXHIBIT FACTS. If missing, explicitly say the museum currently has no verified information.
+- For type (3): politely decline and explain you only have museum/exhibit data in this session.
+- Never mix unverified factual claims into either type.
+- Keep refusals and missing-data replies warm and helpful; offer to continue with museum/exhibit topics.
 
 CURATED EXHIBIT FACTS
 {context_text}
