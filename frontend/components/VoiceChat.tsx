@@ -907,7 +907,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         }}
       >
         {sentences.length === 0 && !currentAIText && !currentUserText ? (
-          <div style={{ textAlign: "center", width: "100%", maxWidth: 420, margin: "0 auto" }}>
+          <div style={{ textAlign: "center", width: "100%", maxWidth: 420, margin: "0 auto", height: "100%" }}>
             {exhibitImageUrl && (
               <div
                 style={{
@@ -916,6 +916,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   overflow: "hidden",
                   border: "1px solid rgba(201,168,76,0.22)",
                   background: "rgba(255,255,255,0.02)",
+                  height: "40%",
                 }}
               >
                 <img
@@ -924,7 +925,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   style={{
                     display: "block",
                     width: "100%",
-                    maxHeight: 220,
+                    height: "100%",
                     objectFit: "cover",
                   }}
                   onError={() => setExhibitImageUrl("")}
