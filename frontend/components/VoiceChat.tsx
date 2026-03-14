@@ -473,9 +473,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     hasAiOutputThisTurnRef.current = false;
 
     if (reason === "silence") {
-      setAutoStopHint("Auto-sent because you stopped speaking.");
-      if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
-      autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 2200);
+      setAutoStopHint("");
     }
 
     // 15s timeout: nếu không có phản hồi → force về ready tránh bị kẹt
