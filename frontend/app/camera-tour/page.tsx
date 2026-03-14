@@ -35,6 +35,7 @@ export default function CameraTourPage() {
   const [museumData, setMuseumData] = useState<{ id: string; name?: string; name_en?: string } | null>(null);
   
   const videoRef = useRef<HTMLVideoElement>(null);
+  const circleRef = useRef<HTMLDivElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const previousStateRef = useRef<State>("scanning");
   
@@ -168,10 +169,14 @@ export default function CameraTourPage() {
         return;
       }
 
-      // The on-screen viewfinder is a fixed 260x260 circle centered in the video area.
-      const viewfinderPx = 260;
-      const vfX = (renderW - viewfinderPx) / 2;
-      const vfY = (renderH - viewfinderPx) / 2;
+      // Read the actual circle position on screen for precise crop mapping.
+      const videoRect = video.getBoundingClientRect();
+      const circleRect = circleRef.current?.getBoundingClientRect();
+      const fallbackSize = 260;
+      const vfW = circleRect?.width || fallbackSize;
+      const vfH = circleRect?.height || fallbackSize;
+      const vfX = (circleRect ? (circleRect.left - videoRect.left) : ((renderW - fallbackSize) / 2));
+      const vfY = (circleRect ? (circleRect.top - videoRect.top) : ((renderH - fallbackSize) / 2));
 
       // Map display coordinates to source video coordinates for object-fit: cover.
       const coverScale = Math.max(renderW / sourceW, renderH / sourceH);
@@ -182,16 +187,16 @@ export default function CameraTourPage() {
 
       const rawSrcX = (vfX - offsetX) / coverScale;
       const rawSrcY = (vfY - offsetY) / coverScale;
-      const rawSrcW = viewfinderPx / coverScale;
-      const rawSrcH = viewfinderPx / coverScale;
+      const rawSrcW = vfW / coverScale;
+      const rawSrcH = vfH / coverScale;
 
       const srcX = Math.max(0, Math.min(sourceW - 1, rawSrcX));
       const srcY = Math.max(0, Math.min(sourceH - 1, rawSrcY));
       const srcW = Math.max(1, Math.min(sourceW - srcX, rawSrcW));
       const srcH = Math.max(1, Math.min(sourceH - srcY, rawSrcH));
 
-      // Send a normalized square crop; apply a circular mask so model focuses on viewfinder area.
-      const targetSize = 640;
+      // Send only the circular area to Vision API.
+      const targetSize = 768;
       const canvas = document.createElement("canvas");
       canvas.width = targetSize;
       canvas.height = targetSize;
@@ -202,16 +207,16 @@ export default function CameraTourPage() {
         return;
       }
 
-      ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, targetSize, targetSize);
-      ctx.globalCompositeOperation = "destination-in";
+      ctx.clearRect(0, 0, targetSize, targetSize);
+      ctx.save();
       ctx.beginPath();
       ctx.arc(targetSize / 2, targetSize / 2, targetSize / 2, 0, Math.PI * 2);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalCompositeOperation = "source-over";
+      ctx.clip();
+      ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, targetSize, targetSize);
+      ctx.restore();
 
       const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9);
+        canvas.toBlob((b) => resolve(b), "image/png");
       });
       if (!blob) {
         setState("error");
@@ -220,7 +225,7 @@ export default function CameraTourPage() {
       }
 
       const formData = new FormData();
-      formData.append("file", blob, "viewfinder-crop.jpg");
+      formData.append("file", blob, "viewfinder-circle.png");
 
       try {
         const response = await fetch(`${BACKEND_URL}/vision/recognize/${museumId}`, {
@@ -426,7 +431,7 @@ export default function CameraTourPage() {
           background: 'radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.75) 100%)',
         }} />
 
-        {/* Viewfinder with 4 corners */}
+        {/* Circular viewfinder */}
         <div style={{
           position: 'relative',
           width: '260px',
@@ -435,49 +440,17 @@ export default function CameraTourPage() {
           minHeight: '260px',
           flexShrink: 0,
           zIndex: 2,
-          borderRadius: 0,
-          overflow: 'visible',
+          borderRadius: '50%',
+          overflow: 'hidden',
+          border: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+          boxShadow: state === 'detected' && !isLockOnAnimating
+            ? '0 0 0 1px rgba(74,222,128,0.35), 0 0 16px rgba(74,222,128,0.35)'
+            : '0 0 0 1px rgba(201,168,76,0.25), 0 0 14px rgba(201,168,76,0.28)',
         }}>
-          {/* Corner TL */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: 32,
-            height: 32,
-            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
-          {/* Corner TR */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            width: 32,
-            height: 32,
-            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
-          {/* Corner BL */}
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            width: 32,
-            height: 32,
-            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
-          {/* Corner BR */}
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            right: 0,
-            width: 32,
-            height: 32,
-            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
+          <div
+            ref={circleRef}
+            style={{ position: "absolute", inset: 0, borderRadius: "50%" }}
+          />
 
           {/* Scan line — only when scanning */}
           {state === 'scanning' && (
