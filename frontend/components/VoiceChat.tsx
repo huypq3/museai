@@ -182,6 +182,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const waitingForAudioRef = useRef(false);
   const pendingAITextRef = useRef("");
   const pendingUserTextRef = useRef("");
+  const currentAITextRef = useRef("");
   const hasAiOutputThisTurnRef = useRef(false);
   const pendingIntroAfterConnectRef = useRef(false);
   const introInFlightRef = useRef(false);
@@ -375,6 +376,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     runtimeLanguageRef.current = language;
   }, [language]);
 
+  useEffect(() => {
+    currentAITextRef.current = currentAIText;
+  }, [currentAIText]);
+
   // ─── Sync websocket connectivity → FSM ────────────────────────────────
   useEffect(() => {
     if (isConnected) {
@@ -510,8 +515,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     dispatch({ type: "INTERRUPT", drainingIntent: "ask_voice" });
     dispatch({ type: "INTERRUPT_DONE" });
 
-    if (currentAIText.trim()) {
-      setMessages((prev) => [...prev, { role: "assistant", text: currentAIText.trim(), timestamp: new Date() }]);
+    if (currentAITextRef.current.trim()) {
+      setMessages((prev) => [...prev, { role: "assistant", text: currentAITextRef.current.trim(), timestamp: new Date() }]);
       pendingAITextRef.current = "";
       setCurrentAIText("");
     }
@@ -522,16 +527,19 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (!ok && can("CANCEL_RECORDING")) {
       dispatch({ type: "CANCEL_RECORDING" });
     }
-  }, [can, stopPlayback, sendMessage, dispatch, currentAIText, startVoiceCapture]);
+  }, [can, stopPlayback, sendMessage, dispatch, startVoiceCapture]);
 
   useEffect(() => {
     let cancelled = false;
 
-    const currentState = stateRef.current;
+    const currentState =
+      is.aiSpeaking ? "ai_speaking" :
+      is.ready ? "ready" :
+      is.paused ? "paused" :
+      stateRef.current;
     const shouldMonitor =
       isConnected &&
       !is.recording &&
-      micPermissionPrimedRef.current &&
       (currentState === "ai_speaking" || currentState === "ready" || currentState === "paused");
 
     if (!shouldMonitor) {
@@ -638,7 +646,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   const handleMicPress = useCallback(async () => {
     const currentState = stateRef.current;
-    console.log(`🎛️ waveform tap: state=${currentState} connected=${isConnected} showIntro=${showIntroButton}`);
+    console.log(
+      `🎛️ waveform tap: state=${currentState} ready=${is.ready} connected=${isConnected} showIntro=${showIntroButton}`
+    );
     if (!showIntroButton) {
       console.log("ℹ️ waveform tap ignored: hands-free mode after intro");
       return;
@@ -659,7 +669,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
     pendingIntroAfterConnectRef.current = true;
 
-    if (isConnected && stateRef.current === "ready") {
+    if (isConnected && is.ready) {
       await handleIntro();
       return;
     }
@@ -667,9 +677,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     setAutoStopHint(language === "vi" ? "Đang kết nối..." : "Connecting...");
     if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
     autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 3000);
-    console.log(`⏳ intro queued: connected=${isConnected} state=${stateRef.current}`);
+    console.log(`⏳ intro queued: connected=${isConnected} ready=${is.ready} state=${stateRef.current}`);
     void connect();
-  }, [showIntroButton, isConnected, handleIntro, stateRef, connect, unlockAndFlush, language]);
+  }, [showIntroButton, isConnected, is.ready, handleIntro, stateRef, connect, unlockAndFlush, language]);
 
   const handleWaveTap = useCallback(() => {
     const tapId = ++waveTapSeqRef.current;
