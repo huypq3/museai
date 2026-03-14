@@ -684,6 +684,13 @@ async def vision_recognize_endpoint(
 
         # Read image bytes
         image_bytes = await file.read()
+        logger.info(
+            "Vision upload metadata: museum_id=%s content_type=%s bytes=%d filename=%s",
+            museum_id,
+            file.content_type,
+            len(image_bytes),
+            file.filename,
+        )
         
         if len(image_bytes) == 0:
             raise HTTPException(status_code=400, detail="Empty image file")

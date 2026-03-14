@@ -13,6 +13,7 @@ from google.cloud import firestore
 
 
 logger = logging.getLogger(__name__)
+VISION_DEBUG = os.getenv("VISION_DEBUG", "0") == "1"
 
 
 async def recognize_exhibit(
@@ -38,6 +39,7 @@ async def recognize_exhibit(
     """
     try:
         logger.info(f"Recognizing exhibit for museum: {museum_id}")
+        logger.info("Vision input image size: %d bytes", len(image_bytes))
         resolved_project_id = project_id or os.getenv("GOOGLE_CLOUD_PROJECT")
         if not resolved_project_id:
             raise ValueError("GOOGLE_CLOUD_PROJECT environment variable not set")
@@ -67,6 +69,8 @@ async def recognize_exhibit(
         
         exhibit_list_str = "\n".join(exhibit_list)
         logger.info(f"Found {len(exhibit_list)} exhibits for matching")
+        if VISION_DEBUG:
+            logger.info("Vision candidates: %s", [x.split(":", 1)[0] for x in exhibit_list][:30])
         
         # Step 2: Call Gemini Vision.
         api_key = os.getenv("GEMINI_API_KEY")
@@ -96,6 +100,8 @@ If no confident match is possible, return:
 EXHIBIT CANDIDATES:
 {exhibit_list_str}
 """
+        if VISION_DEBUG:
+            logger.info("Vision prompt chars=%d", len(prompt))
         
         # Invoke Gemini Vision.
         response = client.models.generate_content(
@@ -104,7 +110,8 @@ EXHIBIT CANDIDATES:
         )
         
         response_text = response.text.strip()
-        logger.debug(f"Gemini response: {response_text}")
+        if VISION_DEBUG:
+            logger.info("Gemini raw response: %s", response_text[:1500])
         
         # Step 3: Parse JSON response.
         # Remove markdown code blocks if present
@@ -136,6 +143,8 @@ EXHIBIT CANDIDATES:
         exhibit_id = result.get("exhibit_id", "unknown")
         confidence = float(result.get("confidence", 0.0))
         reasoning = result.get("reasoning", "")
+        if VISION_DEBUG:
+            logger.info("Gemini parsed: exhibit_id=%s confidence=%.3f reasoning=%s", exhibit_id, confidence, str(reasoning)[:500])
         
         # If confidence is too low, downgrade to unknown.
         if confidence < 0.5:
