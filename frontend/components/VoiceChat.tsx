@@ -917,6 +917,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   border: "1px solid rgba(201,168,76,0.22)",
                   background: "rgba(255,255,255,0.02)",
                   height: "40%",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
                 <img
@@ -924,9 +927,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   alt={exhibitName || "Exhibit image"}
                   style={{
                     display: "block",
-                    width: "100%",
-                    height: "100%",
-                    objectFit: "cover",
+                    width: "70%",
+                    height: "auto",
+                    maxHeight: "100%",
+                    objectFit: "contain",
                   }}
                   onError={() => setExhibitImageUrl("")}
                 />
