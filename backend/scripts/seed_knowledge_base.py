@@ -1,313 +1,53 @@
-"""
-Seed exhibit knowledge_base với embeddings vào Firestore.
-Museum: Bảo tàng Dân tộc học Việt Nam
-Exhibit: Trống đồng Đông Sơn (dong_son_drum)
-
-Run:
-  cd backend
-  python scripts/seed_knowledge_base.py
-"""
-
 import asyncio
 import os
-import sys
-import inspect
 from google.cloud import firestore
+from vertexai.language_models import TextEmbeddingModel
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+EXHIBIT_ID = "dong_ho_baby_fish"
 
-from live.rag_context import add_embeddings_to_chunks
+CHUNKS_RAW = [
+    {"category": "overview", "content": "Tranh Đông Hồ 'Em Bé Ôm Cá Chép' là một trong những bức tranh chúc tụng tiêu biểu nhất của dòng tranh dân gian làng Đông Hồ (xã Song Hồ, huyện Thuận Thành, tỉnh Bắc Ninh). Bức tranh mô tả hình ảnh một bé gái mũm mĩm, bụ bẫm đang ôm chặt một con cá chép to và nặng, nét mặt tươi vui rạng rỡ. Đây là lời nguyện ước của ông cha gửi gắm cho thế hệ trẻ: cầu con cái học giỏi, cuộc đời sung túc và ý chí mạnh mẽ vượt qua mọi sóng gió."},
+    {"category": "symbol", "content": "Cá chép trong văn hóa dân gian Việt Nam tượng trưng cho phú quý sung túc, học hành thăng tiến và tinh thần kiên cường vượt khó. Xuất phát từ truyền thuyết 'Cá chép hóa rồng': cá chép bơi ngược dòng vượt qua vũ môn sẽ hóa thành rồng. Trong tiếng Hán, 'ngư' (cá) đồng âm với 'dư' (dư dả, sung túc). Cá chép còn là biểu tượng của con đàn cháu đống vì loài cá này đẻ rất nhiều trứng."},
+    {"category": "symbol", "content": "Hình ảnh em bé trong tranh Đông Hồ luôn được vẽ mũm mĩm, bụ bẫm — gọi là 'tính phồn thực'. Đường nét đầy đặn, căng tròn biểu thị ước mơ về sức khỏe, no đủ, sung mãn và hạnh phúc. Bé gái ôm chặt cá to và nặng thể hiện sự kiên cường và quyết tâm. Hình ảnh này thường được ghép cùng 'Em Bé Ôm Tôm' thành bộ đôi treo Tết."},
+    {"category": "context", "content": "Tranh Đông Hồ có bộ tứ tranh chúc tụng: Lễ Trí (em bé ôm rùa), Nhân Nghĩa (em bé ôm cóc), Vinh Hoa (em bé ôm gà), Phú Quý (em bé ôm vịt). Ngoài ra 'Em Bé Ôm Cá Chép' là tranh chúc tụng riêng biệt. Các tranh được treo dịp Tết Nguyên Đán để mang lại may mắn, thịnh vượng cho gia đình trong năm mới."},
+    {"category": "technique", "content": "Giấy in tranh Đông Hồ là 'giấy điệp': nghiền nát vỏ con điệp (sò biển), trộn với hồ bột gạo, quét nhiều lớp lên giấy dó bằng chổi lá thông. Tạo nền trắng ngà lấp lánh tự nhiên. Đây là đặc trưng không thể nhầm lẫn của tranh Đông Hồ so với mọi dòng tranh khác."},
+    {"category": "technique", "content": "Màu sắc tranh Đông Hồ hoàn toàn từ thiên nhiên: đỏ từ sỏi son và gỗ vang, vàng từ hoa dành dành và hoa hòe, xanh từ gỉ đồng hoặc lá chàm, đen từ than lá tre ngâm chum vại nhiều tháng, trắng từ vỏ điệp. Các màu trộn với bột nếp trước khi in. Chính sự tinh khiết này tạo vẻ mộc mạc đằm thắm đặc trưng."},
+    {"category": "technique", "content": "Tranh Đông Hồ in từ ván khắc gỗ thủ công. Ván in nét làm từ gỗ thị hoặc gỗ thừng mực, ván in màu làm từ gỗ mỡ. Bao nhiêu màu cần bấy nhiêu ván khắc. In màu đậm trước, màu nhạt sau, nét đen in cuối cùng. Phải chờ mỗi màu khô mới in tiếp. Dụng cụ khắc là bộ ve (mũi đục thép) gồm 30-40 chiếc."},
+    {"category": "history", "content": "Làng tranh Đông Hồ (làng Mái, làng Hồ) thuộc xã Song Hồ, huyện Thuận Thành, tỉnh Bắc Ninh — cách Hà Nội 25km. Nằm trên bờ nam sông Đuống. Nghề làm tranh hình thành từ khoảng thế kỷ XVI. Xưa bán rộng rãi dịp Tết — người dân mua dán tường, hết năm thay mới. Nay bán như sản phẩm văn hóa và quà tặng."},
+    {"category": "heritage", "content": "Năm 2012, 'Nghề làm tranh dân gian Đông Hồ' được công nhận Di sản văn hóa phi vật thể quốc gia. Bộ Văn hóa phối hợp UBND tỉnh Bắc Ninh lập hồ sơ trình UNESCO. Tỉnh Bắc Ninh có nhiều chương trình bảo tồn: quy hoạch khu làng nghề, hỗ trợ nghệ nhân, đưa vào giáo dục và du lịch. Có thể tham quan tại làng Đông Hồ hoặc xem tại 19 ngõ 179 Hoàng Hoa Thám, Ba Đình, Hà Nội."},
+    {"category": "context", "content": "Tranh Đông Hồ gắn liền với Tết Nguyên Đán. Tú Xương nhắc tranh Đông Hồ cùng thịt mỡ dưa hành câu đối đỏ. Hoàng Cầm viết: 'Tranh Đông Hồ gà lợn nét tươi trong / Màu dân tộc sáng bừng trên giấy điệp.' Tranh chúc tụng như Em Bé Ôm Cá Chép được treo cầu may mắn năm mới."},
+    {"category": "symbol", "content": "Truyền thuyết 'Cá chép hóa rồng': vũ môn là cánh cổng trên trời, cá chép nào vượt qua sẽ hóa thành rồng. Phải bơi ngược dòng nước xiết với sức mạnh và kiên trì phi thường. Trở thành ẩn dụ cho học hành thi cử trong chế độ khoa cử. Bé gái ôm cá chép = ôm ấp ước mơ, nuôi dưỡng ý chí vượt qua vũ môn cuộc đời."},
+    {"category": "technique", "content": "Tranh Đông Hồ có 7 thể loại: tranh thờ, tranh chúc tụng, tranh lịch sử, tranh truyện, tranh phương ngôn, tranh cảnh vật và tranh sinh hoạt. Các bức nổi tiếng: Đám Cưới Chuột (châm biếm phong kiến), Đàn Gà Mẹ Con (hạnh phúc gia đình), Cá Chép Trông Trăng (thăng tiến sự nghiệp), Chăn Trâu Thổi Sáo (bình yên làng quê)."},
+    {"category": "context", "content": "Khác với tranh Hàng Trống (Hà Nội) rực rỡ, bán in bán vẽ tay, gắn tầng lớp thị dân — tranh Đông Hồ in ván khắc gỗ hoàn toàn, màu tự nhiên, nền giấy điệp lấp lánh, mộc mạc đậm đà, gắn đời sống nông dân bình dị vùng đồng bằng Bắc Bộ."},
+    {"category": "overview", "content": "Bảo tàng Dân tộc học Việt Nam tại đường Nguyễn Văn Huyên, quận Cầu Giấy, Hà Nội. Mở cửa Thứ Ba đến Chủ Nhật 08:30-17:30, đóng thứ Hai. Vé: 40.000 VNĐ người lớn, 20.000 VNĐ trẻ em, miễn phí dưới 6 tuổi. Tranh Đông Hồ Em Bé Ôm Cá Chép trưng bày tại Nhà Việt Nam, tầng 1, khu nghệ thuật dân gian."},
+    {"category": "technique", "content": "Để cảm nhận tranh Đông Hồ: 1) Giấy điệp — nền trắng ngà lấp lánh đặc trưng. 2) Màu sắc — đỏ vàng xanh đen trầm ấm từ thiên nhiên. 3) Đường nét — nét khắc gỗ đậm dứt khoát, viền đen cuối cùng tạo cân đối. 4) Bố cục — đơn giản, hình trung tâm nổi bật. 5) Biểu tượng — mỗi con vật, màu sắc đều mang ý nghĩa riêng."},
+]
 
-
-# =============================================================================
-# KNOWLEDGE BASE — Trống đồng Đông Sơn
-# Nguồn: Wikipedia tiếng Việt, Bảo tàng Lịch sử Quốc gia, Cục Di sản Văn hóa,
-#        VietnamPlus, nghiên cứu của TS. Nguyễn Văn Đoàn, Phạm Huy Thông.
-# =============================================================================
-
-KNOWLEDGE_BASE = {
-    "dong_son_drum": [
-
-        # ------------------------------------------------------------------
-        # 1. Tổng quan & danh tính hiện vật
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_001",
-            "category": "overview",
-            "content": (
-                "Trống đồng Đông Sơn (còn gọi là trống Heger loại I) là biểu tượng đỉnh cao của nền văn minh "
-                "Việt cổ thời kỳ Hùng Vương. Trống tiêu biểu cho Văn hóa Đông Sơn tồn tại từ thế kỷ 7 TCN "
-                "đến thế kỷ 6 SCN, chủ yếu ở đồng bằng sông Hồng và các tỉnh Bắc Bộ, Bắc Trung Bộ Việt Nam. "
-                "Không chỉ là nhạc khí, trống còn là biểu tượng quyền lực, tôn giáo, và thành tựu kỹ thuật "
-                "luyện kim đỉnh cao của người Lạc Việt — tổ tiên của người Việt Nam hiện đại."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 2. Bối cảnh lịch sử — Văn hóa Đông Sơn
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_002",
-            "category": "historical_context",
-            "content": (
-                "Văn hóa Đông Sơn hình thành và phát triển trên nền tảng các văn hóa tiền Đông Sơn như "
-                "Phùng Nguyên, Đồng Đậu và Gò Mun. Chủ nhân của nền văn hóa này là người Lạc Việt — "
-                "cộng đồng sống bằng trồng lúa nước, săn bắt và đánh cá trên đồng bằng sông Hồng. "
-                "Đây là thời kỳ đồ đồng phát triển vượt bậc: người Đông Sơn thành thạo luyện kim, "
-                "tạo ra những kiệt tác đồ đồng mà văn minh Đông Nam Á thời bấy giờ chưa ai sánh kịp. "
-                "Văn hóa Đông Sơn được coi là nền văn minh sơ khai đặc sắc nhất khu vực Đông Nam Á."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 3. Nguồn gốc phát hiện & phân loại khoa học
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_003",
-            "category": "discovery",
-            "content": (
-                "Trống đồng Đông Sơn được phát hiện lần đầu vào năm 1924 tại làng Đông Sơn, tỉnh Thanh Hóa. "
-                "Học giả người Áo Franz Heger năm 1902 đã hệ thống phân loại 165 chiếc trống đồng được biết "
-                "đến lúc đó, trong đó trống Đông Sơn được xếp vào loại H1 — cổ nhất, cơ bản nhất, là khuôn "
-                "mẫu cho các loại trống sau này. Về nguồn gốc, các nhà khảo cổ Việt Nam khẳng định quê hương "
-                "trống đồng là vùng đồng bằng sông Hồng, Bắc Bộ Việt Nam, với bằng chứng là những chiếc trống "
-                "cổ nhất được tìm thấy sớm nhất tại miền Bắc Việt Nam và Vân Nam vào khoảng 700–800 năm TCN."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 4. Cấu trúc & hình dáng tổng thể
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_004",
-            "category": "physical_structure",
-            "content": (
-                "Trống đồng Đông Sơn có cấu trúc bốn phần rõ ràng: mặt trống (hình tròn phẳng), tang trống "
-                "(phần hình thang nở phình ra — hoạt động như hộp cộng hưởng khuếch đại âm thanh), thân trống "
-                "(hình trụ đứng) và chân trống (hình nón cụt hơi choãi — là cửa thoát âm thanh). "
-                "Trống được đúc liền khối, mặt trống chờm ra khỏi tang. Quai trống thường làm theo hình dây thừng "
-                "bện, bố trí từng cặp đối xứng ở tang và thân. Kích thước tiêu biểu của trống loại lớn: "
-                "đường kính mặt 60–80cm, chiều cao 40–70cm, trọng lượng có thể lên tới 80–100kg."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 5. Hoa văn mặt trống — ngôi sao Mặt Trời
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_005",
-            "category": "decoration_face",
-            "content": (
-                "Trung tâm mặt trống là ngôi sao nhiều cánh đúc nổi — thường 8, 12 hoặc 14 cánh — tượng trưng "
-                "cho thần Mặt Trời, vị thần tối cao của người Lạc Việt cung cấp ánh sáng và năng lượng cho vạn vật. "
-                "Ngôi sao còn đóng vai trò như bức thiên đồ giúp người Việt cổ xác định thời gian và các tiết trong năm. "
-                "Xen giữa các cánh sao là họa tiết hình lông đuôi chim công (tượng trưng cho âm), trong khi "
-                "ngôi sao tượng trưng cho dương — thể hiện triết lý âm dương hòa hợp sinh ra muôn loài. "
-                "Bao quanh ngôi sao là các vành hoa văn đồng tâm với mật độ trang trí dày đặc và tinh xảo."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 6. Hoa văn mặt trống — cảnh sinh hoạt & lễ hội
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_006",
-            "category": "decoration_scenes",
-            "content": (
-                "Các vành hoa văn trên mặt trống mô tả sống động đời sống của người Đông Sơn: người hóa trang "
-                "lông chim nhảy múa, người giã gạo chày đôi, người đánh trống đồng trong lễ hội, cảnh đua thuyền "
-                "trên sông, nhà sàn mái cong hình thuyền — kiến trúc đặc trưng của cư dân lúa nước. "
-                "Hình ảnh con người luôn được diễn tả theo tư thế động: múa, bơi chải, đánh trống. "
-                "Tất cả nhân vật và động vật đều diễu hành quanh ngôi sao trung tâm theo chiều ngược kim đồng hồ, "
-                "phản ánh nghi lễ tế thần Mặt Trời. TS. Nguyễn Văn Đoàn ví trống như 'quyển sách bằng đồng' "
-                "ghi lại toàn bộ văn hóa Đông Sơn bằng hình ảnh."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 7. Hoa văn — chim Lạc và thuyền chiến
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_007",
-            "category": "decoration_birds_boats",
-            "content": (
-                "Chim Lạc (hay chim Hồng) là vật tổ của người Lạc Việt, xuất hiện dày đặc trên mặt trống ở nhiều "
-                "tư thế: chim bay, chim đậu, chim đứng chầu mỏ vào nhau. Số lượng chim trên mỗi vành thường là 18 "
-                "con — con số linh thiêng tượng trưng cho 18 đời Hùng Vương. Trên tang và thân trống có hình thuyền "
-                "chiến với nhiều mái chèo, chiến binh mang vũ khí và nhạc cụ, phản ánh nền văn minh sông nước và "
-                "sức mạnh quân sự của nhà nước Văn Lang. Hình ảnh thuyền cũng liên quan đến nghi lễ táng: "
-                "người Đông Sơn quan niệm linh hồn người chết lên thuyền vượt sang thế giới bên kia."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 8. Kỹ thuật đúc — hợp kim & khuôn
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_008",
-            "category": "casting_technique",
-            "content": (
-                "Trống đồng Đông Sơn được đúc bằng hợp kim đồng-thiếc-chì theo kỹ thuật khuôn hai mảnh. "
-                "Để đúc thành công, người thợ phải đạt nhiều yêu cầu kỹ thuật khắt khe: duy trì nhiệt độ đủ cao "
-                "để nung chảy hợp kim đồng, chọn vật liệu chịu lửa làm khuôn, nắm vững tính năng hóa lý "
-                "của từng kim loại trong hợp kim. Rìa mặt trống còn in dấu các 'con kê' — những vật đệm nhỏ "
-                "dùng để căn đều chiều dày thành trống trên khuôn đúc. Từ năm 1964–1975, Bảo tàng Lịch sử Việt Nam "
-                "đã nhiều lần thử phục dựng trống Ngọc Lũ nhưng không thành công — minh chứng cho trình độ "
-                "kỹ thuật phi thường của người thợ Đông Sơn. Mãi đến năm 2022, dựa trên mảnh khuôn đúc phát hiện "
-                "tại Luy Lâu (Bắc Ninh), Bảo tàng Lịch sử Quốc gia mới đúc thực nghiệm thành công lần đầu tiên."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 9. Nghệ thuật trang trí — phong cách tạo hình
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_009",
-            "category": "artistic_style",
-            "content": (
-                "Nghệ thuật trang trí trống đồng đặc trưng bởi kỹ thuật khắc chạm trên khuôn: hình ảnh trên mặt "
-                "trống được khắc chìm, trên thân trống thì khắc nổi. Bố cục tròn trên mặt và bố cục ô chữ nhật "
-                "trên thân, bên trong đều sắp xếp cân đối, hài hòa. Phong cách tạo hình người có nét tương đồng "
-                "với nghệ thuật Ai Cập cổ đại: ngực hướng thẳng về phía khán giả trong khi chân và đầu nhìn nghiêng. "
-                "Hoa văn hình học gồm: vòng tròn đồng tâm có chấm giữa, đường chữ ∫ gãy khúc nối tiếp, "
-                "răng cưa, chấm nhỏ thẳng hàng — tạo nên nhịp điệu thị giác cuốn hút theo vòng tròn đồng tâm."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 10. Chức năng — nhạc khí & nghi lễ
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_010",
-            "category": "function_ritual",
-            "content": (
-                "Trống đồng đảm nhiệm nhiều chức năng quan trọng trong xã hội Đông Sơn. Là nhạc khí, tiếng trống "
-                "vang lên trong các lễ hội cộng đồng, lễ cầu mùa cầu cho lúa tốt, mưa thuận gió hòa. "
-                "Trong chiến tranh, tiếng trống hiệu lệnh kêu gọi dân binh tập hợp, cổ vũ chiến đấu. "
-                "Theo quan niệm tâm linh người Việt cổ, âm thanh kim loại có khả năng xua đuổi tà ma và "
-                "điều không lành. Trống còn dùng trong lễ mai táng — chôn theo người chết như vật tùy táng "
-                "quý giá, giúp linh hồn vượt sang thế giới bên kia. Một số trống nhỏ (trống minh khí) "
-                "được chế tác riêng chỉ để chôn theo người chết, ít hoa văn hơn trống dùng trong lễ hội."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 11. Chức năng — biểu tượng quyền lực
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_011",
-            "category": "function_power",
-            "content": (
-                "Trống đồng là biểu tượng quyền lực tối cao của thủ lĩnh và tầng lớp thống trị thời Hùng Vương. "
-                "Chỉ vị thủ lĩnh có quyền uy và tài lực mới có thể huy động nhân lực đúc được chiếc trống lớn và đẹp. "
-                "Trống đồng tượng trưng cho vương quyền và thần quyền Bách Việt — quyền lực chính trị gắn liền "
-                "với quyền lực tâm linh. Theo tác giả Tạ Đức trong cuốn 'Nguồn gốc và sự phát triển của trống đồng "
-                "Đông Sơn', An Dương Vương tại thành Cổ Loa là vị vua duy nhất có đủ điều kiện tạo ra những chiếc "
-                "trống đồng lớn và đẹp nhất. Kích thước và mức độ tinh xảo của trống phản ánh trực tiếp địa vị "
-                "xã hội của chủ nhân — trống càng lớn, hoa văn càng phong phú, chủ nhân càng quyền quý."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 12. Trống Ngọc Lũ — bảo vật tiêu biểu nhất
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_012",
-            "category": "ngoc_lu_drum",
-            "content": (
-                "Trống đồng Ngọc Lũ là chiếc trống đẹp nhất và tiêu biểu nhất trong các trống Đông Sơn được "
-                "phát hiện tại Việt Nam. Được người dân tìm thấy năm 1893 khi đắp đê tại xã Như Trác, huyện "
-                "Nam Xang, tỉnh Hà Nam ở độ sâu 2 mét dưới bãi cát bồi. Kích thước: đường kính mặt 79,3cm, "
-                "đường kính chân 80cm, cao 63cm, nặng 86kg. Có màu patin xanh xám đặc trưng. Mặt trống đúc nổi "
-                "ngôi sao 14 cánh, bao quanh bởi 16 vành hoa văn cực kỳ phong phú: hình học, cảnh lễ hội, "
-                "hươu đi cùng chim mỏ ngắn và chim mỏ dài, nhà sàn mái cong. Năm 1903 Viện Viễn Đông Bác cổ "
-                "mua lại với giá 550 đồng bạc Đông Dương và đưa về Bảo tàng Louis Finot (nay là Bảo tàng Lịch sử "
-                "Quốc gia). Được công nhận là Bảo vật Quốc gia theo Quyết định số 1426/QĐ-TTg ngày 1/10/2012."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 13. Sự lan tỏa & ảnh hưởng khu vực
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_013",
-            "category": "regional_influence",
-            "content": (
-                "Trống đồng Đông Sơn không chỉ là sản phẩm riêng của người Việt cổ mà còn là kết quả giao lưu "
-                "văn hóa rộng lớn. Trống được tìm thấy trải dài từ miền Nam Trung Quốc qua Việt Nam, Lào, "
-                "Thái Lan đến tận Indonesia — minh chứng cho sức ảnh hưởng văn hóa phi thường của văn minh Đông Sơn. "
-                "Sau khi văn hóa Đông Sơn sụp đổ dưới bước chân xâm lược của người Hoa Hạ, tầm ảnh hưởng của "
-                "trống đồng không suy giảm mà còn mở rộng hơn. Bảo tàng Lịch sử Quốc gia Việt Nam hiện lưu giữ "
-                "bộ sưu tập trống đồng Đông Sơn lớn nhất thế giới. Trống đồng Đông Sơn còn được trưng bày tại "
-                "Bảo tàng Guimet (Paris, Pháp) và nhiều bảo tàng quốc tế danh tiếng."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 14. Bảo tàng Dân tộc học Việt Nam & vị trí hiện vật
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_014",
-            "category": "museum_context",
-            "content": (
-                "Bảo tàng Dân tộc học Việt Nam tọa lạc tại đường Nguyễn Văn Huyên, quận Cầu Giấy, Hà Nội. "
-                "Tòa nhà trưng bày chính được đặt tên là 'Tòa Trống Đồng' — lấy cảm hứng từ biểu tượng trống đồng "
-                "Đông Sơn — giới thiệu toàn bộ 54 dân tộc anh em tại Việt Nam với hệ thống hiện vật phong phú "
-                "về đời sống vật chất và tinh thần. Bảo tàng do kiến trúc sư Hà Đức Lịnh (người Tày) thiết kế, "
-                "nội thất bởi kiến trúc sư Véronique Dollfus (Pháp). Mọi thông tin trưng bày đều thực hiện bằng "
-                "3 ngôn ngữ: tiếng Việt, tiếng Anh và tiếng Pháp. Bảo tàng mở cửa thứ Ba đến Chủ Nhật "
-                "(8h30–17h30), đóng cửa thứ Hai. Đây là một trong những bảo tàng được đánh giá cao nhất "
-                "Đông Nam Á về phương pháp trưng bày hiện đại và khoa học."
-            ),
-        },
-
-        # ------------------------------------------------------------------
-        # 15. Di sản & ý nghĩa đương đại
-        # ------------------------------------------------------------------
-        {
-            "chunk_id": "dsd_015",
-            "category": "legacy_contemporary",
-            "content": (
-                "Trống đồng Đông Sơn ngày nay là biểu tượng văn hóa quốc gia của Việt Nam, xuất hiện trên "
-                "quốc huy, tiền xu, con dấu nhà nước và các dịp lễ trọng đại. Nghi thức đánh trống đồng được "
-                "phục hồi tại Đền Hùng trong ngày Giỗ Tổ Hùng Vương mồng 10 tháng 3 Âm lịch hằng năm. "
-                "Tại Thanh Sơn (Phú Thọ) — vùng đất duy nhất còn ngày hội trống đồng của dân tộc Mường — "
-                "lễ hội 'Đâm Đuống' và 'Chàm thau' vẫn được gìn giữ. Năm 2023, Bảo tàng Lịch sử Quốc gia "
-                "khai mạc triển lãm 'Âm vang Đông Sơn', lần đầu tiên công bố phiên bản phục dựng trống đồng "
-                "Luy Lâu gần giống bản gốc nhất, nhân dịp kỷ niệm 100 năm phát hiện và nghiên cứu văn hóa Đông Sơn. "
-                "Nhà nghiên cứu Phạm Huy Thông từng viết: người kế thừa văn minh trống đồng không cần tự ti "
-                "trước những người thừa hưởng văn minh kim tự tháp sông Nile."
-            ),
-        },
-    ]
-}
-
-
-async def seed():
+async def main():
     project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
-    if not project_id:
-        raise RuntimeError("Missing GOOGLE_CLOUD_PROJECT. Set it in environment before running seed.")
+    print(f"Project: {project_id}")
+    print(f"Exhibit: {EXHIBIT_ID}")
+    print(f"Loading embedding model...")
 
-    exhibits_collection = os.getenv("EXHIBITS_COLLECTION", "exhibits")
-    include_ids_raw = os.getenv("SEED_EXHIBIT_IDS", "").strip()
-    include_ids = {x.strip() for x in include_ids_raw.split(",") if x.strip()}
+    model = TextEmbeddingModel.from_pretrained(
+        os.getenv("GEMINI_EMBEDDING_MODEL", "gemini-embedding-001")
+    )
+
+    print(f"Generating embeddings for {len(CHUNKS_RAW)} chunks...")
+    chunks_with_embeddings = []
+    for i, chunk in enumerate(CHUNKS_RAW):
+        emb = model.get_embeddings([chunk["content"]])[0]
+        chunk["embedding"] = list(emb.values)
+        chunks_with_embeddings.append(chunk)
+        print(f"  ✅ [{i+1:2d}/{len(CHUNKS_RAW)}] {chunk['category']} — {chunk['content'][:60]}...")
 
     db = firestore.AsyncClient(project=project_id)
+    await db.collection("exhibits").document(EXHIBIT_ID).set(
+        {"knowledge_base": chunks_with_embeddings},
+        merge=True
+    )
+    print(f"\n🎉 Done! {len(chunks_with_embeddings)} chunks với embeddings → exhibits/{EXHIBIT_ID}.knowledge_base")
+    await db.close()
 
-    for exhibit_id, chunks in KNOWLEDGE_BASE.items():
-        if include_ids and exhibit_id not in include_ids:
-            continue
-        print(f"📚 Generating embeddings for {exhibit_id} ({len(chunks)} chunks)...")
-        add_embeddings_to_chunks(chunks)
-        exhibit_ref = db.collection(exhibits_collection).document(exhibit_id)
-        payload = {"knowledge_base": chunks, "exhibit_id": exhibit_id}
-        await exhibit_ref.set(payload, merge=True)
-        print(f"✅ Seeded {len(chunks)} chunks for {exhibit_id}")
-
-    close_result = db.close()
-    if inspect.isawaitable(close_result):
-        await close_result
-
-
-if __name__ == "__main__":
-    asyncio.run(seed())
+asyncio.run(main())
+EOF

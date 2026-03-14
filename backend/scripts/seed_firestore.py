@@ -1,6 +1,6 @@
 """
 Seed Firestore with demo data.
-Creates/updates museum "vietnam_ethnology_museum" với exhibit trống đồng Đông Sơn.
+Creates/updates museum "vietnam_ethnology_museum" với exhibit Tranh Đông Hồ Em Bé Ôm Cá Chép.
 
 Run:
   cd backend
@@ -33,115 +33,102 @@ async def seed_firestore(project_id: str | None = None):
     museum_id = os.getenv("SEED_MUSEUM_ID", "vietnam_ethnology_museum")
 
     # -------------------------------------------------------------------------
-    # Museum document
+    # Museum document (merge — không ghi đè nếu đã tồn tại)
     # -------------------------------------------------------------------------
-    museum_data = {
-        "id": museum_id,
-        "name": "Bảo tàng Dân tộc học Việt Nam",
-        "name_en": "Vietnam Museum of Ethnology",
-        "slug": "vietnam-museum-of-ethnology",
-        "address": "Đường Nguyễn Văn Huyên, phường Quan Hoa, quận Cầu Giấy",
-        "city": "Hà Nội",
-        "country": "Vietnam",
-        "coordinates": {"lat": 21.0380, "lng": 105.7990},
-        "phone": "+84-24-3756-2193",
-        "email": "contact@vme.org.vn",
-        "website": "https://www.vme.org.vn",
-        "logo_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Vietnam_Museum_of_Ethnology.jpg/400px-Vietnam_Museum_of_Ethnology.jpg",
-        "cover_image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/14/Vietnam_Museum_of_Ethnology.jpg/1200px-Vietnam_Museum_of_Ethnology.jpg",
-        "opening_hours": {
-            "monday": "Đóng cửa",
-            "tuesday": "08:30-17:30",
-            "wednesday": "08:30-17:30",
-            "thursday": "08:30-17:30",
-            "friday": "08:30-17:30",
-            "saturday": "08:30-17:30",
-            "sunday": "08:30-17:30",
-        },
-        "ticket_price": {
-            "adult_vnd": 40000,
-            "child_vnd": 20000,
-            "foreign_adult_usd": 3,
-            "free_for": "Trẻ em dưới 6 tuổi",
-        },
-        "supported_languages": ["vi", "en", "fr", "de", "ja", "ko", "zh"],
-        "default_language": "vi",
-        "ai_persona": "Hướng dẫn viên bảo tàng thân thiện, giàu kiến thức về lịch sử và văn hóa dân tộc học Việt Nam.",
-        "welcome_message": {
-            "vi": "Xin chào! Tôi là hướng dẫn viên AI của Bảo tàng Dân tộc học Việt Nam. Tôi rất vui được đưa bạn khám phá kho tàng văn hóa 54 dân tộc anh em.",
-            "en": "Welcome to the Vietnam Museum of Ethnology! I am your AI guide, ready to explore the rich cultural heritage of Vietnam's 54 ethnic groups with you.",
-            "fr": "Bienvenue au Musée d'Ethnologie du Vietnam! Je suis votre guide IA pour explorer les cultures des 54 groupes ethniques du Vietnam.",
-            "de": "Willkommen im Vietnam Museum of Ethnology! Ich bin Ihr KI-Guide für die Erkundung der 54 Volksgruppen Vietnams.",
-            "ja": "ベトナム民族学博物館へようこそ！ベトナムの54民族の豊かな文化遺産をご案内するAIガイドです。",
-            "ko": "베트남 민족학 박물관에 오신 것을 환영합니다! 54개 민족의 풍부한 문화유산을 안내해 드릴 AI 가이드입니다.",
-            "zh": "欢迎来到越南民族学博物馆！我是您的AI导览，将带您探索越南54个民族的丰富文化遗产。",
-        },
-        "status": "active",
-        "exhibit_count": 0,
-        "total_visits": 0,
-        "museum_admin_uid": "",
-        "created_by": "seed_script",
-        "created_at": firestore.SERVER_TIMESTAMP,
-        "updated_at": firestore.SERVER_TIMESTAMP,
-    }
-
     museum_ref = db.collection(museums_collection).document(museum_id)
-    await museum_ref.set(museum_data, merge=True)
-    print(f"  ✅ Upserted museum: {museum_id}")
+    museum_snap = await museum_ref.get()
+    if not museum_snap.exists:
+        museum_data = {
+            "id": museum_id,
+            "name": "Bảo tàng Dân tộc học Việt Nam",
+            "name_en": "Vietnam Museum of Ethnology",
+            "slug": "vietnam-museum-of-ethnology",
+            "address": "Đường Nguyễn Văn Huyên, phường Quan Hoa, quận Cầu Giấy",
+            "city": "Hà Nội",
+            "country": "Vietnam",
+            "coordinates": {"lat": 21.0380, "lng": 105.7990},
+            "supported_languages": ["vi", "en", "fr", "de", "ja", "ko", "zh"],
+            "default_language": "vi",
+            "ai_persona": "Hướng dẫn viên bảo tàng thân thiện, giàu kiến thức về lịch sử và văn hóa dân tộc học Việt Nam.",
+            "welcome_message": {
+                "vi": "Xin chào! Tôi là hướng dẫn viên AI của Bảo tàng Dân tộc học Việt Nam. Tôi rất vui được đưa bạn khám phá kho tàng văn hóa 54 dân tộc anh em.",
+                "en": "Welcome to the Vietnam Museum of Ethnology! I am your AI guide, ready to explore the rich cultural heritage of Vietnam's 54 ethnic groups with you.",
+            },
+            "status": "active",
+            "exhibit_count": 0,
+            "total_visits": 0,
+            "created_by": "seed_script",
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "updated_at": firestore.SERVER_TIMESTAMP,
+        }
+        await museum_ref.set(museum_data)
+        print(f"  ✅ Created museum: {museum_id}")
+    else:
+        print(f"  ℹ️  Museum already exists, skipping: {museum_id}")
 
     # -------------------------------------------------------------------------
     # Exhibits
     # -------------------------------------------------------------------------
     exhibits_data = [
         {
-            "id": "dong_son_drum",
+            "id": "dong_ho_baby_fish",
             "data": {
-                "name": "Trống đồng Đông Sơn",
-                "name_en": "Dong Son Bronze Drum",
-                "category": "other",
-                "period": "Dong Son culture (7th century BCE - 6th century CE)",
+                "name": "Tranh Đông Hồ — Em Bé Ôm Cá Chép",
+                "name_en": "Dong Ho Folk Painting — Baby Holding Carp",
+                "category": "painting",
+                "period": "Tranh dân gian, khoảng thế kỷ XVI – nay, làng Đông Hồ, Bắc Ninh",
                 "type": "object",
-                "era": "Thế kỷ 7 TCN – Thế kỷ 6 SCN, Văn hóa Đông Sơn",
+                "era": "Khoảng thế kỷ XVI – hiện đại, dòng tranh khắc gỗ dân gian Việt Nam",
                 "description": {
                     "vi": (
-                        "Trống đồng Đông Sơn (còn gọi là trống Heger loại I) là biểu tượng đỉnh cao của nền văn minh "
-                        "người Việt cổ thời kỳ Hùng Vương dựng nước Văn Lang. Được đúc bằng hợp kim đồng-thiếc-chì "
-                        "với kỹ thuật khuôn hai mảnh tinh xảo, trống có hình dáng cân đối hài hòa gồm bốn phần: mặt "
-                        "trống, tang trống, thân trống và chân trống. Mặt trống trang trí ngôi sao nhiều cánh tượng trưng "
-                        "cho Mặt Trời, bao quanh bởi các vành hoa văn mô tả sinh hoạt lễ hội, hình chim Lạc, thuyền chiến "
-                        "và cảnh đua thuyền. Trống vừa là nhạc khí trong các nghi lễ tôn giáo, vừa là biểu tượng quyền lực "
-                        "của thủ lĩnh và là vật tùy táng quý giá. Hiện Bảo tàng Lịch sử Quốc gia lưu giữ bộ sưu tập "
-                        "trống đồng Đông Sơn lớn nhất thế giới, trong đó trống Ngọc Lũ được công nhận Bảo vật Quốc gia năm 2012."
+                        "Tranh Đông Hồ 'Em Bé Ôm Cá Chép' là một trong những bức tranh chúc tụng tiêu biểu nhất "
+                        "của dòng tranh dân gian làng Đông Hồ (xã Song Hồ, huyện Thuận Thành, tỉnh Bắc Ninh). "
+                        "Bức tranh mô tả hình ảnh một bé gái mũm mĩm, bụ bẫm đang ôm chặt một con cá chép to và "
+                        "nặng, nét mặt tươi vui rạng rỡ. Cá chép trong văn hóa dân gian Việt Nam tượng trưng cho "
+                        "phú quý sung túc, học hành thăng tiến và tinh thần kiên cường vượt khó — xuất phát từ "
+                        "truyền thuyết 'Cá chép hóa rồng' khi vượt qua vũ môn. Bức tranh mang lời nguyện ước của "
+                        "ông cha: cầu cho con cái học giỏi, cuộc đời sung túc và ý chí mạnh mẽ vượt qua mọi "
+                        "sóng gió. Tranh được in thủ công bằng khuôn khắc gỗ trên giấy dó phủ điệp — loại giấy "
+                        "đặc trưng làm từ vỏ sò điệp nghiền nhuyễn, tạo ánh lấp lánh tự nhiên. Màu sắc hoàn toàn "
+                        "từ thiên nhiên: đỏ từ sỏi son, vàng từ hoa dành dành, xanh từ gỉ đồng hoặc lá chàm, "
+                        "đen từ than lá tre. Năm 2012, nghề làm tranh dân gian Đông Hồ được đưa vào Danh mục Di "
+                        "sản văn hóa phi vật thể quốc gia, và Bộ Văn hóa đang lập hồ sơ trình UNESCO."
                     ),
                     "en": (
-                        "The Dong Son bronze drum (Heger type I) is a peak symbol of early Vietnamese civilization in "
-                        "the Hung Kings era. Cast from a copper-tin-lead alloy with advanced two-piece mold techniques, "
-                        "the drum has four main parts: drumhead, upper body, main body, and foot. Its center sunburst "
-                        "motif is surrounded by decorative bands showing rituals, Lac birds, war boats, and boat races. "
-                        "It functioned as a ritual instrument, a political symbol of authority, and a valuable burial object."
+                        "The Dong Ho folk painting 'Baby Holding Carp' is one of the most iconic congratulatory "
+                        "paintings from Dong Ho village (Song Ho commune, Thuan Thanh district, Bac Ninh province). "
+                        "It depicts a chubby, cheerful baby girl hugging a large carp tightly. In Vietnamese folk "
+                        "culture, the carp symbolizes prosperity, academic success and perseverance — rooted in the "
+                        "legend of the carp leaping the Dragon Gate to transform into a dragon. The painting carries "
+                        "the ancestral wish for children to study well, live prosperously, and overcome life's "
+                        "hardships with courage. It is hand-printed using carved wooden blocks on 'giay diep' paper "
+                        "— traditional do paper coated with crushed mollusk shells that creates a natural shimmer. "
+                        "All pigments are plant- and mineral-based: red from ochre, yellow from gardenia flowers, "
+                        "blue-green from copper rust or indigo leaves, black from bamboo-leaf charcoal."
                     ),
                 },
-                "short_description": "Trống đồng hợp kim, biểu tượng văn minh Việt cổ, thế kỷ 7 TCN – 6 SCN",
-                "location": {"hall": "Tòa Trống Đồng", "floor": 1, "position": "Khu trưng bày văn hóa Việt cổ"},
-                "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/NgocLuDrum.jpg/800px-NgocLuDrum.jpg",
-                "primary_image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/2/27/NgocLuDrum.jpg/800px-NgocLuDrum.jpg",
+                "short_description": "Tranh khắc gỗ dân gian, bé gái ôm cá chép — cầu chúc phú quý học hành thăng tiến",
+                "location": {"hall": "Nhà Việt Nam", "floor": 1, "position": "Khu trưng bày nghệ thuật dân gian"},
+                "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Dong_Ho_painting_-_baby_with_fish.jpg/800px-Dong_Ho_painting_-_baby_with_fish.jpg",
+                "primary_image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Dong_Ho_painting_-_baby_with_fish.jpg/800px-Dong_Ho_painting_-_baby_with_fish.jpg",
                 "gallery_images": [
-                    "https://upload.wikimedia.org/wikipedia/commons/thumb/5/55/DongSonDrum-face.jpg/600px-DongSonDrum-face.jpg",
-                    "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/Lac_bird_Dong_Son_drum.jpg/600px-Lac_bird_Dong_Son_drum.jpg",
+                    "https://upload.wikimedia.org/wikipedia/commons/thumb/b/b7/DongHoPainting.jpg/800px-DongHoPainting.jpg",
+                    "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9e/Dong_Ho_woodblock_print.jpg/600px-Dong_Ho_woodblock_print.jpg",
                 ],
                 "visual_features": {
                     "description": (
-                        "Trống đồng kích thước lớn, thân trống loe, mặt trống có ngôi sao nhiều cánh ở trung tâm, "
-                        "hoa văn chim Lạc, cảnh lễ hội và thuyền."
+                        "Bức tranh nền giấy điệp trắng ngà lấp lánh, hình em bé gái mũm mĩm ôm cá chép to, "
+                        "màu sắc tươi sáng đỏ-vàng-xanh-đen từ nguyên liệu tự nhiên, nét khắc gỗ đậm đà."
                     ),
                     "distinctive_marks": [
-                        "ngoi sao nhieu canh o mat trong",
-                        "hoa van chim lac",
-                        "than trong loe va day",
-                        "hoa tiet dong tam",
+                        "em be gai mum mim om ca chep",
+                        "nen giay diep trang nga lap lanh",
+                        "mau do vang xanh tu thien nhien",
+                        "net khac go dam da thu cong",
+                        "ca chep to duoi xoe vay lon",
                     ],
                 },
-                "persona_id": "dong_son_guide",
+                "persona_id": "dong_ho_fish_guide",
                 "museum_id": museum_id,
                 "status": "published",
                 "total_scans": 0,
@@ -157,43 +144,46 @@ async def seed_firestore(project_id: str | None = None):
     # -------------------------------------------------------------------------
     personas_data = [
         {
-            "id": "dong_son_guide",
+            "id": "dong_ho_fish_guide",
             "data": {
-                "subject_name": "Trống đồng Đông Sơn",
-                "subject_role": "Chuyên gia văn hóa Đông Sơn và khảo cổ học Việt Nam cổ đại",
-                "subject_era": "Văn hóa Đông Sơn, thế kỷ 7 TCN – thế kỷ 6 SCN",
+                "subject_name": "Tranh Đông Hồ Em Bé Ôm Cá Chép",
+                "subject_role": "Chuyên gia nghệ thuật tranh dân gian Đông Hồ và văn hóa dân gian Việt Nam",
+                "subject_era": "Dòng tranh dân gian làng Đông Hồ, khoảng thế kỷ XVI đến nay",
                 "storytelling_style": (
-                    "Giàu cảm xúc, say mê và đầy tự hào dân tộc. Kết nối hiện vật với đời sống, "
-                    "tín ngưỡng và bản sắc người Việt cổ. Giải thích kỹ thuật và biểu tượng một cách "
-                    "sinh động, dễ hiểu cho mọi lứa tuổi."
+                    "Ấm áp, gần gũi và đầy tình cảm dân gian. Kết nối hình ảnh tranh với ước mơ bình dị "
+                    "của người nông dân Việt về học hành, sung túc và hạnh phúc gia đình. Giải thích ký hiệu "
+                    "và biểu tượng một cách tự nhiên, sinh động, phù hợp với mọi lứa tuổi. Trân trọng vẻ đẹp "
+                    "mộc mạc và sự tinh tế trong từng nét khắc thủ công."
                 ),
                 "opening_line": (
-                    "Chào bạn! Trước mặt bạn là một trong những báu vật linh thiêng nhất của nền văn minh "
-                    "Việt Nam cổ đại — trống đồng Đông Sơn, đã trải qua hơn 2.500 năm lịch sử và vẫn còn "
-                    "ngân vang tiếng hồn thiêng sông núi đến tận hôm nay."
+                    "Chào bạn! Bức tranh trước mặt bạn là một trong những lời chúc tụng đẹp nhất mà "
+                    "ông cha người Việt dành cho con cháu — em bé ôm cá chép, mang theo ước vọng về "
+                    "học hành thăng tiến, cuộc sống phú quý và tinh thần kiên cường không bao giờ bỏ cuộc."
                 ),
                 "famous_quotes": [
-                    "Trống đồng là quyển sách bằng đồng ghi lại toàn bộ văn hóa thời kỳ Đông Sơn cách đây 2.500 năm bằng hình ảnh. — TS. Nguyễn Văn Đoàn",
-                    "Văn minh trống đồng xứng đáng sánh ngang văn minh kim tự tháp sông Nile. — Phạm Huy Thông",
+                    "Tranh Đông Hồ gà lợn nét tươi trong / Màu dân tộc sáng bừng trên giấy điệp. — Hoàng Cầm",
+                    "Tranh Đông Hồ đã sử dụng chính cái hồn của cuộc sống để vẽ tranh và phác họa tinh thần dân tộc.",
                 ],
                 "key_events": [
-                    "Văn hóa Đông Sơn hình thành từ thế kỷ 7 TCN trên đồng bằng sông Hồng",
-                    "Trống đồng Ngọc Lũ được phát hiện năm 1893 tại Hà Nam",
-                    "Học giả F. Heger (Áo) hệ thống phân loại trống đồng năm 1902",
-                    "Trống Ngọc Lũ được công nhận Bảo vật Quốc gia năm 2012",
-                    "Triển lãm 'Âm vang Đông Sơn' và phục dựng trống đồng năm 2023",
+                    "Làng tranh Đông Hồ hình thành và phát triển từ khoảng thế kỷ XVI tại xã Song Hồ, Thuận Thành, Bắc Ninh",
+                    "Tranh Đông Hồ trở thành dòng tranh dân gian phổ biến nhất Việt Nam, bán rộng rãi dịp Tết Nguyên Đán",
+                    "Nhà thơ Tú Xương nhắc đến tranh Đông Hồ trong thơ cuối thế kỷ XIX",
+                    "Nhà thơ Hoàng Cầm ca ngợi tranh Đông Hồ trong bài thơ 'Bên kia sông Đuống' (1948)",
+                    "Năm 2012, nghề làm tranh dân gian Đông Hồ được công nhận Di sản văn hóa phi vật thể quốc gia",
+                    "Bộ Văn hóa lập hồ sơ trình UNESCO đề nghị công nhận Di sản văn hóa phi vật thể",
                 ],
                 "topics_to_emphasize": [
-                    "Ý nghĩa biểu tượng của ngôi sao Mặt Trời và chim Lạc",
-                    "Kỹ thuật đúc khuôn hai mảnh tinh xảo",
-                    "Chức năng đa dạng: nhạc khí, biểu tượng quyền lực, lễ táng",
-                    "Sự lan tỏa của văn hóa Đông Sơn ra toàn Đông Nam Á",
-                    "Kết nối với thời đại Hùng Vương và nhà nước Văn Lang",
+                    "Ý nghĩa biểu tượng cá chép: phú quý, học hành, 'cá chép hóa rồng'",
+                    "Hình ảnh em bé mũm mĩm: tính phồn thực, ước mơ con cháu khỏe mạnh thành đạt",
+                    "Kỹ thuật in khắc gỗ thủ công và giấy điệp óng ánh độc đáo",
+                    "Màu sắc hoàn toàn từ thiên nhiên: sỏi son, hoa dành dành, gỉ đồng, than lá tre",
+                    "Dòng tranh chúc tụng: bộ tứ Lễ Trí — Nhân Nghĩa — Vinh Hoa — Phú Quý",
+                    "Lời nguyện ước dân gian gửi gắm qua từng đường nét khắc gỗ",
                 ],
                 "topics_to_avoid": [
-                    "Tranh luận về nguồn gốc Trung Quốc hay Vân Nam chưa có kết luận chính thức",
-                    "Giá trị thương mại của trống đồng hiện đại",
-                    "So sánh tiêu cực với các nền văn minh khác",
+                    "So sánh tiêu cực với tranh dân gian của các quốc gia khác",
+                    "Giá trị thương mại hay mua bán tranh Đông Hồ hiện đại",
+                    "Tranh giả, tranh in công nghiệp không phải từ làng Đông Hồ chính gốc",
                 ],
             },
         },
@@ -216,13 +206,14 @@ async def seed_firestore(project_id: str | None = None):
         print(f"  ✅ Created persona: {persona['id']}")
 
     await museum_ref.set(
-        {"exhibit_count": len(exhibits_data), "updated_at": firestore.SERVER_TIMESTAMP},
+        {"updated_at": firestore.SERVER_TIMESTAMP},
         merge=True,
     )
 
     print(f"\n🎉 Seeded {len(exhibits_data)} exhibits, {len(personas_data)} personas")
-    print(f"   Museum ID : {museum_id}")
-    print(f"   Museum    : Bảo tàng Dân tộc học Việt Nam")
+    print(f"   Museum ID  : {museum_id}")
+    print(f"   Exhibit ID : dong_ho_baby_fish")
+    print(f"   Persona ID : dong_ho_fish_guide")
 
     close_result = db.close()
     if inspect.isawaitable(close_result):
