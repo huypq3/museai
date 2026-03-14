@@ -525,6 +525,9 @@ class GeminiLiveHandler:
                             await session.send_realtime_input(activity_end=types.ActivityEnd())
                             self._client_turn_open = False
                             logger.info("✅ Forced end_of_turn (activity_end) for interrupt")
+                        await session.send_realtime_input(activity_start=types.ActivityStart())
+                        self._client_turn_open = True
+                        logger.info("✅ activity_start sent after interrupt — ready for user audio")
                     except Exception as e:
                         logger.warning("Failed to send interrupt signal to Gemini: %s", e)
 

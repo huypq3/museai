@@ -464,6 +464,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [stopRecording, sendMessage, exhibitId, can, dispatch, stateRef]);
 
   const startVoiceCapture = useCallback(async (): Promise<boolean> => {
+    await unlockAndFlush();
     sendMessage({ type: "set_language", language: runtimeLanguageRef.current });
     const started = sendMessage({ type: "start_of_turn" });
     if (!started) {
@@ -490,7 +491,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     );
     micPermissionPrimedRef.current = true;
     return true;
-  }, [sendMessage, start, stopAndSendTurn, getAudioContext]);
+  }, [sendMessage, start, stopAndSendTurn, getAudioContext, unlockAndFlush]);
 
   const handleBack = useCallback(() => {
     stopRecording();
@@ -585,7 +586,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       console.log("🧪 VAD monitor stop");
       void stopVADMonitor();
     };
-  }, [isConnected, is.recording, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef, can, dispatch, startVoiceCapture]);
+  }, [isConnected, is.recording, is.aiSpeaking, is.ready, is.paused, handleInterrupt, startVADMonitor, stopVADMonitor, stateRef, can, dispatch, startVoiceCapture]);
 
   const handleIntro = useCallback(async () => {
     if (introInFlightRef.current) return;

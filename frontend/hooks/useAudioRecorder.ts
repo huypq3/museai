@@ -96,7 +96,6 @@ export function useAudioRecorder() {
       const deviceSampleRate = ctx.sampleRate;
       const micSource = ctx.createMediaStreamSource(stream);
       micSourceRef.current = micSource;
-      micSource.connect(ctx.destination);
       
       const silenceMs = options?.silenceMs ?? 1300;
       const maxNoSpeechMs = options?.maxNoSpeechMs ?? 2800;
