@@ -170,6 +170,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [currentAIText, setCurrentAIText] = useState("");
   const [currentUserText, setCurrentUserText] = useState("");
   const [exhibitName, setExhibitName] = useState("");
+  const [exhibitImageUrl, setExhibitImageUrl] = useState("");
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showIntroButton, setShowIntroButton] = useState<boolean>(true);
   const [autoStopHint, setAutoStopHint] = useState("");
@@ -366,6 +367,12 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             ? exhibit.name_en || exhibit.name || ""
             : exhibit.name || exhibit.name_en || "";
         setExhibitName(displayName);
+        const representativeImage =
+          exhibit.primary_image_url ||
+          exhibit.image_url ||
+          (Array.isArray(exhibit.gallery_images) ? exhibit.gallery_images[0] : "") ||
+          "";
+        setExhibitImageUrl(String(representativeImage || ""));
       })
       .catch((e) => console.error("Failed to load exhibit:", e));
   }, [exhibitId, language]);
@@ -901,6 +908,29 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       >
         {sentences.length === 0 && !currentAIText && !currentUserText ? (
           <div style={{ textAlign: "center", width: "100%", maxWidth: 420, margin: "0 auto" }}>
+            {exhibitImageUrl && (
+              <div
+                style={{
+                  marginBottom: 12,
+                  borderRadius: 14,
+                  overflow: "hidden",
+                  border: "1px solid rgba(201,168,76,0.22)",
+                  background: "rgba(255,255,255,0.02)",
+                }}
+              >
+                <img
+                  src={exhibitImageUrl}
+                  alt={exhibitName || "Exhibit image"}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    maxHeight: 220,
+                    objectFit: "cover",
+                  }}
+                  onError={() => setExhibitImageUrl("")}
+                />
+              </div>
+            )}
             {wsNotice ? (
               <div
                 style={{
