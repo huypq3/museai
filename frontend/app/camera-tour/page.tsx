@@ -243,6 +243,8 @@ export default function CameraTourPage() {
           });
           setState("detected");
           try {
+            // Keep detected card visible briefly before navigating.
+            await new Promise((resolve) => setTimeout(resolve, 1200));
             const session = await createExhibitSession(result.exhibit_id, museumId);
             router.push(session.redirect_url);
             return;
@@ -424,7 +426,7 @@ export default function CameraTourPage() {
           background: 'radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.75) 100%)',
         }} />
 
-        {/* Circular viewfinder — always visible from the first frame */}
+        {/* Viewfinder with 4 corners */}
         <div style={{
           position: 'relative',
           width: '260px',
@@ -433,25 +435,49 @@ export default function CameraTourPage() {
           minHeight: '260px',
           flexShrink: 0,
           zIndex: 2,
-          borderRadius: '50%',
-          overflow: 'hidden',
-          border: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          boxShadow: state === 'detected' && !isLockOnAnimating
-            ? '0 0 0 1px rgba(74,222,128,0.35), 0 0 16px rgba(74,222,128,0.35)'
-            : '0 0 0 1px rgba(201,168,76,0.25), 0 0 14px rgba(201,168,76,0.28)',
+          borderRadius: 0,
+          overflow: 'visible',
         }}>
-          {/* Inner aiming circle (always visible) */}
-          <div
-            style={{
-              position: "absolute",
-              inset: "12%",
-              borderRadius: "50%",
-              border: `1px solid ${state === 'detected' && !isLockOnAnimating ? 'rgba(74,222,128,0.9)' : 'rgba(201,168,76,0.85)'}`,
-              boxShadow: "0 0 8px rgba(201,168,76,0.2)",
-              pointerEvents: "none",
-              zIndex: 1,
-            }}
-          />
+          {/* Corner TL */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: 32,
+            height: 32,
+            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+          }} />
+          {/* Corner TR */}
+          <div style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            width: 32,
+            height: 32,
+            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+          }} />
+          {/* Corner BL */}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            width: 32,
+            height: 32,
+            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+          }} />
+          {/* Corner BR */}
+          <div style={{
+            position: 'absolute',
+            bottom: 0,
+            right: 0,
+            width: 32,
+            height: 32,
+            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+          }} />
 
           {/* Scan line — only when scanning */}
           {state === 'scanning' && (
