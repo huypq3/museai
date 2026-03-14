@@ -508,7 +508,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       {
         silenceMs: 600,
         maxNoSpeechMs: 4500,
-        voiceThreshold: 0.008,
+        voiceThreshold: 0.005,
         onAutoStop: (reason) => {
           console.log(`⏱️ Auto-stop trigger: ${reason}`);
           stopAndSendTurn(reason);
@@ -608,9 +608,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
         }, 900);
       },
       {
-        threshold: 0.018,
-        minSpeechFrames: 4,
-        minSpeechMs: 320,
+        threshold: 0.012,
+        minSpeechFrames: 3,
+        minSpeechMs: 220,
         cooldownMs: 1200,
       }
     );

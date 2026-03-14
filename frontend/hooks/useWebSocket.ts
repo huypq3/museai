@@ -156,7 +156,7 @@ export function useWebSocket(exhibitId: string | null, language: string, options
       return;
     }
 
-    const wsLang = connectLanguageRef.current || language;
+    const wsLang = connectLanguageRef.current;
     const wsUrl = `${WS_BACKEND_URL}/ws/persona/${exhibitId}?language=${wsLang}&token=${encodeURIComponent(wsToken)}`;
     console.log("🔌 Connecting to:", wsUrl);
 
@@ -261,7 +261,7 @@ export function useWebSocket(exhibitId: string | null, language: string, options
     ws.onerror = () => {
       isConnectingRef.current = false;
     };
-  }, [exhibitId, language, MAX_RETRY]);
+  }, [exhibitId, MAX_RETRY]);
 
   useEffect(() => {
     connectLanguageRef.current = language;
@@ -312,9 +312,9 @@ export function useWebSocket(exhibitId: string | null, language: string, options
     return sendMessage({
       type: "text_input",
       text: payload,
-      language: connectLanguageRef.current || language,
+      language: connectLanguageRef.current,
     });
-  }, [sendMessage, language]);
+  }, [sendMessage]);
 
   const disconnect = useCallback(() => {
     shouldReconnectRef.current = false;
