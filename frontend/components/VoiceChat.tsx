@@ -351,6 +351,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const sentences = messages;
 
   const markIntroUsed = useCallback(() => {
+    showIntroButtonRef.current = false;
     setShowIntroButton(false);
   }, []);
 
@@ -370,6 +371,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [exhibitId, language]);
 
   useEffect(() => {
+    showIntroButtonRef.current = true;
     setShowIntroButton(true);
   }, [exhibitId]);
 
@@ -391,6 +393,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       if (can("WS_CONNECTED")) dispatch({ type: "WS_CONNECTED" });
       return;
     }
+    // Avoid immediate connecting -> reconnecting flip before user initiates connect.
+    if (stateRef.current === "connecting" && !pendingIntroAfterConnectRef.current) return;
     // Keep processing UI while waiting for turn_complete fallback.
     if (stateRef.current === "processing") return;
     if (can("WS_DISCONNECTED")) dispatch({ type: "WS_DISCONNECTED" });
@@ -656,10 +660,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   const handleMicPress = useCallback(async () => {
     const currentState = stateRef.current;
+    const introMode = showIntroButtonRef.current;
     console.log(
-      `🎛️ waveform tap: state=${currentState} ready=${is.ready} connected=${isConnected} showIntro=${showIntroButton}`
+      `🎛️ waveform tap: state=${currentState} ready=${is.ready} connected=${isConnected} showIntro=${introMode}`
     );
-    if (!showIntroButton) {
+    if (!introMode) {
       // Post-intro: button acts as manual interrupt or mic trigger
       if (currentState === "ai_speaking" && can("INTERRUPT")) {
         void handleInterrupt();
@@ -697,7 +702,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 3000);
     console.log(`⏳ intro queued: connected=${isConnected} ready=${is.ready} state=${stateRef.current}`);
     void connect();
-  }, [showIntroButton, isConnected, is.ready, handleIntro, stateRef, connect, unlockAndFlush, language, can, handleInterrupt, dispatch, startVoiceCapture]);
+  }, [isConnected, is.ready, handleIntro, stateRef, connect, unlockAndFlush, language, can, handleInterrupt, dispatch, startVoiceCapture]);
 
   const handleWaveTap = useCallback(() => {
     const tapId = ++waveTapSeqRef.current;
@@ -717,9 +722,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const isSpeakingState = is.aiSpeaking;
   const isProcessingState = is.processing;
   const isDisabledWave =
-    is.connecting || is.reconnecting || is.error || is.sessionEnded || is.processing || is.draining;
-  // Show spinner only in truly transient states; after intro the button is always active
-  const showButtonSpinner = is.connecting || is.reconnecting || is.processing || is.draining;
+    is.error || is.sessionEnded || is.processing || is.draining ||
+    (!showIntroButton && (is.connecting || is.reconnecting));
+  // Pre-intro should stay tappable/clear; spinner is for active/transient states after intro.
+  const showButtonSpinner =
+    is.processing || is.draining || (!showIntroButton && (is.connecting || is.reconnecting));
   const isWaveStartEnabled = !is.error && !is.sessionEnded && !showButtonSpinner;
   const goldBright = "#F6C453";
   const goldLight = "#FFE08A";
@@ -1164,11 +1171,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
               ? t(language, "voice.recording")
               : isSpeakingState
                 ? t(language, "voice.speaking")
-                : isProcessingState
-                  ? t(language, "voice.processing")
-                  : showIntroButton && is.ready
+                  : isProcessingState
+                    ? t(language, "voice.processing")
+                  : showIntroButton
                     ? t(language, "voice.listen_guide")
-                    : t(language, "voice.ask")}
+                    : t(language, "voice.speak_to_ask")}
         </p>
         {autoStopHint && (
           <p
