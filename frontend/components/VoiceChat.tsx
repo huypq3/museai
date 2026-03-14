@@ -651,12 +651,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   useEffect(() => {
     if (!isConnected) return;
-    if (!is.ready) return;
     if (!pendingIntroAfterConnectRef.current) return;
     if (!showIntroButton) return;
     pendingIntroAfterConnectRef.current = false;
     void handleIntro();
-  }, [isConnected, is.ready, showIntroButton, handleIntro]);
+  }, [isConnected, showIntroButton, handleIntro]);
 
   const handleMicPress = useCallback(async () => {
     const currentState = stateRef.current;
@@ -677,20 +676,26 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       return;
     }
 
+    pendingIntroAfterConnectRef.current = true;
+    // Start WS immediately on first tap; do not wait for permission prompt resolution.
+    if (!isConnected) {
+      void connect();
+    }
+
     // Always unlock AudioContext in a user gesture.
     await unlockAndFlush();
 
     if (!micPermissionPrimedRef.current) {
       try {
+        console.log("🎤 Mic preflight start (tap)");
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         introMicAnchorStreamRef.current = stream;
         micPermissionPrimedRef.current = true;
+        console.log("✅ Mic preflight granted (tap)");
       } catch (e) {
         console.warn("⚠️ Mic preflight failed:", e);
       }
     }
-
-    pendingIntroAfterConnectRef.current = true;
 
     if (isConnected && is.ready) {
       await handleIntro();
@@ -701,7 +706,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
     autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 3000);
     console.log(`⏳ intro queued: connected=${isConnected} ready=${is.ready} state=${stateRef.current}`);
-    void connect();
+    if (!isConnected) void connect();
   }, [isConnected, is.ready, handleIntro, stateRef, connect, unlockAndFlush, language, can, handleInterrupt, dispatch, startVoiceCapture]);
 
   const handleWaveTap = useCallback(() => {
@@ -1124,7 +1129,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             }}
           />
           <button
-            onPointerDown={handleWaveTap}
             onClick={handleWaveTap}
             title={isDisabledWave ? (is.connecting || is.reconnecting ? "Đang kết nối..." : "Đang xử lý...") : undefined}
             style={{

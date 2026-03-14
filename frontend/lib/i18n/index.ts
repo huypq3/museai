@@ -74,7 +74,7 @@ export const t = (lang: string, key: string): string => {
       'voice.listening': 'Ask about this exhibit',
       'voice.ai_speaking': 'Audio guide playing...',
       'voice.ask': 'Tap to ask',
-      'voice.speak_to_ask': 'Start speaking to ask',
+      'voice.speak_to_ask': 'Speak to ask',
       'voice.type_question': 'Type your question...',
       'voice.recording': 'Recording...',
       'voice.stop': 'Stop',
