@@ -92,12 +92,12 @@ export default function CameraTourPage() {
       return () => window.clearTimeout(timer);
     }
 
-    if (state !== "detected" && isLockOnAnimating) {
+    if (state !== "detected") {
       setIsLockOnAnimating(false);
     }
 
     previousStateRef.current = state;
-  }, [state, isLockOnAnimating]);
+  }, [state]);
 
   const LANGUAGE_FLAGS: Record<LanguageCode, string> = {
     vi: "🇻🇳",
@@ -157,57 +157,109 @@ export default function CameraTourPage() {
     setState("processing");
     
     try {
-      // Capture frame
-      const canvas = document.createElement('canvas');
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-      
-      ctx.drawImage(videoRef.current, 0, 0);
-      
-      // Convert to blob
-      canvas.toBlob(async (blob) => {
-        if (!blob) {
-          setState("error");
-          setTimeout(() => setState("scanning"), 2000);
-          return;
-        }
-        
-        // Call API
-        const formData = new FormData();
-        formData.append('file', blob, 'frame.jpg');
-        
-        try {
-          const response = await fetch(`${BACKEND_URL}/vision/recognize/${museumId}`, {
-            method: 'POST',
-            body: formData,
+      const video = videoRef.current;
+      const sourceW = video.videoWidth;
+      const sourceH = video.videoHeight;
+      const renderW = video.clientWidth;
+      const renderH = video.clientHeight;
+      if (!sourceW || !sourceH || !renderW || !renderH) {
+        setState("error");
+        setTimeout(() => setState("scanning"), 2000);
+        return;
+      }
+
+      // The on-screen viewfinder is a fixed 260x260 circle centered in the video area.
+      const viewfinderPx = 260;
+      const vfX = (renderW - viewfinderPx) / 2;
+      const vfY = (renderH - viewfinderPx) / 2;
+
+      // Map display coordinates to source video coordinates for object-fit: cover.
+      const coverScale = Math.max(renderW / sourceW, renderH / sourceH);
+      const displayedW = sourceW * coverScale;
+      const displayedH = sourceH * coverScale;
+      const offsetX = (renderW - displayedW) / 2;
+      const offsetY = (renderH - displayedH) / 2;
+
+      const rawSrcX = (vfX - offsetX) / coverScale;
+      const rawSrcY = (vfY - offsetY) / coverScale;
+      const rawSrcW = viewfinderPx / coverScale;
+      const rawSrcH = viewfinderPx / coverScale;
+
+      const srcX = Math.max(0, Math.min(sourceW - 1, rawSrcX));
+      const srcY = Math.max(0, Math.min(sourceH - 1, rawSrcY));
+      const srcW = Math.max(1, Math.min(sourceW - srcX, rawSrcW));
+      const srcH = Math.max(1, Math.min(sourceH - srcY, rawSrcH));
+
+      // Send a normalized square crop; apply a circular mask so model focuses on viewfinder area.
+      const targetSize = 640;
+      const canvas = document.createElement("canvas");
+      canvas.width = targetSize;
+      canvas.height = targetSize;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        setState("error");
+        setTimeout(() => setState("scanning"), 2000);
+        return;
+      }
+
+      ctx.drawImage(video, srcX, srcY, srcW, srcH, 0, 0, targetSize, targetSize);
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.beginPath();
+      ctx.arc(targetSize / 2, targetSize / 2, targetSize / 2, 0, Math.PI * 2);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalCompositeOperation = "source-over";
+
+      const blob = await new Promise<Blob | null>((resolve) => {
+        canvas.toBlob((b) => resolve(b), "image/jpeg", 0.9);
+      });
+      if (!blob) {
+        setState("error");
+        setTimeout(() => setState("scanning"), 2000);
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", blob, "viewfinder-crop.jpg");
+
+      try {
+        const response = await fetch(`${BACKEND_URL}/vision/recognize/${museumId}`, {
+          method: "POST",
+          body: formData,
+        });
+
+        const result = await response.json();
+
+        if (result.found && result.confidence >= 0.5) {
+          trackEvent("exhibit_detected", museumId, result.exhibit_id, {
+            confidence: result.confidence,
           });
-          
-          const result = await response.json();
-          
-          if (result.found && result.confidence >= 0.5) {
-            trackEvent("exhibit_detected", museumId, result.exhibit_id, {
-              confidence: result.confidence,
-            });
-            setDetected({
-              exhibit_id: result.exhibit_id,
-              name: result.exhibit_name || t(language, "camera.exhibit_fallback"),
-              era: result.era,
-              location: result.location,
-              confidence: result.confidence,
-            });
-            setState("detected");
-          } else {
-            setState("error");
-            setTimeout(() => setState("scanning"), 2000);
+          setDetected({
+            exhibit_id: result.exhibit_id,
+            name: result.exhibit_name || t(language, "camera.exhibit_fallback"),
+            era: result.era,
+            location: result.location,
+            confidence: result.confidence,
+          });
+          setState("detected");
+          try {
+            const session = await createExhibitSession(result.exhibit_id, museumId);
+            router.push(session.redirect_url);
+            return;
+          } catch {
+            alert("Unable to start session. Please try again.");
+            setState("scanning");
+            return;
           }
-        } catch (error) {
-          console.error("Recognition error:", error);
+        } else {
           setState("error");
           setTimeout(() => setState("scanning"), 2000);
         }
-      }, 'image/jpeg', 0.8);
+      } catch (error) {
+        console.error("Recognition error:", error);
+        setState("error");
+        setTimeout(() => setState("scanning"), 2000);
+      }
       
     } catch (error) {
       console.error("Capture error:", error);
@@ -372,7 +424,7 @@ export default function CameraTourPage() {
           background: 'radial-gradient(ellipse at center, transparent 35%, rgba(0,0,0,0.75) 100%)',
         }} />
 
-        {/* Viewfinder box — FIXED SIZE 260x260, centered */}
+        {/* Circular viewfinder — always visible from the first frame */}
         <div style={{
           position: 'relative',
           width: '260px',
@@ -381,50 +433,25 @@ export default function CameraTourPage() {
           minHeight: '260px',
           flexShrink: 0,
           zIndex: 2,
+          borderRadius: '50%',
+          overflow: 'hidden',
+          border: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
+          boxShadow: state === 'detected' && !isLockOnAnimating
+            ? '0 0 0 1px rgba(74,222,128,0.35), 0 0 16px rgba(74,222,128,0.35)'
+            : '0 0 0 1px rgba(201,168,76,0.25), 0 0 14px rgba(201,168,76,0.28)',
         }}>
-          {/* Corner TL */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            width: 32,
-            height: 32,
-            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
-          
-          {/* Corner TR */}
-          <div style={{
-            position: 'absolute',
-            top: 0,
-            right: 0,
-            width: 32,
-            height: 32,
-            borderTop: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
-          
-          {/* Corner BL */}
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            width: 32,
-            height: 32,
-            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderLeft: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
-          
-          {/* Corner BR */}
-          <div style={{
-            position: 'absolute',
-            bottom: 0,
-            right: 0,
-            width: 32,
-            height: 32,
-            borderBottom: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-            borderRight: `2px solid ${state === 'detected' && !isLockOnAnimating ? '#4ade80' : '#C9A84C'}`,
-          }} />
+          {/* Inner aiming circle (always visible) */}
+          <div
+            style={{
+              position: "absolute",
+              inset: "12%",
+              borderRadius: "50%",
+              border: `1px solid ${state === 'detected' && !isLockOnAnimating ? 'rgba(74,222,128,0.9)' : 'rgba(201,168,76,0.85)'}`,
+              boxShadow: "0 0 8px rgba(201,168,76,0.2)",
+              pointerEvents: "none",
+              zIndex: 1,
+            }}
+          />
 
           {/* Scan line — only when scanning */}
           {state === 'scanning' && (
