@@ -191,10 +191,10 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const runtimeLanguageRef = useRef<LanguageCode>(language);
   const vadInterruptLockRef = useRef(false);
   const lastWaveTapAtRef = useRef(0);
+  const waveTapSeqRef = useRef(0);
   const autoStartLockRef = useRef(false);
   const lastAutoStartAtRef = useRef(0);
   const lastAiAudioAtRef = useRef(0);
-  const isConnectedRef = useRef(false);
 
   const {
     start,
@@ -372,10 +372,6 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   useEffect(() => {
     runtimeLanguageRef.current = language;
   }, [language]);
-
-  useEffect(() => {
-    isConnectedRef.current = isConnected;
-  }, [isConnected]);
 
   // ─── Sync websocket connectivity → FSM ────────────────────────────────
   useEffect(() => {
@@ -595,13 +591,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
 
   const handleIntro = useCallback(async () => {
     if (introInFlightRef.current) return;
-    if (stateRef.current !== "ready") {
-      console.warn(`⚠️ handleIntro blocked: state=${stateRef.current}`);
-      return;
-    }
     introInFlightRef.current = true;
     try {
-      console.log("🎬 intro-start");
+      console.log(`🎬 intro-start, state=${stateRef.current}`);
       await unlockAndFlush();
       if (!micPermissionPrimedRef.current) {
         try {
@@ -617,7 +609,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       await unlockAndFlush();
       const sent = sendMessage({ type: "request_greeting" });
       if (!sent) {
-        console.warn("⚠️ request_greeting not sent because websocket is not open");
+        console.warn("⚠️ request_greeting failed — WS not open");
         pendingIntroAfterConnectRef.current = true;
         reconnectNow();
         return;
@@ -643,45 +635,49 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   }, [isConnected, is.ready, showIntroButton, handleIntro]);
 
   const handleMicPress = useCallback(async () => {
-    console.log(
-      `🎛️ waveform tap: state=${stateRef.current} ready=${is.ready} recording=${is.recording} speaking=${is.aiSpeaking} processing=${is.processing} draining=${is.draining} blocked=${is.inputBlocked}`
-    );
+    const currentState = stateRef.current;
+    console.log(`🎛️ waveform tap: state=${currentState} connected=${isConnected} showIntro=${showIntroButton}`);
     if (!showIntroButton) {
       console.log("ℹ️ waveform tap ignored: hands-free mode after intro");
       return;
     }
 
-    const connected = isConnectedRef.current;
-    const ready = stateRef.current === "ready";
-    if (!connected || !ready) {
-      pendingIntroAfterConnectRef.current = true;
-      // Prime audio + mic inside a real user gesture so autoplay/permission
-      // restrictions do not block the first greeting turn later.
-      await unlockAndFlush();
+    // Always unlock AudioContext in a user gesture.
+    await unlockAndFlush();
+
+    if (!isConnected || currentState !== "ready") {
       if (!micPermissionPrimedRef.current) {
         try {
           const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           introMicAnchorStreamRef.current = stream;
           micPermissionPrimedRef.current = true;
         } catch (e) {
-          console.warn("⚠️ Mic preflight failed while waiting for WS ready:", e);
+          console.warn("⚠️ Mic preflight failed:", e);
         }
       }
+      pendingIntroAfterConnectRef.current = true;
       setAutoStopHint(language === "vi" ? "Đang kết nối..." : "Connecting...");
       if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
       autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 3000);
-      console.log("⏳ intro queued; waiting for ready state...");
-      if (!connected) reconnectNow();
+      console.log(`⏳ intro queued: connected=${isConnected} state=${currentState}`);
+      if (!isConnected) reconnectNow();
       return;
     }
 
     await handleIntro();
-  }, [showIntroButton, handleIntro, stateRef, is.ready, is.recording, is.aiSpeaking, is.processing, is.draining, is.inputBlocked, reconnectNow, unlockAndFlush, language]);
+  }, [showIntroButton, isConnected, handleIntro, stateRef, reconnectNow, unlockAndFlush, language]);
 
   const handleWaveTap = useCallback(() => {
+    const tapId = ++waveTapSeqRef.current;
+    const ts = new Date().toISOString();
+    console.log(`🧭 wave_tap id=${tapId} ts=${ts}`);
     const now = Date.now();
-    if (now - lastWaveTapAtRef.current < 250) return;
+    if (now - lastWaveTapAtRef.current < 250) {
+      console.log(`🧭 wave_tap id=${tapId} ignored=debounce`);
+      return;
+    }
     lastWaveTapAtRef.current = now;
+    console.log(`🧭 wave_tap id=${tapId} dispatch=handleMicPress`);
     void handleMicPress();
   }, [handleMicPress]);
 
