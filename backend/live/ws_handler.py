@@ -199,7 +199,7 @@ class GeminiLiveHandler:
             voice_name     = os.getenv("VOICE_NAME", "Kore")
             model_name     = os.getenv("GEMINI_LIVE_MODEL", "gemini-2.5-flash-native-audio-preview-12-2025")
             temperature    = float(os.getenv("VOICE_TEMPERATURE", "0.55"))
-            max_tokens     = int(os.getenv("VOICE_MAX_OUTPUT_TOKENS", "1400"))
+            max_tokens     = int(os.getenv("VOICE_MAX_OUTPUT_TOKENS", "900"))
 
             config = {
                 "response_modalities": ["AUDIO"],
@@ -1116,6 +1116,8 @@ CONTENT POLICY (facts and grounding)
 - Treat the curated facts as the absolute and complete limit of truth for this session. Any detail not explicitly mentioned there does NOT exist in this museum's records.
 - If the answer to a question is not explicitly written in the curated facts, respond naturally in {language_label}: say the museum does not currently have verified information on that detail. Never say this in English if the visitor is speaking another language.
 - Do not invent any names, dates, numbers, or events.
+- For pure social chit-chat (greetings, thanks, confirmations, encouragement) that does not request factual museum details, you may answer naturally in {language_label} in ONE short sentence.
+- Even in chit-chat mode, do NOT introduce any new factual claims about exhibits, history, dates, people, or places.
 
 CURATED EXHIBIT FACTS
 {context_text}
@@ -1156,6 +1158,8 @@ CONTENT POLICY (facts and grounding)
 - Treat the curated facts as the absolute and complete limit of truth for this session. Any detail not explicitly mentioned there does NOT exist in this museum's records.
 - If the answer to a question is not explicitly written in the curated facts, respond naturally in {language_label}: say the museum does not currently have verified information on that detail. Never say this in English if the visitor is speaking another language.
 - Do not invent any names, dates, numbers, or events.
+- For pure social chit-chat (greetings, thanks, confirmations, encouragement) that does not request factual museum details, you may answer naturally in {language_label} in ONE short sentence.
+- Even in chit-chat mode, do NOT introduce any new factual claims about exhibits, history, dates, people, or places.
 
 CURATED EXHIBIT FACTS
 {context_text}

@@ -89,7 +89,7 @@ export function useAudioPlayer() {
               setIsPlaying(false);
               console.log("🔇 Audio playback finished");
             }
-          }, 350);
+          }, 150);
         }
       };
 

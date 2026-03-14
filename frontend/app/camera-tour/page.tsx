@@ -196,7 +196,7 @@ export default function CameraTourPage() {
       const srcH = Math.max(1, Math.min(sourceH - srcY, rawSrcH));
 
       // Send only the circular area to Vision API.
-      const targetSize = 768;
+      const targetSize = 512;
       const canvas = document.createElement("canvas");
       canvas.width = targetSize;
       canvas.height = targetSize;
@@ -216,7 +216,7 @@ export default function CameraTourPage() {
       ctx.restore();
 
       const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob((b) => resolve(b), "image/png");
+        canvas.toBlob((b) => resolve(b), "image/jpeg", 0.82);
       });
       if (!blob) {
         setState("error");
@@ -225,7 +225,7 @@ export default function CameraTourPage() {
       }
 
       const formData = new FormData();
-      formData.append("file", blob, "viewfinder-circle.png");
+      formData.append("file", blob, "viewfinder-circle.jpg");
 
       try {
         const response = await fetch(`${BACKEND_URL}/vision/recognize/${museumId}`, {

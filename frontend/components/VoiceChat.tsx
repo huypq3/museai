@@ -170,6 +170,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [currentAIText, setCurrentAIText] = useState("");
   const [currentUserText, setCurrentUserText] = useState("");
   const [exhibitName, setExhibitName] = useState("");
+  const [exhibitNameEn, setExhibitNameEn] = useState("");
   const [exhibitImageUrl, setExhibitImageUrl] = useState("");
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showIntroButton, setShowIntroButton] = useState<boolean>(true);
@@ -367,6 +368,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
             ? exhibit.name_en || exhibit.name || ""
             : exhibit.name || exhibit.name_en || "";
         setExhibitName(displayName);
+        setExhibitNameEn(exhibit.name_en || exhibit.name || "");
         const representativeImage =
           exhibit.primary_image_url ||
           exhibit.image_url ||
@@ -504,7 +506,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       ctx,
       (base64) => sendMessage({ type: "audio", data: base64 }),
       {
-        silenceMs: 1600,
+        silenceMs: 600,
         maxNoSpeechMs: 4500,
         voiceThreshold: 0.008,
         onAutoStop: (reason) => {
@@ -989,7 +991,9 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
                   margin: 0,
                 }}
               >
-                {is.connecting || is.reconnecting ? t(language, "voice.connecting") : t(language, "voice.listening")}
+                {exhibitImageUrl
+                  ? (exhibitNameEn || exhibitName || t(language, "voice.listening"))
+                  : (is.connecting || is.reconnecting ? t(language, "voice.connecting") : t(language, "voice.listening"))}
               </p>
             )}
           </div>
