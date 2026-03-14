@@ -340,9 +340,11 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     notice: wsNotice,
     sendMessage,
     reconnectNow,
+    connect,
   } = useWebSocket(exhibitId, language, {
     onAudioChunk: handleAudioChunk,
     onControlMessage: handleControlMessage,
+    autoConnect: false,
   });
   const sentences = messages;
 
@@ -645,27 +647,29 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
     // Always unlock AudioContext in a user gesture.
     await unlockAndFlush();
 
-    if (!isConnected || currentState !== "ready") {
-      if (!micPermissionPrimedRef.current) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-          introMicAnchorStreamRef.current = stream;
-          micPermissionPrimedRef.current = true;
-        } catch (e) {
-          console.warn("⚠️ Mic preflight failed:", e);
-        }
+    if (!micPermissionPrimedRef.current) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        introMicAnchorStreamRef.current = stream;
+        micPermissionPrimedRef.current = true;
+      } catch (e) {
+        console.warn("⚠️ Mic preflight failed:", e);
       }
-      pendingIntroAfterConnectRef.current = true;
-      setAutoStopHint(language === "vi" ? "Đang kết nối..." : "Connecting...");
-      if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
-      autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 3000);
-      console.log(`⏳ intro queued: connected=${isConnected} state=${currentState}`);
-      if (!isConnected) reconnectNow();
+    }
+
+    pendingIntroAfterConnectRef.current = true;
+
+    if (isConnected && stateRef.current === "ready") {
+      await handleIntro();
       return;
     }
 
-    await handleIntro();
-  }, [showIntroButton, isConnected, handleIntro, stateRef, reconnectNow, unlockAndFlush, language]);
+    setAutoStopHint(language === "vi" ? "Đang kết nối..." : "Connecting...");
+    if (autoStopHintTimerRef.current) clearTimeout(autoStopHintTimerRef.current);
+    autoStopHintTimerRef.current = setTimeout(() => setAutoStopHint(""), 3000);
+    console.log(`⏳ intro queued: connected=${isConnected} state=${stateRef.current}`);
+    void connect();
+  }, [showIntroButton, isConnected, handleIntro, stateRef, connect, unlockAndFlush, language]);
 
   const handleWaveTap = useCallback(() => {
     const tapId = ++waveTapSeqRef.current;

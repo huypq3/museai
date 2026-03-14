@@ -23,6 +23,7 @@ type WSNotice = {
 type UseWebSocketOptions = {
   onAudioChunk?: (base64: string) => void;
   onControlMessage?: (msg: any) => void;
+  autoConnect?: boolean;
 };
 
 const MAX_RETRY_DEFAULT = 5;
@@ -108,6 +109,7 @@ function mapCloseToNotice(code: number, reason: string): WSNotice {
 export function useWebSocket(exhibitId: string | null, language: string, options?: UseWebSocketOptions) {
   const [isConnected, setIsConnected] = useState(false);
   const [notice, setNotice] = useState<WSNotice | null>(null);
+  const autoConnect = options?.autoConnect ?? true;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout>();
   const retryCountRef = useRef(0);
@@ -267,14 +269,16 @@ export function useWebSocket(exhibitId: string | null, language: string, options
 
   useEffect(() => {
     if (!exhibitId) return;
-
-    const timer = setTimeout(() => {
-      connect();
-    }, 100);
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    if (autoConnect) {
+      timer = setTimeout(() => {
+        connect();
+      }, 100);
+    }
 
     return () => {
       shouldReconnectRef.current = false;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
       }
@@ -285,7 +289,7 @@ export function useWebSocket(exhibitId: string | null, language: string, options
       wsRef.current = null;
       isConnectingRef.current = false;
     };
-  }, [exhibitId, connect]);
+  }, [exhibitId, connect, autoConnect]);
 
   const sendMessage = useCallback((message: WSMessage): boolean => {
     const ws = wsRef.current;
@@ -326,5 +330,5 @@ export function useWebSocket(exhibitId: string | null, language: string, options
     void connect();
   }, [connect]);
 
-  return { isConnected, notice, sendMessage, sendTextMessage, disconnect, reconnectNow };
+  return { isConnected, notice, sendMessage, sendTextMessage, disconnect, reconnectNow, connect };
 }
