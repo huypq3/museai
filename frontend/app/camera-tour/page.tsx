@@ -304,9 +304,8 @@ export default function CameraTourPage() {
       return;
     }
 
-    const exhibitId = data.exhibit_id || data.exhibit_id;
+    const exhibitId = data.exhibit_id;
     if (exhibitId) {
-      setShowQRScanner(false);
       const targetMuseumId = data.museum_id || museumId;
       if (targetMuseumId) {
         localStorage.setItem("museum_id", targetMuseumId);
@@ -314,8 +313,10 @@ export default function CameraTourPage() {
       }
       try {
         const session = await createExhibitSession(exhibitId, targetMuseumId);
+        setShowQRScanner(false);
         router.push(session.redirect_url);
       } catch {
+        setShowQRScanner(false);
         alert("Unable to start session. Please try again.");
       }
       return;
