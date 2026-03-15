@@ -582,21 +582,11 @@ class GeminiLiveHandler:
                 elif msg_type == "request_greeting":
                     if not self._accepting_input:
                         continue
-                    # Keep greeting trigger short; persona/style already lives in system prompt.
+                    # Keep greeting trigger short and exhibit-focused; avoid repeating museum-level welcome lines.
                     lang_name = self._language_label(self.language)
-                    welcome_by_lang = self._museum_welcome_messages or {}
-                    welcome_line = str(welcome_by_lang.get(self.language, "")).strip()
-                    if not welcome_line:
-                        welcome_line = str(welcome_by_lang.get("en", "")).strip()
-
-                    welcome_instruction = (
-                        f'If appropriate, start with this welcome line: "{welcome_line}". '
-                        if welcome_line
-                        else ""
-                    )
                     greeting = (
                         f"Introduce the exhibit \"{self._exhibit_name}\" in 2-3 concise sentences "
-                        f"in {lang_name}. {welcome_instruction}"
+                        f"in {lang_name}. Do not add a generic museum welcome line."
                     )
                     await session.send(input=greeting, end_of_turn=True)
                     logger.info("📤 Sent to Gemini: %s", greeting[:80])
