@@ -1228,7 +1228,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
           {is.draining
             ? (language === "vi" ? "Đang chuyển sang lượt mới..." : "Switching to new turn...")
             : isRecordingState
-              ? t(language, "voice.recording")
+              ? t(language, "voice.listening")
               : isSpeakingState
                 ? t(language, "voice.speaking")
                   : isProcessingState
