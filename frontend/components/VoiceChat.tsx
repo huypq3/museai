@@ -175,6 +175,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const [showLangMenu, setShowLangMenu] = useState(false);
   const [showIntroButton, setShowIntroButton] = useState<boolean>(true);
   const [autoStopHint, setAutoStopHint] = useState("");
+  const transcriptContainerRef = useRef<HTMLDivElement>(null);
   const transcriptEndRef = useRef<HTMLDivElement>(null);
   const autoStopHintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const aiTextFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -199,6 +200,7 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   const lastAutoStartAtRef = useRef(0);
   const lastAiAudioAtRef = useRef(0);
   const showIntroButtonRef = useRef(true);
+  const stickToBottomRef = useRef(true);
 
   const {
     start,
@@ -395,6 +397,21 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
   useEffect(() => {
     currentAITextRef.current = currentAIText;
   }, [currentAIText]);
+
+  const handleTranscriptScroll = useCallback(() => {
+    const container = transcriptContainerRef.current;
+    if (!container) return;
+    const distanceToBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
+    stickToBottomRef.current = distanceToBottom <= 72;
+  }, []);
+
+  useEffect(() => {
+    const container = transcriptContainerRef.current;
+    if (!container) return;
+    if (stickToBottomRef.current || is.aiSpeaking || is.processing) {
+      container.scrollTop = container.scrollHeight;
+    }
+  }, [messages, currentAIText, currentUserText, is.aiSpeaking, is.processing]);
 
   // ─── Sync websocket connectivity → FSM ────────────────────────────────
   useEffect(() => {
@@ -893,6 +910,8 @@ export default function VoiceChat({ exhibitId, language, onLanguageChange, museu
       </header>
 
       <div
+        ref={transcriptContainerRef}
+        onScroll={handleTranscriptScroll}
         style={{
           flex: 1,
           minHeight: 0,
