@@ -221,8 +221,8 @@ python scripts/seed_scenes.py
 ### 7) Smoke test URLs
 
 - Frontend: `http://localhost:3000`
-- Welcome: `http://localhost:3000/welcome?museum=demo_museum`
-- Camera tour: `http://localhost:3000/camera-tour?museum=demo_museum`
+- Welcome: `http://localhost:3000/welcome?museum=vietnam_ethnology_museum`
+- Camera tour: `http://localhost:3000/camera-tour?museum=vietnam_ethnology_museum`
 - Backend health: `http://localhost:8080/health`
 
 ### 8) Optional verification commands
