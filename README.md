@@ -45,16 +45,10 @@ Every exhibit, every visitor, every language.
 ![MuseAI Architecture](https://raw.githubusercontent.com/huypq3/museai/main/docs/museai-system-architecture.png)
 
 ```text
-Flow A (QR Entry)
 QR Scan -> Next.js PWA -> /welcome -> /camera-tour or /exhibit/[id]
 -> WebSocket (FastAPI) -> Gemini Live API
 -> RAG Context (Firestore + Embeddings)
 -> Real-time voice response + transcript
-
-Flow B (Camera Recognition)
-Camera Tour -> /vision/recognize/{museum_id} Vision Matching (Gemini Vision)
--> Exhibit Match -> Context Load
--> Gemini Live conversation
 ```
 
 ## Tech Stack
