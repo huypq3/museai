@@ -12,7 +12,7 @@
 Gemini Live Agent Challenge 2026 — Category: Live Agents.
 
 - Live demo: https://guideqr.ai
-- Demo video: [Add your YouTube/Drive link]
+- Demo video: https://youtu.be/PICosF4za00?si=UuSnuXthNXDCGDS4
 - Devpost: https://geminiliveagentchallenge.devpost.com/
 
 ## The Problem
@@ -85,109 +85,188 @@ MuseAI is designed for mixed visitor groups in real museums:
 - Staff can still provide the same guided experience without extra devices.
 
 ## Prerequisites
-- Python 3.11+
+- Python 3.11+ (3.12 also works)
 - Node.js 20+
-- Google Cloud project (billing enabled)
-- Enabled APIs:
-  - Gemini API / Gemini Live
-  - Vertex AI API
+- Google Cloud project with billing enabled
+- `gcloud` CLI installed and authenticated
+- APIs enabled in your GCP project:
   - Firestore API
   - Cloud Storage API
-  - Cloud Run API
-  - Artifact Registry API
-  - Cloud Build API
+  - Gemini API / Vertex AI API
+  - Cloud Run API (for deployment)
+  - Artifact Registry API (for deployment)
 
 ## Cloud Dependency Notice
-This project is not a fully offline demo.
-Running it locally still requires real cloud services for the core experience:
+This is not an offline-only project. Local UI can run without cloud, but full features require:
+- Firestore (museums/exhibits/admin/session metadata)
+- Gemini API / Gemini Live (voice + reasoning)
+- Google credentials (service account or ADC)
 
-- Firestore for museums, exhibits, analytics, and admin data
-- Google Cloud Storage for uploaded assets
-- Gemini API / Gemini Live for voice interaction
-- Google Cloud credentials for backend access to GCP services
+## Fast Reproducible Setup (Recommended)
+This section is optimized so a new developer can reproduce the project quickly with minimal guesswork.
 
-To run the project end-to-end after cloning, a user must provide:
-- a valid Google Cloud project
-- a service account JSON with the required permissions
-- a valid `GEMINI_API_KEY`
-- a valid `JWT_SECRET`
-
-Without GCP configuration, the frontend can start, but most museum, admin, analytics, upload, and live voice features will not work correctly.
-
-## Before You Start
-Prepare these four items before running the repo:
-
-1. A Google Cloud project with billing enabled
-2. A service account JSON file with access to Firestore and Cloud Storage
-3. A valid `GEMINI_API_KEY`
-4. A strong `JWT_SECRET`
-
-## Quick Start (Local, 10-15 minutes)
-
-### 1) Clone
+### 1) Clone repository
 ```bash
 git clone https://github.com/huypq3/museai.git
 cd museai
 ```
 
-### 2) Backend setup
+### 2) Prepare Google Cloud access
+Use one of these methods:
+
+1. Service account JSON (recommended for backend local run):
+```bash
+# Put file at backend/service-account.json
+ls backend/service-account.json
+```
+
+2. ADC user login (fallback):
+```bash
+gcloud auth application-default login
+```
+
+Set active project:
+```bash
+gcloud config set project <YOUR_GCP_PROJECT_ID>
+```
+
+### 3) Configure backend env
+```bash
+cd backend
+cp .env.example .env
+```
+
+Edit `backend/.env` with at least these required values:
+- `JWT_SECRET=<strong_random_64_hex_or_more>`
+- `GEMINI_API_KEY=<your_gemini_api_key>`
+- `GOOGLE_CLOUD_PROJECT=<your_project_id>`
+- `GOOGLE_APPLICATION_CREDENTIALS=./service-account.json` (if using service account file)
+- `ALLOWED_ORIGINS=http://localhost:3000`
+- `PUBLIC_APP_URL=http://localhost:3000`
+- `GCS_BUCKET=<your_bucket_name>`
+- `GCS_BUCKET_NAME=<your_bucket_name>`
+
+Optional but useful for local:
+- `APP_ENV=development`
+- `ENFORCE_HTTPS=false`
+- `WS_REQUIRE_EPHEMERAL_TOKEN=true`
+- `VOICE_MAX_OUTPUT_TOKENS=900`
+
+### 4) Run backend
 ```bash
 cd backend
 python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+source .venv/bin/activate
 pip install -r requirements.txt
-cp .env.example .env
-# Fill required vars in .env (minimum):
-# JWT_SECRET=<32+ chars>
-# GEMINI_API_KEY=<your key>
-# GOOGLE_CLOUD_PROJECT=<your-gcp-project>
-# GOOGLE_APPLICATION_CREDENTIALS=./service-account.json
-# ALLOWED_ORIGINS=http://localhost:3000
 uvicorn main:app --host 0.0.0.0 --port 8080 --reload
 ```
 
-### 3) Frontend setup
+Backend health check:
 ```bash
-cd ../frontend
-npm install
+curl http://localhost:8080/health
+```
+
+### 5) Configure and run frontend
+Open another terminal:
+```bash
+cd museai/frontend
 cp .env.example .env.local
-# Set:
-# NEXT_PUBLIC_BACKEND_URL=http://localhost:8080
-# NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
+
+Set:
+- `NEXT_PUBLIC_BACKEND_URL=http://localhost:8080`
+- `NEXT_PUBLIC_APP_URL=http://localhost:3000`
+
+Then run:
+```bash
+npm install
 npm run dev
 ```
 
-### 4) Seed Demo Data (optional)
+### 6) Seed demo data (first run)
+Open another terminal:
 ```bash
-cd ../backend
+cd museai/backend
 source .venv/bin/activate
 python scripts/seed_firestore.py
 python scripts/seed_knowledge_base.py
 python scripts/seed_scenes.py
 ```
 
-### 5) Smoke test
-- Frontend: http://localhost:3000
-- Health: http://localhost:8080/health
-- Welcome demo: http://localhost:3000/welcome?museum=demo_museum
+### 7) Smoke test URLs
+- Frontend: `http://localhost:3000`
+- Welcome: `http://localhost:3000/welcome?museum=demo_museum`
+- Camera tour: `http://localhost:3000/camera-tour?museum=demo_museum`
+- Backend health: `http://localhost:8080/health`
 
-Default seeded admin:
-- Super admin username: `admin`
-- Password: use your seeded/reset password from backend scripts or Firestore admin user record.
+### 8) Optional verification commands
+Frontend type-check:
+```bash
+cd museai/frontend
+npx tsc --noEmit
+```
+
+Backend syntax check:
+```bash
+cd museai
+python3 -m py_compile backend/main.py backend/live/ws_handler.py backend/vision/recognizer.py
+```
+
+Run tests:
+```bash
+cd museai
+pytest -q
+```
+
+## Quick Troubleshooting (Most Common Failures)
+1. `google.auth.exceptions.DefaultCredentialsError`
+- Cause: GCP credentials not configured.
+- Fix:
+  - set `GOOGLE_APPLICATION_CREDENTIALS=./service-account.json` in `backend/.env`, or
+  - run `gcloud auth application-default login`.
+
+2. Frontend shows CORS / cannot call backend
+- Cause: `ALLOWED_ORIGINS` missing frontend URL.
+- Fix: set `ALLOWED_ORIGINS=http://localhost:3000` in backend `.env`, then restart backend.
+
+3. Voice connects then closes immediately
+- Cause: missing/invalid `GEMINI_API_KEY`, JWT/session config, or WS limits too strict.
+- Fix:
+  - verify `/health`
+  - verify `GEMINI_API_KEY`, `JWT_SECRET`
+  - keep default WS limits from `.env.example`.
+
+4. Camera recognition always unknown
+- Cause: museum has no seeded exhibits or low-quality frame.
+- Fix:
+  - run all seed scripts
+  - test with seeded museum/exhibit
+  - ensure backend logs show `Vision recognize request`.
+
+5. Admin login fails on fresh setup
+- Cause: no admin seeded / wrong password.
+- Fix:
+  - use `ADMIN_USERNAME=admin` and set `ADMIN_PASSWORD` or `ADMIN_PASSWORD_HASH` in `.env`
+  - rerun relevant seed/bootstrap flow.
 
 ## Environment Variables
 
 ### Backend
 See [`backend/.env.example`](backend/.env.example).
-Critical vars:
+Required vars (minimum for full run):
 - `JWT_SECRET` (required, >= 32 chars)
 - `GEMINI_API_KEY` (required)
-- `GEMINI_EMBEDDING_MODEL` (optional, default: `gemini-embedding-001`)
 - `GOOGLE_CLOUD_PROJECT` (required)
 - `GOOGLE_APPLICATION_CREDENTIALS` (required for local GCP auth)
 - `ALLOWED_ORIGINS` (must include frontend origin)
-- `PUBLIC_APP_URL` (recommended, used for QR URL fallback)
+- `PUBLIC_APP_URL` (recommended, QR URL fallback)
 - `GCS_BUCKET` / `GCS_BUCKET_NAME`
+
+Important runtime tuning vars:
+- `GEMINI_LIVE_MODEL` (default `gemini-2.5-flash-native-audio-preview-12-2025`)
+- `GEMINI_EMBEDDING_MODEL` (default `gemini-embedding-001`)
+- `VOICE_MAX_OUTPUT_TOKENS` (default currently `900`)
+- `VOICE_TEMPERATURE` (default `0.55`)
 - `MAX_REQUEST_BYTES` (default: `10485760`)
 - `WS_MAX_PER_IP`, `WS_MAX_PER_HOUR`, `WS_MAX_AUDIO_CHUNK_BYTES`, `WS_MAX_MESSAGE_SIZE`
 - `LOGIN_MAX_ATTEMPTS`, `LOGIN_LOCKOUT_MINUTES`, `LOGIN_IP_MAX_ATTEMPTS`
@@ -197,7 +276,7 @@ QR URL fallback order in backend: `museum.qr_base_url` -> `PUBLIC_APP_URL` -> `F
 
 ### Frontend
 See [`frontend/.env.example`](frontend/.env.example).
-Critical vars:
+Required vars:
 - `NEXT_PUBLIC_BACKEND_URL`
 - `NEXT_PUBLIC_APP_URL`
 
@@ -263,6 +342,12 @@ gcloud run deploy "${SERVICE}" \
   --set-env-vars "GOOGLE_CLOUD_PROJECT=${PROJECT_ID},APP_ENV=production,ENFORCE_HTTPS=true,ALLOWED_ORIGINS=https://guideqr.ai,https://www.guideqr.ai,PUBLIC_APP_URL=https://guideqr.ai,MAX_REQUEST_BYTES=10485760,WS_MAX_PER_IP=5,WS_MAX_PER_HOUR=100"
 ```
 
+After deploy, verify:
+```bash
+gcloud run services describe "${SERVICE}" --region "${REGION}" --format='value(status.url,status.latestReadyRevisionName)'
+gcloud run services logs read "${SERVICE}" --region "${REGION}" --limit=100
+```
+
 ### Frontend
 Deploy `frontend/` to Vercel (recommended).
 
@@ -322,6 +407,7 @@ museai/
 - Do not commit `.env`, service account JSON, or secrets.
 - Rotate keys before public demo.
 - Use strong `JWT_SECRET` and bcrypt password hashes.
+- If any secret is accidentally exposed in logs/chat, rotate immediately.
 
 ## License
 MIT

@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800" role="img" aria-label="MuseAI System Architecture">
+  <defs>
+    <style>
+      .title { font: 700 32px 'Segoe UI', Arial, sans-serif; fill: #0c447c; }
+      .subtitle { font: 500 14px 'Segoe UI', Arial, sans-serif; fill: #3d5f7f; }
+      .pill { font: 700 15px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+      .boxTitleBlue { font: 700 14px 'Segoe UI', Arial, sans-serif; fill: #0c447c; }
+      .boxSubBlue { font: 500 11px 'Segoe UI', Arial, sans-serif; fill: #0c447c; }
+      .boxTitleTeal { font: 700 14px 'Segoe UI', Arial, sans-serif; fill: #085041; }
+      .boxSubTeal { font: 500 11px 'Segoe UI', Arial, sans-serif; fill: #085041; }
+      .legend { font: 600 12px 'Segoe UI', Arial, sans-serif; fill: #2e4d66; }
+      .flow { font: 600 12px 'Segoe UI', Arial, sans-serif; fill: #2e4d66; }
+      .arrowLabel { font: 700 12px 'Segoe UI', Arial, sans-serif; }
+    </style>
+
+    <marker id="arrowGreen" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#0F6E56"/>
+    </marker>
+    <marker id="arrowBlue" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#185FA5"/>
+    </marker>
+    <marker id="arrowAmber" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#D9891B"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1200" height="800" fill="#ffffff"/>
+
+  <text x="600" y="52" text-anchor="middle" class="title">MuseAI - System Architecture</text>
+  <text x="600" y="78" text-anchor="middle" class="subtitle">Powered by Gemini Live API - guideqr.ai</text>
+
+  <line x1="395" y1="110" x2="395" y2="715" stroke="#b8c5d1" stroke-width="2" stroke-dasharray="8 7"/>
+  <line x1="765" y1="110" x2="765" y2="715" stroke="#b8c5d1" stroke-width="2" stroke-dasharray="8 7"/>
+
+  <rect x="120" y="106" width="200" height="36" rx="18" fill="#185FA5"/>
+  <text x="220" y="129" text-anchor="middle" class="pill">Frontend - PWA</text>
+
+  <rect x="485" y="106" width="220" height="36" rx="18" fill="#0F6E56"/>
+  <text x="595" y="129" text-anchor="middle" class="pill">Backend - FastAPI</text>
+
+  <rect x="865" y="106" width="190" height="36" rx="18" fill="#185FA5"/>
+  <text x="960" y="129" text-anchor="middle" class="pill">Google Cloud</text>
+
+  <!-- Frontend column -->
+  <rect x="80" y="165" width="280" height="72" rx="9" fill="#F1EFE8" stroke="#b8b2a4" stroke-width="2"/>
+  <text x="220" y="193" text-anchor="middle" class="boxTitleBlue" fill="#56504a">Visitor</text>
+  <text x="220" y="212" text-anchor="middle" class="boxSubBlue" fill="#56504a">Scans QR -&gt; opens browser</text>
+
+  <rect x="80" y="258" width="280" height="84" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="220" y="290" text-anchor="middle" class="boxTitleBlue">React / Next.js</text>
+  <text x="220" y="311" text-anchor="middle" class="boxSubBlue">Progressive Web App</text>
+
+  <rect x="80" y="364" width="132" height="88" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="146" y="397" text-anchor="middle" class="boxTitleBlue">Camera</text>
+  <text x="146" y="417" text-anchor="middle" class="boxSubBlue">Vision</text>
+
+  <rect x="228" y="364" width="132" height="88" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="294" y="397" text-anchor="middle" class="boxTitleBlue">Voice</text>
+  <text x="294" y="417" text-anchor="middle" class="boxSubBlue">VAD - 10 lang</text>
+
+  <!-- Backend column -->
+  <rect x="450" y="165" width="290" height="84" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="2"/>
+  <text x="595" y="197" text-anchor="middle" class="boxTitleTeal">WebSocket Handler</text>
+  <text x="595" y="218" text-anchor="middle" class="boxSubTeal">ws_handler.py - sessions</text>
+
+  <rect x="450" y="270" width="290" height="94" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="2"/>
+  <text x="595" y="305" text-anchor="middle" class="boxTitleTeal">RAG Context Engine</text>
+  <text x="595" y="326" text-anchor="middle" class="boxSubTeal">rag_context.py - Firestore</text>
+
+  <rect x="450" y="387" width="136" height="88" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="2"/>
+  <text x="518" y="420" text-anchor="middle" class="boxTitleTeal">Prompt</text>
+  <text x="518" y="440" text-anchor="middle" class="boxSubTeal">Builder</text>
+
+  <rect x="604" y="387" width="136" height="88" rx="9" fill="#E1F5EE" stroke="#0F6E56" stroke-width="2"/>
+  <text x="672" y="420" text-anchor="middle" class="boxTitleTeal">Session</text>
+  <text x="672" y="440" text-anchor="middle" class="boxSubTeal">Manager</text>
+
+  <!-- Google Cloud column -->
+  <rect x="820" y="165" width="280" height="132" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="960" y="201" text-anchor="middle" class="boxTitleBlue">Gemini Live API</text>
+  <text x="960" y="224" text-anchor="middle" class="boxSubBlue">Gemini 2.5 Flash</text>
+  <text x="960" y="244" text-anchor="middle" class="boxSubBlue">multimodal - voice + vision</text>
+
+  <rect x="820" y="320" width="132" height="88" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="886" y="353" text-anchor="middle" class="boxTitleBlue">Firestore</text>
+  <text x="886" y="373" text-anchor="middle" class="boxSubBlue">Exhibit KB</text>
+
+  <rect x="968" y="320" width="132" height="88" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="1034" y="353" text-anchor="middle" class="boxTitleBlue">Vertex AI</text>
+  <text x="1034" y="373" text-anchor="middle" class="boxSubBlue">Embeddings</text>
+
+  <rect x="820" y="430" width="132" height="88" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="886" y="463" text-anchor="middle" class="boxTitleBlue">Redis</text>
+  <text x="886" y="483" text-anchor="middle" class="boxSubBlue">Memorystore</text>
+
+  <rect x="968" y="430" width="132" height="88" rx="9" fill="#E6F1FB" stroke="#185FA5" stroke-width="2"/>
+  <text x="1034" y="463" text-anchor="middle" class="boxTitleBlue">Cloud Run</text>
+  <text x="1034" y="483" text-anchor="middle" class="boxSubBlue">hosts backend</text>
+
+  <!-- Numbered arrows -->
+  <line x1="220" y1="237" x2="220" y2="258" stroke="#185FA5" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <text x="238" y="251" class="arrowLabel" fill="#185FA5">① QR scan</text>
+
+  <line x1="360" y1="300" x2="450" y2="206" stroke="#0F6E56" stroke-width="3" marker-end="url(#arrowGreen)"/>
+  <text x="386" y="262" class="arrowLabel" fill="#0F6E56">② WS</text>
+
+  <line x1="212" y1="400" x2="450" y2="315" stroke="#185FA5" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <text x="285" y="355" class="arrowLabel" fill="#185FA5">③ camera</text>
+
+  <line x1="360" y1="400" x2="450" y2="334" stroke="#185FA5" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <text x="352" y="378" class="arrowLabel" fill="#185FA5">④ audio</text>
+
+  <line x1="740" y1="206" x2="820" y2="206" stroke="#0F6E56" stroke-width="3" marker-end="url(#arrowGreen)"/>
+  <text x="752" y="193" class="arrowLabel" fill="#0F6E56">⑤ gRPC</text>
+
+  <line x1="740" y1="317" x2="820" y2="352" stroke="#185FA5" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <text x="754" y="305" class="arrowLabel" fill="#185FA5">⑥ REST</text>
+
+  <line x1="820" y1="240" x2="740" y2="240" stroke="#D9891B" stroke-width="3" stroke-dasharray="9 6" marker-end="url(#arrowAmber)"/>
+  <text x="748" y="256" class="arrowLabel" fill="#D9891B">⑦ response</text>
+
+  <line x1="450" y1="225" x2="360" y2="320" stroke="#D9891B" stroke-width="3" stroke-dasharray="9 6" marker-end="url(#arrowAmber)"/>
+  <text x="372" y="306" class="arrowLabel" fill="#D9891B">⑧ live stream</text>
+
+  <line x1="740" y1="431" x2="820" y2="474" stroke="#0F6E56" stroke-width="3" marker-end="url(#arrowGreen)"/>
+  <text x="748" y="454" class="arrowLabel" fill="#0F6E56">⑨ session</text>
+
+  <line x1="968" y1="364" x2="952" y2="364" stroke="#0F6E56" stroke-width="3" stroke-dasharray="6 5" marker-end="url(#arrowGreen)"/>
+  <text x="972" y="348" class="arrowLabel" fill="#0F6E56">⑩</text>
+
+  <!-- Legend -->
+  <rect x="80" y="590" width="490" height="160" rx="10" fill="#f8fbff" stroke="#d6e4f0" stroke-width="2"/>
+  <text x="102" y="618" class="boxTitleBlue">Legend</text>
+
+  <line x1="105" y1="640" x2="165" y2="640" stroke="#0F6E56" stroke-width="3" marker-end="url(#arrowGreen)"/>
+  <text x="178" y="645" class="legend">Green solid arrow: Real-time stream (WebSocket / gRPC)</text>
+
+  <line x1="105" y1="673" x2="165" y2="673" stroke="#185FA5" stroke-width="3" marker-end="url(#arrowBlue)"/>
+  <text x="178" y="678" class="legend">Blue solid arrow: Data request (REST / HTTP)</text>
+
+  <line x1="105" y1="706" x2="165" y2="706" stroke="#D9891B" stroke-width="3" stroke-dasharray="9 6" marker-end="url(#arrowAmber)"/>
+  <text x="178" y="711" class="legend">Amber dashed arrow: AI response (audio + transcript)</text>
+
+  <!-- Flow summary -->
+  <rect x="620" y="560" width="500" height="190" rx="10" fill="#f8fbff" stroke="#d6e4f0" stroke-width="2"/>
+  <text x="642" y="588" class="boxTitleBlue">Numbered Flow Summary</text>
+  <text x="642" y="612" class="flow">① QR scan -&gt; PWA opens in browser</text>
+  <text x="642" y="634" class="flow">② PWA connects via WebSocket</text>
+  <text x="642" y="656" class="flow">③ Camera -&gt; Gemini Vision recognition</text>
+  <text x="642" y="678" class="flow">④ Audio -&gt; Gemini Live API conversation</text>
+  <text x="642" y="700" class="flow">⑤ RAG queries Firestore knowledge base</text>
+  <text x="642" y="722" class="flow">⑥ Gemini response -&gt; PWA (audio + text)</text>
+  <text x="642" y="744" class="flow">⑦ VAD interrupt + language switch real-time</text>
+</svg>
